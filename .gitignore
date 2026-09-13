@@ -16,6 +16,7 @@ node_modules/
 frontend/dist/
 *.tsbuildinfo
 npm-debug.log*
+*.log
 
 # Environment and local config
 .env
@@ -26,7 +27,6 @@ config.local.toml
 # Personal notes and settings
 CLAUDE.local.md
 .claude/settings.local.json
-plans/
 
 # OS and editors
 .DS_Store
