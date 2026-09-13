@@ -5,6 +5,8 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
+from apps.api.core.types import EnvironmentType
+
 
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -13,7 +15,7 @@ class AppSettings(BaseSettings):
     )
 
     app_name: str = "Persona Blog API"
-    environment: str
+    environment: EnvironmentType
 
     @classmethod
     def settings_customise_sources(

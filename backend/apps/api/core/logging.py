@@ -1,8 +1,7 @@
 import structlog
 
 from apps.api.core.config import AppSettings
-
-TEST_ENVIRONMENT = "test"
+from apps.api.core.types import EnvironmentType
 
 
 def configure_logging(app_settings: AppSettings) -> None:
@@ -13,5 +12,5 @@ def configure_logging(app_settings: AppSettings) -> None:
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.dev.ConsoleRenderer(),
         ],
-        cache_logger_on_first_use=app_settings.environment != TEST_ENVIRONMENT,
+        cache_logger_on_first_use=app_settings.environment != EnvironmentType.TEST,
     )

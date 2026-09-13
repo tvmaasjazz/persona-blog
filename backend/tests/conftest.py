@@ -5,7 +5,7 @@ import pytest
 from apps.api.core.config import AppSettings
 
 TEST_ENVIRONMENT_VARIABLES = {
-    "ENVIRONMENT": "test",
+    "ENVIRONMENT": "TEST",
 }
 
 
