@@ -22,7 +22,7 @@ Run from `backend/`:
 
 ```bash
 uv sync                      # install from lockfile
-uv lock --generate-hashes    # regenerate lockfile after dependency changes
+uv lock                      # regenerate lockfile after dependency changes (hashes included)
 uv run ruff check --fix .    # lint
 uv run ruff format .         # format
 uv run pytest                # tests
@@ -64,5 +64,7 @@ rubric prompt`, `fix(persona): correct bio length validation`.
 - Domains are the business area touched: `humanizer`, `persona`, `post`, `user`,
   `auth`, `graph`, `db`, `infra`, `web`. Use one that already appears in the log
   before inventing a new one.
+- Branches are `type/what-it-does`, using the commit types — e.g.
+  `feat/setup-api-skeleton`, `fix/bio-length-validation`.
 - Never commit unless asked. Never push to `main` directly.
 - `CLAUDE.local.md` is gitignored — personal notes go there, not in this file.

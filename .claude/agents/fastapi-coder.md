@@ -28,7 +28,7 @@ to touch so your code matches what is there.
 The rules files say where each of these lives and how it is shaped.
 
 - **Domain library code** — services, Input and Result models, domain settings,
-  constants, prompts, exceptions
+  constants, enums (`types.py`), prompts, exceptions
 - **Tables** — Orm classes, association tables, and the orm package exports
 - **HTTP layer** — DTOs, dependency factories with their `Annotated` aliases, thin
   routers
@@ -44,7 +44,8 @@ The rules files say where each of these lives and how it is shaped.
 - **Tests** — owned by the `test-writer` agent. List the source files, service
   methods, and routes that need tests, so the work can be handed to it.
 - **App setup files** — `lifespan.py`, `main.py`, the database base and session
-  modules, `core/dependencies.py`, `core/dtos.py`, `libs/core/exceptions.py`. Written
+  modules, `core/dependencies.py`, `core/dtos.py`, `core/exception_handlers.py`,
+  `core/logging.py`, `core/types.py`, `libs/core/exceptions.py`. Written
   once; if a task seems to need a change there (including a new standard exception
   category), report it instead.
 - **Anything the rules don't give a home** — if the rules name a kind of class but
@@ -55,6 +56,7 @@ The rules files say where each of these lives and how it is shaped.
 
 - Apply the rules; don't restate them in code comments.
 - Match the surrounding code's style, comment density, and idiom.
+- Every new package under `apps/` or `libs/` gets an empty `__init__.py`.
 - Never add a dependency or import a package the project doesn't already use.
 - You cannot run commands, so you cannot run `ruff` or `pytest`. Say so in your
   report rather than implying the code was checked.

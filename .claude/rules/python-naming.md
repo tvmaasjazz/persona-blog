@@ -127,6 +127,10 @@ This extends to attributes (`self._db_session`), constructor parameters, depende
 factories (`get_db_session`, `db_session_factory`), and anything on `app.state`. If a
 name would still be correct in an unrelated module, it is too generic.
 
+One exception: the root `AppSettings` instance is `app.state.settings`. There is only
+ever one settings object on `app.state`, so the qualifier adds nothing. Local
+variables holding it are still `app_settings`.
+
 ## Statements and readability
 
 **An `await` result is bound to a name unless it is returned directly or unused.** An
@@ -170,6 +174,9 @@ The same applies to chained attribute access into a call:
 
 ## Other conventions
 
+- Imports are absolute from `backend/`:
+  `from apps.api.core.dependencies import AppSettingsDep`. Never relative; ruff's
+  `TID252` enforces it.
 - Type-hint every function signature, parameters and return.
 - Private methods and attributes are `_`-prefixed; anything without `_` is API.
 - Functions returning more than one value return a `...Result` Pydantic model, not a

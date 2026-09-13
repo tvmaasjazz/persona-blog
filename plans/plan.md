@@ -4,7 +4,8 @@ Alpha target: a user can sign in, hit a writing endpoint, and get real LLM outpu
 back. Personas and saved posts come after this plan.
 
 Every step is one branch, one PR, reviewed and merged to `main` before the next
-starts. Branch names: `step/05-api-skeleton`. Steps 1–3 are the exception and land
+starts. Branch names follow the Git section of `CLAUDE.md`:
+`feat/setup-api-skeleton`. Steps 1–3 are the exception and land
 directly on `main`.
 
 ## Settled decisions
@@ -194,26 +195,33 @@ visibly applies, `npm run build` succeeds.
 No database, no libs beyond what the app needs.
 
 Build:
-- `backend/pyproject.toml` via `uv init`, plus `uv lock --generate-hashes`
+- `backend/pyproject.toml` via `uv init`, plus `uv lock`
 - Ruff and pytest config in `pyproject.toml`
 - `apps/api/core/config.py` — `AppSettings` with `app_name: str = "Persona Blog API"`
-  and `environment: str`, loading `config.toml` and env
-- `config.toml` carrying `app_name = "Persona Blog API"`, so the override path is
-  proven rather than assumed
+  and `environment: EnvironmentType` (`DEVELOPMENT` / `TEST` / `PRODUCTION`, in
+  `apps/api/core/types.py`), loading `config.toml` and env
+- `config.toml` carrying only `environment = "DEVELOPMENT"` — TOML holds only what
+  differs between environments. `tests/api/core/test_config.py` proves TOML beats
+  the default and env beats TOML
 - `apps/api/core/dtos.py` — the shared CRUD response DTOs: `IdentityResponseDto
   { identity: str }` for creates, `EmptyResponseDto {}` for updates and deletes.
   Nothing uses them until the first CRUD domain, but `fastapi-coder` treats this as
   a setup file and won't create it
-- `apps/api/lifespan.py` — logs `"<app_name> started"` from settings, closes cleanly
-- `apps/api/app_factory.py` — `create_app()`, includes routers, registers the
-  domain-exception handler
+- `apps/api/lifespan.py` — logs `api_started` with `app_name` and `environment` from
+  settings, closes cleanly
+- `apps/api/core/exception_handlers.py` — the standard exception → status code map
+  and `register_exception_handlers()`
+- `apps/api/app_factory.py` — `create_app()`, registers exception handlers, includes
+  routers
 - `apps/api/main.py` — `app = create_app()`
 - structlog with a console renderer for dev; Logfire deferred to step 13
 - `apps/api/domains/health/` — `router.py`, `dtos.py` with
   `HealthResponseDto { status, app_name, environment }`. No lib: health has no
   business logic and is the one domain allowed to skip `libs/`
 - `tests/api/health/test_router.py` using `httpx.AsyncClient` with
-  `ASGITransport`
+  `ASGITransport`, plus `tests/api/core/test_config.py` and
+  `tests/api/core/test_exception_handlers.py`. `test_lifespan.py` waits for step 8, when the
+  lifespan first owns a resource
 - `.github/workflows/ci.yml` — on push and PR, from `backend/`:
   `uv sync --locked`, `ruff check`, `ruff format --check`, `pytest`. Deferred from
   step 3; the health test is what gives `pytest` something to collect
@@ -225,8 +233,8 @@ curl localhost:8000/health
 uv run pytest
 ```
 The Actions run on the PR is green.
-Change `app_name` in `config.toml`, restart, confirm the log and `/health` both
-change. Then set `APP_NAME=...` as an env var and confirm it beats the TOML value.
+Add `app_name = "..."` to `config.toml`, restart, confirm the log and `/health` both
+change (remove it afterwards). Then set `APP_NAME=...` as an env var and confirm it beats the TOML value.
 
 **Watch for:** this is where the granian invocation and module path in `CLAUDE.md`
 get corrected to whatever actually works.
@@ -242,7 +250,7 @@ Build:
   `inputs.py` with `GenerateWritingInput { writing_type, prompt_text }`,
   `results.py` with `GenerateWritingResult { content, character_count }`
 - `WritingType(StrEnum)` with the single member `BLOG_POST = "BLOG_POST"` in
-  `libs/ai_write/writing_type.py`
+  `libs/ai_write/types.py`
 - The service returns a hardcoded string and the real `len()` of it
 - `apps/api/domains/ai_write/` — `dtos.py` with `GenerateWritingDto` + `to_input()`
   and `WritingResponseDto` + `from_result()`, `dependencies.py`, `router.py` at

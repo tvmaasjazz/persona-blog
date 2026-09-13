@@ -54,11 +54,11 @@ backend/tests/
 │   ├── conftest.py          # app fixtures: fastapi_app, api_client, signed_in_user
 │   ├── core/
 │   │   ├── test_config.py
+│   │   ├── test_exception_handlers.py
 │   │   └── test_dependencies.py
 │   ├── users/
 │   │   ├── conftest.py
 │   │   └── test_router.py
-│   ├── test_app_factory.py
 │   └── test_lifespan.py
 └── migrations/
     ├── conftest.py
@@ -94,7 +94,7 @@ backend/tests/
 | `apps/api/domains/<d>/dependencies.py` | None                                 | Route tests run the real factories |
 | `apps/api/core/dependencies.py`      | `tests/api/core/test_dependencies.py`  | Session discards writes, transaction commits and rolls back, auth guard cases (§7) |
 | `apps/api/core/config.py`            | `tests/api/core/test_config.py`        | TOML beats default, env beats TOML, missing secret fails (§8) |
-| `apps/api/app_factory.py`            | `tests/api/test_app_factory.py`        | Each standard exception maps to its status; a lib exception gets its parent's; unhandled errors return 500 without internals (§7) |
+| `apps/api/core/exception_handlers.py` | `tests/api/core/test_exception_handlers.py` | Each standard exception maps to its status; a lib exception gets its parent's; unhandled errors return 500 without internals (§7) |
 | `libs/core/exceptions.py`, `libs/<d>/exceptions.py` | None                   | The app factory tests and the service tests that raise them cover these |
 | `apps/api/lifespan.py`               | `tests/api/test_lifespan.py`           | Resources created at startup and closed at shutdown (§7) |
 | Middleware                           | `tests/api/test_<module>.py`           | Observable effect on a real route (§9) |
@@ -342,7 +342,7 @@ target shape.
 ```python
 # tests/conftest.py
 TEST_ENVIRONMENT_VARIABLES = {
-    "ENVIRONMENT": "test",
+    "ENVIRONMENT": "TEST",
     "DATABASE_URL": "postgresql+asyncpg://persona_blog:persona_blog@localhost:5432/persona_blog_test",
     "REDIS_URL": "redis://localhost:6379/15",
     "OPENAI_API_KEY": "test-openai-api-key",
@@ -801,7 +801,7 @@ async def signed_in_user(
 | Set-Cookie attributes         | Read `response.headers.get_list("set-cookie")`; assert `HttpOnly`, `Secure` for the environment, and `SameSite` |
 | Rate limit → 429              | Pre-set the Redis counter at the cap; assert 429 |
 | Dependency unavailable (health) | Point the resource at a closed port (`redis://localhost:1/0`) through the same seam the route reads. Never stub `ping()` |
-| Unhandled exception → 500     | Covered once in `tests/api/test_app_factory.py`, not per route |
+| Unhandled exception → 500     | Covered once in `tests/api/core/test_exception_handlers.py`, not per route |
 
 ```python
 # tests/api/ai_write/test_router.py
@@ -917,9 +917,9 @@ test's `fastapi_app` inside the test body.
 
 | File                    | Situation                            | Pattern |
 | ----------------------- | ------------------------------------ | ------- |
-| `test_app_factory.py`   | Each standard exception → its status and `{"detail": message}` body | Parametrize one case per entry in `STATUS_CODE_BY_EXCEPTION`, written out as literals (never looped from the map). A throwaway route raises each one |
-| `test_app_factory.py`   | A lib exception → its parent's status | One test with one lib exception. That proves handler lookup follows the class hierarchy |
-| `test_app_factory.py`   | Unhandled exception → 500, no internals | Client built with `ASGITransport(..., raise_app_exceptions=False)`. By default httpx re-raises the exception into the test instead of returning the 500 |
+| `test_exception_handlers.py` | Each standard exception → its status and `{"detail": message}` body | Parametrize one case per entry in `STATUS_CODE_BY_EXCEPTION`, written out as literals (never looped from the map). A throwaway route raises each one |
+| `test_exception_handlers.py` | A lib exception → its parent's status | One test with one lib exception. That proves handler lookup follows the class hierarchy |
+| `test_exception_handlers.py` | Unhandled exception → 500, no internals | Client built with `ASGITransport(..., raise_app_exceptions=False)`. By default httpx re-raises the exception into the test instead of returning the 500 |
 | `test_lifespan.py`      | Startup creates resources            | Enter `lifespan_context` on a fresh `create_app()`; assert the `app.state` attributes |
 | `test_lifespan.py`      | Shutdown closes them                 | After the `async with` exits, assert closed (`http_client.is_closed`) |
 | `test_lifespan.py`      | Invalid settings fail startup        | `monkeypatch.setenv` a bad value; `pytest.raises(ValidationError)` around entering the lifespan |
@@ -929,7 +929,7 @@ test's `fastapi_app` inside the test body.
 | `test_dependencies.py`  | Auth guard                           | No cookie, unknown session id, session for a deleted user: each 401. A valid session reaches the route |
 
 ```python
-# tests/api/test_app_factory.py
+# tests/api/core/test_exception_handlers.py
 @pytest.mark.parametrize(
     ("standard_exception", "expected_status_code"),
     [
@@ -1046,7 +1046,7 @@ def test_app_settings_env_var_overrides_toml(
 | Not tested                        | Log formatting, renderer output, Logfire export |
 
 `capture_logs()` can't see a logger cached before it was entered. Don't turn on
-`cache_logger_on_first_use` when `ENVIRONMENT` is `test`.
+`cache_logger_on_first_use` when `ENVIRONMENT` is `TEST`.
 
 ```python
 async def test_complete_logs_token_counts(

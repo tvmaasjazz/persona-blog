@@ -1,0 +1,44 @@
+[project]
+name = "persona-blog-backend"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.141.1",
+    "granian>=2.8.2",
+    "pydantic-settings>=2.15.0",
+    "structlog>=26.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.7",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "ASYNC", "N", "SIM", "RUF", "TID"]
+# python-naming.md suffixes exceptions with Exception, not Error
+ignore = ["N818"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.pytest]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["--import-mode=importlib", "-m", "not live_llm and not migration"]
+strict = true
+filterwarnings = ["error"]
+markers = [
+    "live_llm: calls the real LLM provider; run by hand with -m live_llm",
+    "migration: rebuilds the test database schema; run with -m migration",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"

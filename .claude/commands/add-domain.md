@@ -22,12 +22,15 @@ every file. Do not restate those conventions back to me — apply them.
 **`libs/database/orm/<entity>.py`** for each new table, exported from
 `libs/database/orm/__init__.py`. Skip if the domain owns no tables.
 
+Each new package folder below gets an empty `__init__.py`.
+
 **`libs/$1/`**
 - `services.py` — `$1`'s service class, framework-free, dependencies via `__init__`
 - `inputs.py` — one `Input` model per method taking a structured payload
 - `results.py` — one `Result` per method, named after the method
 - `settings.py` — only if the domain has tunable values
 - `constants.py` — only if the domain has values that must not be overridden
+- `types.py` — only if the domain has enums; all of them go here
 - `prompts.py` — only if the domain calls an LLM
 - `exceptions.py` — only if the domain needs exceptions callers must tell apart; each
   subclasses one standard exception from `libs/core/exceptions.py`
