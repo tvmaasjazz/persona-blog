@@ -9,7 +9,11 @@ review.
 frontend/            React + Vite app
 backend/
 └── apps/api/        FastAPI service (more services will land beside it)
+plans/               build plans — gitignored, local only
 ```
+
+Save plans to `plans/`. The folder is gitignored, so don't reference plans from
+committed files.
 
 ## Commands
 
