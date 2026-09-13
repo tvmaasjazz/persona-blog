@@ -16,6 +16,7 @@ node_modules/
 frontend/dist/
 *.tsbuildinfo
 npm-debug.log*
+*.log
 
 # Environment and local config
 .env
