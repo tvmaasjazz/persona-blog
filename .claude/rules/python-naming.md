@@ -174,6 +174,9 @@ The same applies to chained attribute access into a call:
 
 ## Other conventions
 
+- Imports are absolute from `backend/`:
+  `from apps.api.core.dependencies import AppSettingsDep`. Never relative; ruff's
+  `TID252` enforces it.
 - Type-hint every function signature, parameters and return.
 - Private methods and attributes are `_`-prefixed; anything without `_` is API.
 - Functions returning more than one value return a `...Result` Pydantic model, not a

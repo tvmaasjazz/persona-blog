@@ -30,7 +30,7 @@ Then look at what already exists:
 - Read every source file under test in full. For a service, that's the service plus
   its Input and Result models, settings, and the exceptions it raises. For a route,
   it's the router, its DTOs, its dependency factories, and the exception handlers in
-  `app_factory.py` that map errors to status codes.
+  `apps/api/core/exception_handlers.py` that map errors to status codes.
 - Read what's already in `backend/tests/`: the root and domain `conftest.py` files,
   `tests/stubs/`, `tests/factories/`, `tests/payloads/`, and neighbouring test
   modules. Reuse existing fixtures, stubs, and factories before adding new ones.

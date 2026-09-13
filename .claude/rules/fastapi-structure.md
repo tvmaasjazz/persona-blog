@@ -16,7 +16,9 @@ backend/
 │       │   ├── config.py      # root AppSettings
 │       │   ├── dependencies.py# global deps: db session, current user
 │       │   ├── dtos.py        # IdentityResponseDto, EmptyResponseDto
-│       │   └── logging.py     # configure_logging(), called once from lifespan
+│       │   ├── exception_handlers.py # standard exception → status code map
+│       │   ├── logging.py     # configure_logging(), called once from lifespan
+│       │   └── types.py       # app-wide enums: EnvironmentType
 │       ├── domains/
 │       │   └── users/
 │       │       ├── dependencies.py   # factories + Annotated aliases
@@ -62,7 +64,8 @@ exception and has no `__init__.py` at all (see `pytest-testing.md`).
 
 All of a domain's enums live in one module, `types.py`: `libs/ai_write/types.py`
 holds `WritingType`. A domain with no lib, like `health`, keeps its enums in
-`apps/api/domains/<name>/types.py`. Never put an enum in `inputs.py`,
+`apps/api/domains/<name>/types.py`. Enums the whole app uses, like
+`EnvironmentType`, live in `apps/api/core/types.py`. Never put an enum in `inputs.py`,
 `constants.py`, or `dtos.py`, even when only one of them uses it.
 
 ## Logging
@@ -559,7 +562,8 @@ class HumanizerPrompt:
 
 ## Errors
 
-Code raises plain Python exceptions. Only `app_factory.py` knows status codes.
+Code raises plain Python exceptions. Only `apps/api/core/exception_handlers.py` knows
+status codes.
 
 ### Standard exceptions
 
@@ -622,12 +626,13 @@ return `None` instead.
 
 ### Mapping to status codes
 
-`app_factory.py` maps each standard exception to its status code and registers one
-handler per entry. Starlette looks up handlers along the exception's class hierarchy,
+`apps/api/core/exception_handlers.py` maps each standard exception to its status code,
+and `register_exception_handlers()` registers one handler per entry. `create_app()`
+calls it and does nothing else with exceptions. Starlette looks up handlers along the exception's class hierarchy,
 so every lib exception gets its parent's status code without an entry of its own.
 
 ```python
-# apps/api/app_factory.py
+# apps/api/core/exception_handlers.py
 STATUS_CODE_BY_EXCEPTION: dict[type[Exception], int] = {
     NotFoundException: 404,
     ConflictException: 409,
@@ -648,10 +653,16 @@ def build_exception_handler(
     return handle_exception
 
 
-def create_app() -> FastAPI:
-    fastapi_app = FastAPI(lifespan=lifespan)
+def register_exception_handlers(fastapi_app: FastAPI) -> None:
     for exception_class, status_code in STATUS_CODE_BY_EXCEPTION.items():
         fastapi_app.add_exception_handler(exception_class, build_exception_handler(status_code))
+```
+
+```python
+# apps/api/app_factory.py
+def create_app() -> FastAPI:
+    fastapi_app = FastAPI(lifespan=lifespan)
+    register_exception_handlers(fastapi_app)
     ...
 ```
 

@@ -198,8 +198,9 @@ Build:
 - `backend/pyproject.toml` via `uv init`, plus `uv lock`
 - Ruff and pytest config in `pyproject.toml`
 - `apps/api/core/config.py` — `AppSettings` with `app_name: str = "Persona Blog API"`
-  and `environment: str`, loading `config.toml` and env
-- `config.toml` carrying only `environment = "development"` — TOML holds only what
+  and `environment: EnvironmentType` (`DEVELOPMENT` / `TEST` / `PRODUCTION`, in
+  `apps/api/core/types.py`), loading `config.toml` and env
+- `config.toml` carrying only `environment = "DEVELOPMENT"` — TOML holds only what
   differs between environments. `tests/api/core/test_config.py` proves TOML beats
   the default and env beats TOML
 - `apps/api/core/dtos.py` — the shared CRUD response DTOs: `IdentityResponseDto
@@ -208,8 +209,10 @@ Build:
   a setup file and won't create it
 - `apps/api/lifespan.py` — logs `api_started` with `app_name` and `environment` from
   settings, closes cleanly
-- `apps/api/app_factory.py` — `create_app()`, includes routers, registers the
-  domain-exception handler
+- `apps/api/core/exception_handlers.py` — the standard exception → status code map
+  and `register_exception_handlers()`
+- `apps/api/app_factory.py` — `create_app()`, registers exception handlers, includes
+  routers
 - `apps/api/main.py` — `app = create_app()`
 - structlog with a console renderer for dev; Logfire deferred to step 13
 - `apps/api/domains/health/` — `router.py`, `dtos.py` with
@@ -217,7 +220,7 @@ Build:
   business logic and is the one domain allowed to skip `libs/`
 - `tests/api/health/test_router.py` using `httpx.AsyncClient` with
   `ASGITransport`, plus `tests/api/core/test_config.py` and
-  `tests/api/test_app_factory.py`. `test_lifespan.py` waits for step 8, when the
+  `tests/api/core/test_exception_handlers.py`. `test_lifespan.py` waits for step 8, when the
   lifespan first owns a resource
 - `.github/workflows/ci.yml` — on push and PR, from `backend/`:
   `uv sync --locked`, `ruff check`, `ruff format --check`, `pytest`. Deferred from
