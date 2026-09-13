@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from apps.api.core.dependencies import AppSettingsDep
 from apps.api.domains.health.dtos import HealthResponseDto
-from apps.api.domains.health.health_status_type import HealthStatusType
+from apps.api.domains.health.types import HealthStatusType
 
 health_router = APIRouter(tags=["health"])
 

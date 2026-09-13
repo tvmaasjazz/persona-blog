@@ -15,7 +15,8 @@ backend/
 │       ├── core/
 │       │   ├── config.py      # root AppSettings
 │       │   ├── dependencies.py# global deps: db session, current user
-│       │   └── dtos.py        # IdentityResponseDto, EmptyResponseDto
+│       │   ├── dtos.py        # IdentityResponseDto, EmptyResponseDto
+│       │   └── logging.py     # configure_logging(), called once from lifespan
 │       ├── domains/
 │       │   └── users/
 │       │       ├── dependencies.py   # factories + Annotated aliases
@@ -41,6 +42,7 @@ backend/
 │       ├── settings.py        # UserSettings (BaseModel)
 │       ├── prompts.py         # ...Prompt classes, if the domain uses an LLM
 │       ├── exceptions.py      # UserEmailTakenException, if the domain needs its own
+│       ├── types.py           # every StrEnum the domain owns
 │       └── constants.py
 ├── migrations/                # raw SQL; imports nothing from apps/ or libs/
 └── pyproject.toml
@@ -48,6 +50,27 @@ backend/
 
 A second service (worker, scheduler) lands as `apps/<name>/` beside `api/` and
 reuses the same `libs/` domains.
+
+## Packages
+
+Every package under `apps/` and `libs/` has an `__init__.py`. It stays empty unless it
+does work, like `libs/database/orm/__init__.py` registering every mapper. The tree
+above lists only the ones that do work. No namespace packages. `tests/` is the
+exception and has no `__init__.py` at all (see `pytest-testing.md`).
+
+## Enums
+
+All of a domain's enums live in one module, `types.py`: `libs/ai_write/types.py`
+holds `WritingType`. A domain with no lib, like `health`, keeps its enums in
+`apps/api/domains/<name>/types.py`. Never put an enum in `inputs.py`,
+`constants.py`, or `dtos.py`, even when only one of them uses it.
+
+## Logging
+
+`apps/api/core/logging.py` configures structlog once, through
+`configure_logging(app_settings)`, called at the start of `lifespan` before anything
+logs. Everything else only calls `structlog.get_logger(__name__)`. `libs/` never
+configures logging.
 
 ## Filenames inside a domain package
 

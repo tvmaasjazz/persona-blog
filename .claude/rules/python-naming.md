@@ -127,6 +127,10 @@ This extends to attributes (`self._db_session`), constructor parameters, depende
 factories (`get_db_session`, `db_session_factory`), and anything on `app.state`. If a
 name would still be correct in an unrelated module, it is too generic.
 
+One exception: the root `AppSettings` instance is `app.state.settings`. There is only
+ever one settings object on `app.state`, so the qualifier adds nothing. Local
+variables holding it are still `app_settings`.
+
 ## Statements and readability
 
 **An `await` result is bound to a name unless it is returned directly or unused.** An

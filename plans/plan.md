@@ -247,7 +247,7 @@ Build:
   `inputs.py` with `GenerateWritingInput { writing_type, prompt_text }`,
   `results.py` with `GenerateWritingResult { content, character_count }`
 - `WritingType(StrEnum)` with the single member `BLOG_POST = "BLOG_POST"` in
-  `libs/ai_write/writing_type.py`
+  `libs/ai_write/types.py`
 - The service returns a hardcoded string and the real `len()` of it
 - `apps/api/domains/ai_write/` — `dtos.py` with `GenerateWritingDto` + `to_input()`
   and `WritingResponseDto` + `from_result()`, `dependencies.py`, `router.py` at

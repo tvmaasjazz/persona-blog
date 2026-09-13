@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from apps.api.domains.health.health_status_type import HealthStatusType
+from apps.api.domains.health.types import HealthStatusType
 
 
 class HealthResponseDto(BaseModel):
