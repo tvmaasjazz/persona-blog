@@ -14,16 +14,18 @@ directly on `main`.
 | --------------------------------- | -------------------------------------------------------------- |
 | Session strategy                  | Server-side session in Redis, session id in an httpOnly cookie |
 | Redis                             | In from the start, for sessions                                |
-| `/ai-write` persistence in step 6 | None. Request → LLM → response, nothing stored                 |
+| `/generate-text` persistence      | No saved output. Only the LLM call log from step 11 is stored  |
 | First OpenAI model                | `gpt-4o-mini`, overridable in TOML                             |
 | Frontend styling                  | Tailwind, set up in step 4                                     |
 
 ## Naming settled for this plan
 
-- Python packages snake_case, URL paths kebab-case: `libs/ai_write/`,
-  `apps/api/domains/ai_write/`, router prefix `/ai-write`.
+- Python packages snake_case, URL paths kebab-case: `libs/generate_text/`,
+  `apps/api/domains/generate_text/`, router prefix `/generate-text`.
+- Step 12 names are prefixed `GenerateText`: `GenerateTextService.generate_text()`,
+  `GenerateTextInput`, `GenerateTextResult`, `GenerateTextDto`,
+  `GeneratedTextResponseDto`, `GenerateTextPrompt`. The enum is `TextType`.
 - `character_count`, not `char_length`.
-- The step-6 result is `GenerateWritingResult`.
 
 ---
 
@@ -222,7 +224,7 @@ Build:
   business logic and is the one domain allowed to skip `libs/`
 - `tests/api/health/test_router.py` using `httpx.AsyncClient` with
   `ASGITransport`, plus `tests/api/core/test_config.py` and
-  `tests/api/core/test_exception_handlers.py`. `test_lifespan.py` waits for step 8, when the
+  `tests/api/core/test_exception_handlers.py`. `test_lifespan.py` waits for step 6, when the
   lifespan first owns a resource
 - `.github/workflows/ci.yml` — on push and PR, from `backend/`:
   `uv sync --locked`, `ruff check`, `ruff format --check`, `pytest`. Deferred from
@@ -245,65 +247,7 @@ get corrected to whatever actually works.
 
 ---
 
-## Step 6 — `ai_write` skeleton, app ↔ lib wired
-
-### should this be called generate_writing (think about full system of edits and such)
-
-No LLM yet. This step proves the layering end to end.
-
-Build:
-
-- `libs/ai_write/` — `services.py` with `AiWriteService.generate_writing()`,
-  `inputs.py` with `GenerateWritingInput { writing_type, prompt_text }`,
-  `results.py` with `GenerateWritingResult { content, character_count }`
-- `WritingType(StrEnum)` with the single member `BLOG_POST = "BLOG_POST"` in
-  `libs/ai_write/types.py`
-- The service returns a hardcoded string and the real `len()` of it
-- `apps/api/domains/ai_write/` — `dtos.py` with `GenerateWritingDto` + `to_input()`
-  and `WritingResponseDto` + `from_result()`, `dependencies.py`, `router.py` at
-  `/ai-write`
-- Tests both sides: service called directly, route via the test client
-
-**Verify:**
-
-```bash
-curl -X POST localhost:8000/ai-write \
-  -H 'content-type: application/json' \
-  -d '{"writing_type":"BLOG_POST","prompt_text":"a post about sourdough"}'
-```
-
-Returns the fake content and a correct `character_count`. Post an invalid
-`writing_type` and confirm a readable 422. Confirm `grep -r "from apps" libs/`
-returns nothing.
-
----
-
-## Step 7 — LLM lib, real output
-
-Build:
-
-- `libs/llm/` — `services.py` with `LlmService.complete()`, `settings.py` with
-  `LlmSettings { model_name, request_timeout_seconds, max_output_tokens }`,
-  `inputs.py`, `results.py` with
-  `LlmCompletionResult { content, input_tokens, output_tokens }`
-- OpenAI only. One provider, no abstraction layer — add `LlmProviderType(StrEnum)`
-  when a second provider actually arrives
-- API key from env via `AppSettings`, never TOML
-- `libs/ai_write/prompts.py` — `AiWritePrompt.build_system_prompt()` and
-  `.build_user_prompt(prompt_text, writing_type)`, templates as `UPPER_SNAKE`
-  constants
-- `AiWriteService` takes an `LlmService` through `__init__`; the dependency factory
-  wires it
-- Log token counts per call at info level
-- Tests use a stub `LlmService`, never the real API
-
-**Verify:** same curl as step 6, now real generated text. Remove the API key and
-confirm a clean error response rather than a stack trace. Confirm the log line shows
-token counts. `uv run pytest` passes with no network.
-
----
-
-## Step 8 — Postgres + Redis via docker compose
+## Step 6 — Postgres + Redis via docker compose
 
 Build:
 
@@ -320,7 +264,7 @@ container in turn and confirm `/health` degrades without the app crashing.
 
 ---
 
-## Step 9 — Migration system + users table
+## Step 7 — Migration system + users table
 
 Uses the `db-migration` skill.
 
@@ -341,14 +285,14 @@ the Orm class deliberately and confirm CI's drift check fails.
 
 ---
 
-## Step 10 — Users lib and domain
+## Step 8 — Users lib and domain
 
 Build:
 
 - `libs/users/` — `services.py` with `get_user_by_email`, `create_user`,
   `get_or_create_from_google`; `inputs.py`; `results.py`
 - `apps/api/domains/users/` — `dtos.py`, `dependencies.py`, `router.py` with
-  `GET /users/me` (401 until step 11)
+  `GET /users/me` (401 until step 9)
 - Tests against a real test database, transaction rolled back per test
 
 **Verify:** create a user through the service in a test and confirm the row lands.
@@ -356,7 +300,7 @@ Confirm a duplicate email raises the domain exception and maps to a 409.
 
 ---
 
-## Step 11 — Google sign-in
+## Step 9 — Google sign-in
 
 Needs a Google Cloud OAuth client — **manual setup by Tyler**, redirect URI
 `http://localhost:8000/auth/google/callback`.
@@ -369,27 +313,91 @@ Build:
   `GET /auth/google/callback`, `POST /auth/logout`
 - `CurrentUserDep` in `apps/api/core/dependencies.py` — the guard. Routes needing
   auth take it; that's the Passport-equivalent
-- `/users/me` and `/ai-write` now require it
+- `/users/me` now requires it. `/generate-text` takes it when it lands in step 12
 
 **Verify:** full browser round trip to a logged-in state. Cookie is httpOnly, and
-`secure` is off only in dev. Call `/ai-write` without the cookie and get a 401. Log
+`secure` is off only in dev. Call `/users/me` without the cookie and get a 401. Log
 out, then confirm the Redis key is actually gone (`redis-cli KEYS 'session:*'`), not
 just the cookie cleared.
 
 ---
 
-## Step 12 — Frontend auth + write screen
+## Step 10 — Frontend auth
+
+Sign-in only. The write screen waits for step 12, when there is an endpoint behind
+it.
 
 Build:
 
 - Sign-in button hitting the backend login route
 - A logged-in view showing `display_name` from `/users/me`
-- A form posting to `/ai-write` and rendering the result
+- Sign-out button posting to `/auth/logout`
 - Vite dev proxy to the API so cookies are same-origin
 - A typed API client module; no `fetch` calls scattered through components
 
-**Verify:** sign in, generate text, sign out, confirm the write form 401s. Hard
-refresh mid-session and confirm you stay signed in.
+**Verify:** sign in and see your `display_name`. Hard refresh mid-session and confirm
+you stay signed in. Sign out, confirm the app returns to the signed-out view and a
+direct call to `/users/me` 401s.
+
+---
+
+## Step 11 — LLM lib + dev LLM router
+
+Outline only — detailed when this step starts.
+
+Build:
+
+- `libs/llm/` — `services.py` with `LlmService.complete()`, `settings.py` with
+  `LlmSettings { model_name, request_timeout_seconds, max_output_tokens }`,
+  `inputs.py`, `results.py` with
+  `LlmCompletionResult { content, input_tokens, output_tokens }`
+- API key from env via `AppSettings`, never TOML
+- Every LLM call recorded in a tracking table. Columns and migration are planned
+  when this step is detailed
+- A dev-only router for making basic calls against different LLMs and checking each
+  call is tracked. Registered only when `environment` is `DEVELOPMENT`
+- Log token counts per call at info level
+- Tests use a stub `LlmService`, never the real API
+
+**Open when detailing:** which providers are in scope and whether that means a
+provider abstraction now; the tracking table's columns; whether the dev router
+requires sign-in.
+
+**Verify:** call the dev router against more than one model, get real text back,
+and confirm a tracking row per call with token counts. Remove the API key and confirm
+a clean error response rather than a stack trace. `uv run pytest` passes with no
+network.
+
+---
+
+## Step 12 — `generate_text` lib + domain
+
+Outline only — detailed once step 11 has settled the LLM lib. This is the app's core
+logic, built as a LangGraph workflow on top of `LlmService`.
+
+Build:
+
+- `libs/generate_text/` — `services.py` with `GenerateTextService.generate_text()`,
+  `inputs.py` with `GenerateTextInput { text_type, prompt_text }`, `results.py` with
+  `GenerateTextResult { content, character_count }`
+- `TextType(StrEnum)` with the single member `BLOG_POST = "BLOG_POST"` in
+  `libs/generate_text/types.py`
+- `libs/generate_text/prompts.py` — `GenerateTextPrompt.build_system_prompt()` and
+  `.build_user_prompt(prompt_text, text_type)`, templates as `UPPER_SNAKE` constants
+- The LangGraph workflow. `langgraph` is a new dependency, confirmed when this step
+  is detailed
+- `GenerateTextService` takes an `LlmService` through `__init__`; the dependency
+  factory wires it
+- `apps/api/domains/generate_text/` — `dtos.py` with `GenerateTextDto` + `to_input()`
+  and `GeneratedTextResponseDto` + `from_result()`, `dependencies.py`, `router.py` at
+  `/generate-text`, guarded by `CurrentUserDep`
+- Frontend write screen: a form posting to `/generate-text` through the typed API
+  client and rendering the result
+- Tests both sides: service called directly, route via the test client
+
+**Verify:** sign in, generate text from the write screen, sign out, confirm the form
+401s. Post an invalid `text_type` and confirm a readable 422. Confirm
+`grep -r "from apps" libs/` returns nothing.
 
 ---
 
@@ -409,6 +417,6 @@ message. Confirm traces appear in Logfire.
 ## Deliberately deferred
 
 Personas, saved posts and the blog feed, the human-in-the-loop review flow, the
-un-AI-ify module, LangGraph, Anthropic as a second provider, scheduled publishing,
-RSS context. Step 13 ends with a working single-user writing tool, which is the
-point at which the persona model can be designed against something real.
+un-AI-ify module, Anthropic as a second provider, scheduled publishing, RSS context.
+Step 13 ends with a working single-user writing tool, which is the point at which
+the persona model can be designed against something real.
