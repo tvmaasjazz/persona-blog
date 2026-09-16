@@ -64,19 +64,10 @@ class TextType(StrEnum):
 Write the value out explicitly. Never `auto()` — in a `StrEnum` it produces the
 lowercased member name, which breaks the rule silently.
 
-This carries into the database. A Postgres enum type's labels are `UPPER_SNAKE` and
-match the Python members exactly; the type itself is `pb_` plus the class name in
-snake_case (`TextType` → `pb_text_type`). SQLAlchemy's `Enum` column persists member
-*names* by default while Pydantic serializes *values* — when the two are identical,
-that difference stops being a source of bugs.
-
-```sql
--- migrations/sql/pb_post/0001_create_pb_post.up.sql
-CREATE TYPE pb_text_type AS ENUM ('BLOG_POST', 'NEWSLETTER');
-```
-
-Adding a member means a migration (`ALTER TYPE ... ADD VALUE`) in the same commit as
-the Python change.
+This carries into the database: Postgres enum labels match the members exactly
+(`database.md` › Enums). SQLAlchemy's `Enum` column persists member *names* by
+default while Pydantic serializes *values* — when the two are identical, that
+difference stops being a source of bugs.
 
 ## Enum dispatch
 
