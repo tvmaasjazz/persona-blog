@@ -10,6 +10,8 @@ Backend, from `backend/`:
 
 ```bash
 uv sync                                                      # install from lockfile
+cp .env.example .env                                         # local connection settings
+docker compose up -d                                         # Postgres + Redis
 uv run granian --interface asgi apps.api.main:app --reload   # dev server
 uv run ruff check --fix .                                    # lint
 uv run ruff format .                                         # format
