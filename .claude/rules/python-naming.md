@@ -16,7 +16,7 @@ Every class ends in the suffix for what it is:
 
 | Suffix       | Use for                                      | Example                          |
 | ------------ | -------------------------------------------- | -------------------------------- |
-| `Type`       | Enums                                        | `WritingType.BLOG_POST`          |
+| `Type`       | Enums                                        | `TextType.BLOG_POST`             |
 | `Settings`   | Config models: the root `AppSettings` (`BaseSettings`) and each domain's frozen `BaseModel` | `HumanizerSettings` |
 | `Prompt`     | A grouped set of LLM prompt builders         | `HumanizerPrompt`                |
 | `Input`      | A service method's payload (`libs/` only)    | `CreateUserInput`                |
@@ -24,12 +24,12 @@ Every class ends in the suffix for what it is:
 | `Router`     | FastAPI `APIRouter` modules                  | `account_router` (an `APIRouter` instance) |
 | `Service`    | Business logic, framework-free               | `AccountService`                 |
 | `Middleware` | ASGI / FastAPI middleware                    | `RequestLogMiddleware`           |
-| `Dto`        | Inbound HTTP body (`apps/` only)             | `BlogPostDto`, `GenerateWritingDto` |
+| `Dto`        | Inbound HTTP body (`apps/` only)             | `BlogPostDto`, `GenerateTextDto` |
 | `QueryDto`   | A list route's query model (`apps/` only)    | `BlogPostFetchAllQueryDto`       |
 | `ResponseDto`| A route's response shape (`apps/` only)      | `BlogPostResponseDto`, `IdentityResponseDto` |
 | `Orm`        | SQLAlchemy table classes                     | `UserOrm`, `PersonaOrm`          |
 | `Key`        | Defined key objects                          | `CacheKey`, `StateKey`           |
-| `Exception`  | Exceptions: standard ones in `libs/core/`, domain-prefixed ones in their lib | `NotFoundException`, `AiWriteInappropriateException` |
+| `Exception`  | Exceptions: standard ones in `libs/core/`, domain-prefixed ones in their lib | `NotFoundException`, `GenerateTextInappropriateException` |
 | `Stub`       | A hand-written test double (`tests/` only)   | `LlmServiceStub`, `HttpHandlerStub` |
 | `Model`      | Only when the purpose is genuinely unclear   | —                                |
 
@@ -51,7 +51,7 @@ Enums are `StrEnum`, and **the member name and its string value are identical, b
 `UPPER_SNAKE`**:
 
 ```python
-class WritingType(StrEnum):
+class TextType(StrEnum):
     BLOG_POST = "BLOG_POST"
     NEWSLETTER = "NEWSLETTER"
 ```
@@ -61,13 +61,13 @@ lowercased member name, which breaks the rule silently.
 
 This carries into the database. A Postgres enum type's labels are `UPPER_SNAKE` and
 match the Python members exactly; the type itself is named in snake_case after the
-class (`WritingType` → `writing_type`). SQLAlchemy's `Enum` column persists member
+class (`TextType` → `text_type`). SQLAlchemy's `Enum` column persists member
 *names* by default while Pydantic serializes *values* — when the two are identical,
 that difference stops being a source of bugs.
 
 ```sql
 -- migrations/sql/posts/0001_create_posts.up.sql
-CREATE TYPE writing_type AS ENUM ('BLOG_POST', 'NEWSLETTER');
+CREATE TYPE text_type AS ENUM ('BLOG_POST', 'NEWSLETTER');
 ```
 
 Adding a member means a migration (`ALTER TYPE ... ADD VALUE`) in the same commit as

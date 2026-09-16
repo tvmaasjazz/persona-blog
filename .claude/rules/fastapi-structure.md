@@ -62,8 +62,8 @@ exception and has no `__init__.py` at all (see `pytest-testing.md`).
 
 ## Enums
 
-All of a domain's enums live in one module, `types.py`: `libs/ai_write/types.py`
-holds `WritingType`. A domain with no lib, like `health`, keeps its enums in
+All of a domain's enums live in one module, `types.py`: `libs/generate_text/types.py`
+holds `TextType`. A domain with no lib, like `health`, keeps its enums in
 `apps/api/domains/<name>/types.py`. Enums the whole app uses, like
 `EnvironmentType`, live in `apps/api/core/types.py`. Never put an enum in `inputs.py`,
 `constants.py`, or `dtos.py`, even when only one of them uses it.
@@ -112,7 +112,7 @@ A route takes a `Dto` only when a body or a query model is sent.
 | `POST` create / `PUT` update           | `<Entity>Dto` body, **one class shared by both**: `BlogPostDto` |
 | `GET /{id}` / `DELETE /{id}`           | None — the identifier is a plain path parameter            |
 | `GET` list                             | `<Entity>FetchAllQueryDto` query model: `BlogPostFetchAllQueryDto` |
-| Non-CRUD action (`POST /ai-write`)     | `<Verb><Entity>Dto` body: `GenerateWritingDto`             |
+| Non-CRUD action (`POST /generate-text`) | `<Verb><Entity>Dto` body: `GenerateTextDto`                |
 
 A `FetchAllQueryDto` defines and validates the query string the way a body `Dto`
 validates the body, with filters grouped in a nested filter object. Bind it as
@@ -127,7 +127,7 @@ them here.
 | `GET`                          | A custom `<Entity>ResponseDto`: `BlogPostResponseDto`  |
 | `POST` create                  | `IdentityResponseDto` — `{"identity": "<id>"}`        |
 | `PUT` update / `DELETE`        | `EmptyResponseDto` — `{}`                             |
-| Non-CRUD action                | A custom `ResponseDto` for what it carries: `WritingResponseDto` |
+| Non-CRUD action                | A custom `ResponseDto` for what it carries: `GeneratedTextResponseDto` |
 
 On a CRUD route, a custom `ResponseDto` appears only on a `GET`. Every route declares
 its response DTO as its return annotation.
@@ -602,14 +602,14 @@ domain.
 A lib that needs its own exceptions declares them in `libs/<domain>/exceptions.py`.
 
 - **Name**: `<Domain><What>Exception`, prefixed the way the domain's service is
-  (`UserService` → `UserEmailTakenException`, `AiWriteService` →
-  `AiWriteInappropriateException`).
+  (`UserService` → `UserEmailTakenException`, `GenerateTextService` →
+  `GenerateTextInappropriateException`).
 - **Parent**: exactly one standard exception, which is where its status code comes
   from. Never subclass `Exception` directly.
 - **Domain base**: `<Domain>Exception(Exception)`, only if something catches every
   exception from that domain. A domain base never subclasses a standard exception.
   Specific exceptions list it first:
-  `class AiWriteInappropriateException(AiWriteException, UnprocessableException)`.
+  `class GenerateTextInappropriateException(GenerateTextException, UnprocessableException)`.
 
 ```python
 # libs/users/exceptions.py
