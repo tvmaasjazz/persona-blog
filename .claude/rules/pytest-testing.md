@@ -800,7 +800,6 @@ async def signed_in_user(
 | Redirect                      | httpx doesn't follow redirects by default. Assert the status, then check `Location` with `urllib.parse` |
 | Set-Cookie attributes         | Read `response.headers.get_list("set-cookie")`; assert `HttpOnly`, `Secure` for the environment, and `SameSite` |
 | Rate limit → 429              | Pre-set the Redis counter at the cap; assert 429 |
-| Dependency unavailable (health) | Point the resource at a closed port (`redis://localhost:1/0`) through the same seam the route reads. Never stub `ping()` |
 | Unhandled exception → 500     | Covered once in `tests/api/core/test_exception_handlers.py`, not per route |
 
 ```python
