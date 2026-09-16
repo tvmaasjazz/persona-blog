@@ -66,7 +66,7 @@ snake_case (`TextType` → `pb_text_type`). SQLAlchemy's `Enum` column persists 
 that difference stops being a source of bugs.
 
 ```sql
--- migrations/sql/pb_posts/0001_create_pb_posts.up.sql
+-- migrations/sql/pb_post/0001_create_pb_post.up.sql
 CREATE TYPE pb_text_type AS ENUM ('BLOG_POST', 'NEWSLETTER');
 ```
 

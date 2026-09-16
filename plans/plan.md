@@ -27,7 +27,8 @@ directly on `main`.
   `GeneratedTextResponseDto`, `GenerateTextPrompt`. The enum is `TextType`.
 - `character_count`, not `char_length`.
 - Every Postgres object is prefixed `pb_`: databases `pb_local` and `pb_test`, tables
-  `pb_users`, enum types `pb_text_type`, and so on.
+  `pb_user`, enum types `pb_text_type`, and so on. Table names are singular. Alembic's
+  `alembic_version` table keeps its default name.
 
 ---
 
@@ -263,12 +264,14 @@ Build:
   undeclared `.env` keys
 - SQLAlchemy async engine and Redis client created in `lifespan`, stored on
   `app.state`, closed on shutdown. `tests/api/test_lifespan.py` covers both
-- `/health` extended to check both Postgres (`SELECT 1`) and Redis (`PING`), reporting
-  each as `REACHABLE` / `UNREACHABLE` and the overall status as `OK` / `DEGRADED`
+- `/health` stays a liveness check — process up, nothing else. It does not check
+  Postgres or Redis, so a backing-service blip never fails a deploy or restarts the
+  API. A separate readiness endpoint can come later if deployment needs one
 - CI gets Postgres and Redis service containers on the same ports as compose
 
-**Verify:** `docker compose up -d`, `/health` reports both as reachable. Stop each
-container in turn and confirm `/health` degrades without the app crashing.
+**Verify:** `docker compose up -d --wait` reports both containers healthy, and
+`pb_local` and `pb_test` both exist. The dev server starts with `.env` in place;
+`uv run pytest` passes with compose up, and CI is green.
 
 ---
 
@@ -278,7 +281,7 @@ Uses the `db-migration` skill.
 
 Build:
 
-- `migrations/env.py` (no `target_metadata`, `version_table="pb_alembic_version"`), `alembic.ini` with `file_template` and
+- `migrations/env.py` (no `target_metadata`), `alembic.ini` with `file_template` and
   `version_locations`, `migrations/migration_runner.py`
 - `uv add sqlparse alembic`
 - `libs/database/base.py`, `session.py` (`async_sessionmaker`), empty
@@ -286,13 +289,13 @@ Build:
 - `get_db_session` and `get_db_transaction` in `apps/api/core/dependencies.py`, with
   `tests/api/core/test_dependencies.py`, plus the `db_engine` / `db_session` test
   fixtures
-- First revision: `pb_users` — `id`, `email` (unique), `display_name`,
+- First revision: `pb_user` — `id`, `email` (unique), `display_name`,
   `google_subject_id`, `created_at`, `updated_at`
 - `libs/database/orm/user.py` with `UserOrm`, exported from `orm/__init__.py`
 - CI job: apply migrations to an empty database, then the drift check against Orm
   metadata
 
-**Verify:** `alembic upgrade head` on a fresh database, inspect with `psql \d pb_users`.
+**Verify:** `alembic upgrade head` on a fresh database, inspect with `psql \d pb_user`.
 `alembic downgrade -1`, confirm the table is gone, upgrade again. Rename a column in
 the Orm class deliberately and confirm CI's drift check fails.
 
