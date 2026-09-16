@@ -5,8 +5,8 @@ argument-hint: <domain-name> [quirks or notes in quotes]
 
 Scaffold the `$1` domain. Notes on this domain: $2
 
-Follow `.claude/rules/fastapi-structure.md` and `.claude/rules/python-naming.md` for
-every file. Do not restate those conventions back to me — apply them.
+Follow `.claude/rules/fastapi-structure.md`, `.claude/rules/python-naming.md`, and
+`.claude/rules/database.md` for every file. Do not restate those conventions back to me — apply them.
 
 ## Before writing anything
 
@@ -19,8 +19,12 @@ every file. Do not restate those conventions back to me — apply them.
 
 ## Create
 
-**`libs/database/orm/<entity>.py`** for each new table, exported from
-`libs/database/orm/__init__.py`. Skip if the domain owns no tables.
+**Tables first.** If the domain owns tables, hand them to the `schema-coder` agent
+before writing anything else. It writes the SQL, the revision, and the Orm classes,
+and verifies them. It doesn't see this conversation, so pass each table's columns
+(type, nullability, default), constraints, indexes, and enum types. Wait for its
+report; the code below uses the Orm classes it creates. Skip if the domain owns no
+tables.
 
 Each new package folder below gets an empty `__init__.py`.
 
@@ -46,11 +50,6 @@ Each new package folder below gets an empty `__init__.py`.
 - Register the router in `apps/api/app_factory.py`
 - Add the settings model to `AppSettings` in `apps/api/core/config.py`
 
-**Migrations** — follow the `db-migration` skill: for each new table, a `.up.sql` and
-`.down.sql` under `migrations/sql/<table>/` with the shared columns every table
-carries, plus the revision wrapper in `migrations/revisions/`. Chain `down_revision`
-to the current head.
-
 **Tests** — once every file above exists, hand off to the `test-writer` agent. Don't
 write tests yourself. It doesn't see this conversation, so pass it the new source
 files, each service method and route, and the intended behaviour from the notes:
@@ -59,8 +58,9 @@ error cases, status codes, limits.
 ## After
 
 Report as a list: files created, decisions you made where the notes were thin, and
-anything the rules files didn't cover. Include the test-writer's Coverage, Test run,
-and Source problems sections. If a quirk of this domain conflicts with an
+anything the rules files didn't cover. Include the schema-coder's Verification and
+Follow-up sections, and the test-writer's Coverage, Test run, and Source problems
+sections. If a quirk of this domain conflicts with an
 existing rule, say so and propose wording — don't quietly deviate.
 
 Stop before running migrations or committing.

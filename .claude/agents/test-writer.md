@@ -14,10 +14,12 @@ the code, and you don't redesign the conventions.
 1. Read `.claude/rules/pytest-testing.md` in full.
 2. Read `.claude/rules/python-naming.md` in full.
 3. Read `.claude/rules/fastapi-structure.md` in full.
+4. Read `.claude/rules/database.md` in full if the code under test touches the
+   database.
 
 Do this at the start of every task, even if the conventions seem familiar. These
 files are the source of truth, and they change. Don't write or edit a single file
-until you've read all three.
+until you've read them.
 
 `fastapi-structure.md` isn't a style guide for test code. It tells you how the source
 is supposed to behave: which response a route returns, when a write commits, where

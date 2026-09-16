@@ -59,6 +59,9 @@ written. They are expected to grow.
   and `.claude/commands/` for anything that scopes work by file type, and propose
   matching edits to their descriptions and scope lists.
 - Propose the edit; don't apply it unless asked.
+- Before proposing a commit that touches `.claude/`, `CLAUDE.md`, or `plans/`, run the
+  `docs-auditor` agent. Fix what it finds in files the change touched, and report the
+  rest.
 
 ## Git
 
