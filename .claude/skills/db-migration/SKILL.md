@@ -27,6 +27,7 @@ backend/migrations/
 ├── revisions/
 │   └── 20260912_1423_create_pb_user.py
 └── sql/
+    ├── extensions/                   # CREATE EXTENSION files; no pb_ prefix
     └── pb_user/                      # one folder per table, named exactly as the table
         ├── 0001_create_pb_user.up.sql
         └── 0001_create_pb_user.down.sql
@@ -54,6 +55,48 @@ default name.
 Table names are singular: `pb_user`, `pb_persona`. A many-to-many table joins both
 singular names: `pb_persona_tag`.
 
+Columns ending `_id` are `BIGINT` foreign keys; a third party's identifier is named
+otherwise (`provider_subject`). Boolean columns start with `is_`.
+
+## Table shape
+
+Every `CREATE TABLE` carries the shared columns that `Base` maps
+(`fastapi-structure.md` › Shared columns), in this order, with constraints named in
+full:
+
+```sql
+CREATE TABLE pb_persona (
+    id BIGINT GENERATED ALWAYS AS IDENTITY,
+    identity UUID NOT NULL DEFAULT gen_random_uuid(),
+    user_id BIGINT NOT NULL,
+    name TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
+    updated_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
+    deleted_at TIMESTAMP,
+    created_by_id BIGINT NOT NULL,
+    updated_by_id BIGINT NOT NULL,
+    deleted_by_id BIGINT,
+    CONSTRAINT pb_persona_pkey PRIMARY KEY (id),
+    CONSTRAINT pb_persona_identity_key UNIQUE (identity),
+    CONSTRAINT pb_persona_user_id_fkey FOREIGN KEY (user_id) REFERENCES pb_user (id),
+    CONSTRAINT pb_persona_created_by_id_fkey FOREIGN KEY (created_by_id) REFERENCES pb_user (id),
+    CONSTRAINT pb_persona_updated_by_id_fkey FOREIGN KEY (updated_by_id) REFERENCES pb_user (id),
+    CONSTRAINT pb_persona_deleted_by_id_fkey FOREIGN KEY (deleted_by_id) REFERENCES pb_user (id)
+);
+
+CREATE INDEX pb_persona_user_id_idx ON pb_persona (user_id);
+```
+
+- Table-specific columns go between `identity` and `created_at`.
+- Timestamps are `TIMESTAMP` without time zone, holding UTC. Never `TIMESTAMPTZ`.
+- Text is `TEXT`, never `VARCHAR(n)`; case-insensitive text is `CITEXT`.
+- No triggers. `updated_at` is set by SQLAlchemy, so a backfill `UPDATE` sets
+  `updated_at` itself.
+- Postgres doesn't index foreign keys; add an index for each one you query by.
+- A unique constraint on a soft-deletable table is usually a partial unique index,
+  `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL`, so a soft-deleted row doesn't
+  block a new one. Mirror it in the Orm with `Index(..., unique=True, postgresql_where=...)`.
+
 ## Steps
 
 1. **Find the current head** — `alembic heads`, or the revision with no child in
@@ -63,9 +106,12 @@ singular names: `pb_persona_tag`.
 3. **Write the `.down.sql`.** Always. If the change is irreversible (dropping a
    column holding data), the file carries a comment saying so plus whatever
    schema-only reversal it can manage. Never omit it.
-4. **Write the revision wrapper** (see below).
+4. **Write the revision wrapper** (see below). Generate it with
+   `uv run alembic revision --rev-id <YYYYMMDD_HHMM> -m <slug>`, using the current UTC
+   time, then replace the placeholder file paths.
 5. **Update the Orm class** in `libs/database/orm/` to match.
 6. **Stop.** Report what you wrote and let Tyler run it. Do not run `alembic upgrade`.
+   Remind him to run `uv run python -m scripts.check_schema_drift` after upgrading.
 
 ## Revision wrapper
 
@@ -142,7 +188,9 @@ for the duration.
 ## If `migration_runner.py` does not exist yet
 
 Create it from `reference/migration_runner.py` in this skill. It requires
-`sqlparse` — add it to the project dependencies with `uv add sqlparse`. Splitting SQL
+`sqlparse` — add it to the project dependencies with `uv add sqlparse`. It executes
+through `exec_driver_sql()`, not `op.execute()`, which would parse any `:word` in the
+SQL as a bind parameter. Splitting SQL
 on `;` is not acceptable; semicolons appear inside string literals, comments, and
 function bodies.
 

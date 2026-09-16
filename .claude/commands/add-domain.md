@@ -46,9 +46,10 @@ Each new package folder below gets an empty `__init__.py`.
 - Register the router in `apps/api/app_factory.py`
 - Add the settings model to `AppSettings` in `apps/api/core/config.py`
 
-**Migrations** — for each new table, a `.up.sql` and `.down.sql` under
-`migrations/sql/<table>/`, plus the revision wrapper in `migrations/revisions/`.
-Chain `down_revision` to the current head.
+**Migrations** — follow the `db-migration` skill: for each new table, a `.up.sql` and
+`.down.sql` under `migrations/sql/<table>/` with the shared columns every table
+carries, plus the revision wrapper in `migrations/revisions/`. Chain `down_revision`
+to the current head.
 
 **Tests** — once every file above exists, hand off to the `test-writer` agent. Don't
 write tests yourself. It doesn't see this conversation, so pass it the new source

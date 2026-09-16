@@ -31,8 +31,10 @@ backend/
 │   ├── core/
 │   │   └── exceptions.py      # standard exceptions: NotFoundException, ...
 │   ├── database/
-│   │   ├── base.py            # Base (DeclarativeBase), shared metadata
-│   │   ├── session.py         # engine + async_sessionmaker
+│   │   ├── base.py            # Base: shared columns every table inherits
+│   │   ├── column_types.py    # UtcDateTime
+│   │   ├── constants.py       # naming convention, UTC_NOW_SQL
+│   │   ├── session.py         # create_db_session_factory(), soft-delete rule
 │   │   └── orm/               # every table, one module per entity
 │   │       ├── __init__.py    # imports all modules below
 │   │       ├── user.py        # UserOrm
@@ -47,6 +49,8 @@ backend/
 │       ├── types.py           # every StrEnum the domain owns
 │       └── constants.py
 ├── migrations/                # raw SQL; imports nothing from apps/ or libs/
+├── scripts/                   # developer and CI scripts: check_schema_drift.py
+├── alembic.ini
 └── pyproject.toml
 ```
 
@@ -110,7 +114,7 @@ A route takes a `Dto` only when a body or a query model is sent.
 | Route                                  | Inbound                                                    |
 | -------------------------------------- | ---------------------------------------------------------- |
 | `POST` create / `PUT` update           | `<Entity>Dto` body, **one class shared by both**: `BlogPostDto` |
-| `GET /{id}` / `DELETE /{id}`           | None — the identifier is a plain path parameter            |
+| `GET /{identity}` / `DELETE /{identity}` | None — the entity's `identity` is a plain `UUID` path parameter |
 | `GET` list                             | `<Entity>FetchAllQueryDto` query model: `BlogPostFetchAllQueryDto` |
 | Non-CRUD action (`POST /generate-text`) | `<Verb><Entity>Dto` body: `GenerateTextDto`                |
 
@@ -125,7 +129,7 @@ them here.
 | Route                          | Returns                                               |
 | ------------------------------ | ----------------------------------------------------- |
 | `GET`                          | A custom `<Entity>ResponseDto`: `BlogPostResponseDto`  |
-| `POST` create                  | `IdentityResponseDto` — `{"identity": "<id>"}`        |
+| `POST` create                  | `IdentityResponseDto` — `{"identity": "<uuid>"}`      |
 | `PUT` update / `DELETE`        | `EmptyResponseDto` — `{}`                             |
 | Non-CRUD action                | A custom `ResponseDto` for what it carries: `GeneratedTextResponseDto` |
 
@@ -137,13 +141,31 @@ One `dtos.py` per domain holds both directions. Never split into `requests.py` /
 
 A service never accepts or returns a `Dto`.
 
+### Identifiers
+
+Every row has two keys (see `## ORM`). `id` is the `BIGINT` primary key and never
+leaves the backend: not in a DTO, a path, or a query string. `identity` is the UUID
+the API exposes, typed `UUID` everywhere it appears, so FastAPI rejects a malformed
+one with a 422 before a service sees it. Routes and services look rows up by
+`identity`; foreign keys and joins use `id`.
+
 ### Input models
 
 A service method taking a structured payload takes a Pydantic `Input` model from
 `libs/<domain>/inputs.py`. Scalar identifiers stay plain parameters —
-`get_user(user_id: int)` gets no wrapper. Create and update share the one `Input`
-their shared `Dto` maps to: `create_blog_post(blog_post_input: BlogPostInput)` and
-`update_blog_post(blog_post_id: int, blog_post_input: BlogPostInput)`.
+`get_user(user_identity: UUID)` gets no wrapper. Create and update share the one
+`Input` their shared `Dto` maps to:
+`create_blog_post(blog_post_input: BlogPostInput, auth_user: AuthUser)` and
+`update_blog_post(blog_post_identity: UUID, blog_post_input: BlogPostInput, auth_user: AuthUser)`.
+
+### The acting user
+
+The auth guard, `AuthUserDep` in `core/dependencies.py`, resolves the session to an
+`AuthUser` in request scope, carrying the signed-in user's `id` and `identity`. A
+route that needs the acting user takes `AuthUserDep` and passes the `AuthUser` to the
+service. Any service method that writes takes it as its last parameter and fills the
+audit columns from `auth_user.id`. Services never read the current user from
+anywhere else.
 
 **Never subclass an `Input` to make a `Dto`.** Declare the `Dto` independently.
 Every `Dto` has a `to_input()`; every domain `ResponseDto` has a `from_result()`.
@@ -152,7 +174,7 @@ The shared `IdentityResponseDto` and `EmptyResponseDto` are constructed directly
 ```python
 # apps/api/core/dtos.py
 class IdentityResponseDto(BaseModel):
-    identity: str
+    identity: UUID
 
 
 class EmptyResponseDto(BaseModel):
@@ -170,13 +192,13 @@ class BlogPostDto(BaseModel):
 
 
 class BlogPostResponseDto(BaseModel):
-    id: int
+    identity: UUID
     title: str
     body: str
 
     @classmethod
     def from_result(cls, result: GetBlogPostResult) -> "BlogPostResponseDto":
-        return cls(id=result.id, title=result.title, body=result.body)
+        return cls(identity=result.identity, title=result.title, body=result.body)
 ```
 
 ## App-scoped vs request-scoped
@@ -221,35 +243,40 @@ Routers are one line of delegation, type hints only, no `= Depends(...)` default
 blog_post_router = APIRouter(prefix="/blog-posts", tags=["blog-posts"])
 
 
-@blog_post_router.get("/{blog_post_id}")
+@blog_post_router.get("/{blog_post_identity}")
 async def get_blog_post(
-    blog_post_id: int, blog_post_service: BlogPostServiceDep
+    blog_post_identity: UUID, blog_post_service: BlogPostServiceDep
 ) -> BlogPostResponseDto:
-    get_blog_post_result = await blog_post_service.get_blog_post(blog_post_id)
+    get_blog_post_result = await blog_post_service.get_blog_post(blog_post_identity)
     return BlogPostResponseDto.from_result(get_blog_post_result)
 
 
 @blog_post_router.post("/")
 async def create_blog_post(
-    dto: BlogPostDto, blog_post_service: BlogPostServiceDep
+    dto: BlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> IdentityResponseDto:
-    create_blog_post_result = await blog_post_service.create_blog_post(dto.to_input())
-    return IdentityResponseDto(identity=str(create_blog_post_result.id))
+    create_blog_post_result = await blog_post_service.create_blog_post(
+        dto.to_input(), auth_user
+    )
+    return IdentityResponseDto(identity=create_blog_post_result.identity)
 
 
-@blog_post_router.put("/{blog_post_id}")
+@blog_post_router.put("/{blog_post_identity}")
 async def update_blog_post(
-    blog_post_id: int, dto: BlogPostDto, blog_post_service: BlogPostServiceDep
+    blog_post_identity: UUID,
+    dto: BlogPostDto,
+    auth_user: AuthUserDep,
+    blog_post_service: BlogPostServiceDep,
 ) -> EmptyResponseDto:
-    await blog_post_service.update_blog_post(blog_post_id, dto.to_input())
+    await blog_post_service.update_blog_post(blog_post_identity, dto.to_input(), auth_user)
     return EmptyResponseDto()
 
 
-@blog_post_router.delete("/{blog_post_id}")
+@blog_post_router.delete("/{blog_post_identity}")
 async def delete_blog_post(
-    blog_post_id: int, blog_post_service: BlogPostServiceDep
+    blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> EmptyResponseDto:
-    await blog_post_service.delete_blog_post(blog_post_id)
+    await blog_post_service.delete_blog_post(blog_post_identity, auth_user)
     return EmptyResponseDto()
 ```
 
@@ -272,6 +299,29 @@ __all__ = ["PersonaOrm", "UserOrm"]
 A service may import any Orm it needs; the domain boundary applies to services, not
 tables.
 
+### Shared columns
+
+Every Orm class extends `Base` from `libs/database/base.py`, which supplies the
+columns every table has. Never redeclare them in an Orm class, except where noted.
+The full column spec is in `plans/user-tables.md`.
+
+| Column          | Mapped as               | Notes |
+| --------------- | ----------------------- | ----- |
+| `id`            | `Mapped[int]`           | `BIGINT` identity primary key. Never leaves the backend |
+| `identity`      | `Mapped[UUID]`          | Unique, generated by `gen_random_uuid()`. The ID the API exposes |
+| `created_at`    | `Mapped[datetime]`      | Database default on insert |
+| `updated_at`    | `Mapped[datetime]`      | Database default on insert; SQLAlchemy `onupdate` on every ORM update |
+| `deleted_at`    | `Mapped[datetime \| None]` | On `SoftDeleteMixin`, which `Base` inherits |
+| `created_by_id` | `Mapped[int]`           | FK to `pb_user.id` |
+| `updated_by_id` | `Mapped[int]`           | FK to `pb_user.id` |
+| `deleted_by_id` | `Mapped[int \| None]`   | FK to `pb_user.id` |
+
+`UserOrm` is the one exception: it redeclares `created_by_id` and `updated_by_id` as
+nullable, since a person signing up has no creator.
+
+`Base` maps annotations to column types: `str` → `TEXT`, `datetime` → `UtcDateTime`,
+`UUID` → `UUID`. Declare `CITEXT`, `BIGINT` foreign keys, and enums explicitly.
+
 ### References between tables
 
 Use direct symbols where import order allows:
@@ -287,7 +337,11 @@ class PersonaOrm(Base):
 
 - `ForeignKey(UserOrm.id)`, never `ForeignKey("pb_user.id")`.
 - `__tablename__` and the `back_populates` attribute name are the only permitted
-  loose strings.
+  loose strings, with one exception: `ForeignKey("pb_user.id")` on `Base`'s audit
+  columns and `UserOrm`'s own overrides of them, because `UserOrm` extends `Base`
+  and can't be imported there.
+- Explicit index names in `__table_args__` match the SQL exactly:
+  `Index("pb_user_email_idx", "email", unique=True, postgresql_where=text("deleted_at IS NULL"))`.
 - A quoted class name in `relationship()` or `Mapped[...]` is allowed on **one** side
   of a mutual relationship only. Put the forward reference on the parent
   (`UserOrm.personas`) and the concrete import on the child.
@@ -304,9 +358,24 @@ class PersonaOrm(Base):
 - Table names are singular: `pb_user`, `pb_persona`. A many-to-many table joins both
   singular names: `pb_persona_tag`. Relationship attributes that hold collections stay
   plural: `UserOrm.personas`.
+- Columns ending `_id` are `BIGINT` foreign keys. A provider's or third party's
+  identifier never takes that suffix: `provider_subject`, not `provider_id`.
+- Boolean columns start with `is_`: `is_active`, `is_email_verified`.
+- Timestamps are `TIMESTAMP` without time zone and always hold UTC. `UtcDateTime`
+  stores them naive and returns them timezone-aware, so Python code only ever handles
+  aware UTC datetimes: `datetime.now(UTC)`. Passing a naive datetime raises.
+- No database triggers. SQLAlchemy sets `updated_at`, so an `UPDATE` written in raw
+  SQL (a backfill) sets `updated_at` itself.
+- Soft delete, not `DELETE`: set `deleted_at` and `deleted_by_id`. Sessions from
+  `create_db_session_factory()` add `deleted_at IS NULL` to every ORM select, including
+  relationship loads, so soft-deleted rows never appear by accident. Raw SQL and Core
+  statements aren't filtered. How to read soft-deleted rows on purpose isn't settled
+  yet — decide it with the first feature that needs to.
 - Async throughout: `AsyncSession`, `async_sessionmaker`, async driver. Never a sync
   `Session`.
-- Engine and `async_sessionmaker` are created once in `lifespan`; db sessions are
+- The engine is created once in `lifespan`, and the session factory once from it with
+  `create_db_session_factory(db_engine)`. Never build an `async_sessionmaker` by hand;
+  the factory carries the session options and the soft-delete rule. Db sessions are
   per-request.
 - `get_db_session` does **not** commit — a write through it is silently discarded.
   Write routes use a second dependency that owns the transaction:
@@ -395,7 +464,11 @@ backend/migrations/
 ```
 
 - Revision files are `<YYYYMMDD>_<HHMM>_<slug>.py`, generated via `file_template` in
-  `alembic.ini`. Point `version_locations` at `revisions/`.
+  `alembic.ini`. Point `version_locations` at `revisions/`. The revision id is the same
+  timestamp, passed explicitly:
+  `uv run alembic revision --rev-id 20260912_1423 -m create_pb_user`.
+- SQL that isn't about one table goes in a named folder: extensions in
+  `sql/extensions/`. Extensions aren't ours, so they take no `pb_` prefix.
 - SQL files are `<nnnn>_<what_it_does>.<up|down>.sql`, zero-padded to four. The verb
   describes the change: `create_pb_user`, `add_display_name`, `backfill_persona_slug`.
 - The numeric prefix orders changes within one table's folder, for human reading
@@ -407,34 +480,51 @@ backend/migrations/
 
 ```python
 # revisions/20260912_1423_create_pb_user.py
+from migration_runner import MigrationRunner
+
 revision = "20260912_1423"
 down_revision = None
 
-RUNNER = MigrationRunner()
+MIGRATION_RUNNER = MigrationRunner()
 
 
 def upgrade() -> None:
-    RUNNER.run("pb_user/0001_create_pb_user.up.sql")
+    MIGRATION_RUNNER.run_transactional("pb_user/0001_create_pb_user.up.sql")
 
 
 def downgrade() -> None:
-    RUNNER.run("pb_user/0001_create_pb_user.down.sql")
+    MIGRATION_RUNNER.run_transactional("pb_user/0001_create_pb_user.down.sql")
 ```
+
+`alembic.ini` sets `prepend_sys_path` to `migrations/`, so revisions import
+`migration_runner` as a top-level module and `migrations/` stays out of the package
+tree. `env.py` reads `DATABASE_URL` from the environment, loading `.env` with
+python-dotenv; real environment variables win.
 
 - Every migration ships a `.down.sql`. If a change is irreversible, the down file
   carries a comment saying so plus whatever schema-only reversal it can manage — it
   is never omitted.
-- `MigrationRunner` supports transactional and non-transactional (autocommit)
-  execution. Index builds and other statements that can't run in a transaction use
-  the autocommit path.
+- `MigrationRunner` supports transactional (`run_transactional`) and
+  non-transactional (`run_non_transactional`, autocommit) execution. Index builds and
+  other statements that can't run in a transaction use the autocommit path. Each
+  revision runs in its own transaction (`transaction_per_migration=True`).
+- The runner executes through `exec_driver_sql()`, so SQL reaches Postgres untouched.
+  Never switch it to `op.execute()`: that parses any `:word` in the SQL as a bind
+  parameter.
 - Changing a table means writing the SQL file *and* updating the Orm class in the
   same commit.
 
 ### Drift check
 
-CI applies all migrations to an empty database and compares the result against the
-Orm metadata (`alembic check` with a throwaway `target_metadata`). Autogenerate is a
-detector that fails the build, never a generator that writes files.
+CI applies all migrations to an empty database, then runs
+`uv run python -m scripts.check_schema_drift`. The script compares the database with
+`Base.metadata` through Alembic's `compare_metadata`, ignoring `alembic_version`, and
+exits non-zero on any difference. `env.py` keeps no `target_metadata`. Autogenerate is
+a detector that fails the build, never a generator that writes files. Run the script
+locally after writing a migration.
+
+Scripts in `backend/scripts/` may import `libs/`, and run as modules from `backend/`
+(`python -m scripts.<name>`). Nothing imports from `scripts/`.
 
 ## Configuration and constants
 

@@ -17,7 +17,7 @@ class MigrationRunner:
 
         for statement in statements:
             if statement.strip():
-                op.execute(statement)
+                self._execute(statement)
 
     def run_non_transactional(self, relative_path: str) -> None:
         """Run exactly one statement outside a transaction. Raises on more than one."""
@@ -35,7 +35,12 @@ class MigrationRunner:
             return
 
         with op.get_context().autocommit_block():
-            op.execute(statements[0])
+            self._execute(statements[0])
+
+    def _execute(self, statement: str) -> None:
+        # exec_driver_sql sends the SQL untouched. op.execute() would wrap it in text(),
+        # which treats any `:word` in the SQL as a bind parameter.
+        op.get_bind().exec_driver_sql(statement)
 
     def _read_file(self, relative_path: str) -> str:
         file_path = self._root_dir / relative_path
