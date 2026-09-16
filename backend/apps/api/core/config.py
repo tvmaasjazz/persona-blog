@@ -11,11 +11,14 @@ from apps.api.core.types import EnvironmentType
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         toml_file="config.toml",
+        env_file=".env",
         env_nested_delimiter="__",
     )
 
     app_name: str = "Persona Blog API"
     environment: EnvironmentType
+    database_url: str
+    redis_url: str
 
     @classmethod
     def settings_customise_sources(

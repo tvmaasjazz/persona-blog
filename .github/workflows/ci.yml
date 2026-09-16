@@ -8,6 +8,29 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: pb
+          POSTGRES_PASSWORD: pb
+          POSTGRES_DB: pb_test
+        ports:
+          - 5437:5432
+        options: >-
+          --health-cmd "pg_isready -U pb -d pb_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:8
+        ports:
+          - 6387:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
