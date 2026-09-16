@@ -334,7 +334,7 @@ asyncio_default_test_loop_scope = "session"
 ## Root fixtures
 
 Each fixture arrives with the plan step that adds its resource (the app in step 5,
-the database and Redis in step 8, `signed_in_user` in step 11). The code below is the
+the database and Redis in step 6, `signed_in_user` in step 9). The code below is the
 target shape.
 
 `tests/conftest.py` holds infrastructure every app and lib uses:
@@ -343,8 +343,8 @@ target shape.
 # tests/conftest.py
 TEST_ENVIRONMENT_VARIABLES = {
     "ENVIRONMENT": "TEST",
-    "DATABASE_URL": "postgresql+asyncpg://persona_blog:persona_blog@localhost:5432/persona_blog_test",
-    "REDIS_URL": "redis://localhost:6379/15",
+    "DATABASE_URL": "postgresql+asyncpg://pb:pb@localhost:5437/pb_test",
+    "REDIS_URL": "redis://localhost:6387/15",
     "OPENAI_API_KEY": "test-openai-api-key",
 }
 TEST_DATABASE_NAME_SUFFIX = "_test"
@@ -469,7 +469,7 @@ What these fixtures guarantee:
   Redis index other than 15, raises.
 
 Before running tests, start docker compose (`docker compose up -d`). The
-`persona_blog_test` database comes from the compose init script locally and from the
+`pb_test` database comes from the compose init script locally and from the
 service container in CI, which uses the same URLs. Tests never create or drop
 databases.
 

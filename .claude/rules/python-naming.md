@@ -60,14 +60,14 @@ Write the value out explicitly. Never `auto()` — in a `StrEnum` it produces th
 lowercased member name, which breaks the rule silently.
 
 This carries into the database. A Postgres enum type's labels are `UPPER_SNAKE` and
-match the Python members exactly; the type itself is named in snake_case after the
-class (`TextType` → `text_type`). SQLAlchemy's `Enum` column persists member
+match the Python members exactly; the type itself is `pb_` plus the class name in
+snake_case (`TextType` → `pb_text_type`). SQLAlchemy's `Enum` column persists member
 *names* by default while Pydantic serializes *values* — when the two are identical,
 that difference stops being a source of bugs.
 
 ```sql
--- migrations/sql/posts/0001_create_posts.up.sql
-CREATE TYPE text_type AS ENUM ('BLOG_POST', 'NEWSLETTER');
+-- migrations/sql/pb_posts/0001_create_pb_posts.up.sql
+CREATE TYPE pb_text_type AS ENUM ('BLOG_POST', 'NEWSLETTER');
 ```
 
 Adding a member means a migration (`ALTER TYPE ... ADD VALUE`) in the same commit as

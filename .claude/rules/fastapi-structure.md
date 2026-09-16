@@ -279,13 +279,13 @@ Use direct symbols where import order allows:
 ```python
 # libs/database/orm/persona.py
 class PersonaOrm(Base):
-    __tablename__ = "personas"
+    __tablename__ = "pb_personas"
 
     user_id: Mapped[int] = mapped_column(ForeignKey(UserOrm.id))
     user: Mapped[UserOrm] = relationship(back_populates="personas")
 ```
 
-- `ForeignKey(UserOrm.id)`, never `ForeignKey("users.id")`.
+- `ForeignKey(UserOrm.id)`, never `ForeignKey("pb_users.id")`.
 - `__tablename__` and the `back_populates` attribute name are the only permitted
   loose strings.
 - A quoted class name in `relationship()` or `Mapped[...]` is allowed on **one** side
@@ -295,6 +295,11 @@ class PersonaOrm(Base):
 
 ## Database
 
+- Every Postgres object this project creates is prefixed `pb_`: tables, enum types,
+  sequences, and Alembic's version table (`pb_alembic_version`). Constraint and index
+  names start with their table name, so they carry the prefix too:
+  `pb_users_pkey`, `pb_users_email_key`, `pb_personas_user_id_idx`. Python names
+  don't carry it: `PbUserOrm` is wrong, `UserOrm` is right.
 - Async throughout: `AsyncSession`, `async_sessionmaker`, async driver. Never a sync
   `Session`.
 - Engine and `async_sessionmaker` are created once in `lifespan`; db sessions are
@@ -375,12 +380,12 @@ backend/migrations/
 ├── env.py
 ├── migration_runner.py
 ├── revisions/
-│   ├── 20260912_1423_create_users.py
+│   ├── 20260912_1423_create_pb_users.py
 │   └── 20260914_0902_add_display_name.py
 └── sql/
-    └── users/                      # one folder per table
-        ├── 0001_create_users.up.sql
-        ├── 0001_create_users.down.sql
+    └── pb_users/                   # one folder per table, named exactly as the table
+        ├── 0001_create_pb_users.up.sql
+        ├── 0001_create_pb_users.down.sql
         ├── 0002_add_display_name.up.sql
         └── 0002_add_display_name.down.sql
 ```
@@ -388,7 +393,7 @@ backend/migrations/
 - Revision files are `<YYYYMMDD>_<HHMM>_<slug>.py`, generated via `file_template` in
   `alembic.ini`. Point `version_locations` at `revisions/`.
 - SQL files are `<nnnn>_<what_it_does>.<up|down>.sql`, zero-padded to four. The verb
-  describes the change: `create_users`, `add_display_name`, `backfill_persona_slug`.
+  describes the change: `create_pb_users`, `add_display_name`, `backfill_persona_slug`.
 - The numeric prefix orders changes within one table's folder, for human reading
   only. Ordering across tables is Alembic's `down_revision` chain.
 - The chain is append-only. Never insert a migration between two that have already
@@ -397,7 +402,7 @@ backend/migrations/
   `.down.sql` files in reverse order. Nothing is inferred from filenames.
 
 ```python
-# revisions/20260912_1423_create_users.py
+# revisions/20260912_1423_create_pb_users.py
 revision = "20260912_1423"
 down_revision = None
 
@@ -405,11 +410,11 @@ RUNNER = MigrationRunner()
 
 
 def upgrade() -> None:
-    RUNNER.run("users/0001_create_users.up.sql")
+    RUNNER.run("pb_users/0001_create_pb_users.up.sql")
 
 
 def downgrade() -> None:
-    RUNNER.run("users/0001_create_users.down.sql")
+    RUNNER.run("pb_users/0001_create_pb_users.down.sql")
 ```
 
 - Every migration ships a `.down.sql`. If a change is irreversible, the down file
