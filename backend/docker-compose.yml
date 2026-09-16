@@ -1,0 +1,35 @@
+name: persona-blog
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: pb
+      POSTGRES_PASSWORD: pb
+      POSTGRES_DB: pb_local
+    ports:
+      - "5437:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pb -d pb_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8
+    ports:
+      - "6387:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:

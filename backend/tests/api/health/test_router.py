@@ -9,7 +9,10 @@ async def test_get_health_returns_status_and_settings(
     fastapi_app: FastAPI, api_client: AsyncClient
 ) -> None:
     fastapi_app.state.settings = AppSettings(
-        app_name="Health Test API", environment=EnvironmentType.TEST
+        app_name="Health Test API",
+        environment=EnvironmentType.TEST,
+        database_url=fastapi_app.state.settings.database_url,
+        redis_url=fastapi_app.state.settings.redis_url,
     )
 
     get_health_response = await api_client.get("/health")

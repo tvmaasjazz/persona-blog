@@ -22,6 +22,7 @@ Run from `backend/`:
 
 ```bash
 uv sync                      # install from lockfile
+docker compose up -d         # Postgres + Redis; the dev server and tests need them
 uv lock                      # regenerate lockfile after dependency changes (hashes included)
 uv run ruff check --fix .    # lint
 uv run ruff format .         # format

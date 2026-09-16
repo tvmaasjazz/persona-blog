@@ -3,12 +3,13 @@ from collections.abc import AsyncIterator
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from redis.asyncio import Redis
 
 from apps.api.app_factory import create_app
 
 
 @pytest.fixture
-async def fastapi_app() -> AsyncIterator[FastAPI]:
+async def fastapi_app(redis_client: Redis) -> AsyncIterator[FastAPI]:
     fastapi_app = create_app()
     async with fastapi_app.router.lifespan_context(fastapi_app):
         yield fastapi_app

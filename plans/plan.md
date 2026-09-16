@@ -26,6 +26,9 @@ directly on `main`.
   `GenerateTextInput`, `GenerateTextResult`, `GenerateTextDto`,
   `GeneratedTextResponseDto`, `GenerateTextPrompt`. The enum is `TextType`.
 - `character_count`, not `char_length`.
+- Every Postgres object is prefixed `pb_`: databases `pb_local` and `pb_test`, tables
+  `pb_user`, enum types `pb_text_type`, and so on. Table names are singular. Alembic's
+  `alembic_version` table keeps its default name.
 
 ---
 
@@ -251,16 +254,24 @@ get corrected to whatever actually works.
 
 Build:
 
-- `docker-compose.yml` — Postgres 18 and Redis 8, named volumes, healthchecks
-- `.env.example` with `DATABASE_URL`, `REDIS_URL`, and the OpenAI key name
-- `libs/database/base.py`, `session.py` (async engine + `async_sessionmaker`),
-  empty `orm/__init__.py`
-- Redis client created in `lifespan`, stored on `app.state`, closed on shutdown
-- `get_db_session` and `get_db_transaction` in `apps/api/core/dependencies.py`
-- `/health` extended to check both Postgres (`SELECT 1`) and Redis (`PING`)
+- `backend/docker-compose.yml` — Postgres 18 on host port 5437 and Redis 8 on host
+  port 6387 (kept off the defaults so this doesn't clash with other local projects),
+  named volumes, healthchecks. Database `pb_local`
+- `backend/docker/postgres/init/` — creates `pb_test` beside `pb_local` when the
+  volume is first created
+- `backend/.env.example` with `DATABASE_URL` and `REDIS_URL`; `AppSettings` loads
+  `.env`. The OpenAI key name joins it in step 11, since `AppSettings` rejects
+  undeclared `.env` keys
+- SQLAlchemy async engine and Redis client created in `lifespan`, stored on
+  `app.state`, closed on shutdown. `tests/api/test_lifespan.py` covers both
+- `/health` stays a liveness check — process up, nothing else. It does not check
+  Postgres or Redis, so a backing-service blip never fails a deploy or restarts the
+  API. A separate readiness endpoint can come later if deployment needs one
+- CI gets Postgres and Redis service containers on the same ports as compose
 
-**Verify:** `docker compose up -d`, `/health` reports both as reachable. Stop each
-container in turn and confirm `/health` degrades without the app crashing.
+**Verify:** `docker compose up -d --wait` reports both containers healthy, and
+`pb_local` and `pb_test` both exist. The dev server starts with `.env` in place;
+`uv run pytest` passes with compose up, and CI is green.
 
 ---
 
@@ -273,13 +284,18 @@ Build:
 - `migrations/env.py` (no `target_metadata`), `alembic.ini` with `file_template` and
   `version_locations`, `migrations/migration_runner.py`
 - `uv add sqlparse alembic`
-- First revision: `users` — `id`, `email` (unique), `display_name`,
+- `libs/database/base.py`, `session.py` (`async_sessionmaker`), empty
+  `orm/__init__.py`. Moved from step 6: nothing needs them until there is a table
+- `get_db_session` and `get_db_transaction` in `apps/api/core/dependencies.py`, with
+  `tests/api/core/test_dependencies.py`, plus the `db_engine` / `db_session` test
+  fixtures
+- First revision: `pb_user` — `id`, `email` (unique), `display_name`,
   `google_subject_id`, `created_at`, `updated_at`
 - `libs/database/orm/user.py` with `UserOrm`, exported from `orm/__init__.py`
 - CI job: apply migrations to an empty database, then the drift check against Orm
   metadata
 
-**Verify:** `alembic upgrade head` on a fresh database, inspect with `psql \d users`.
+**Verify:** `alembic upgrade head` on a fresh database, inspect with `psql \d pb_user`.
 `alembic downgrade -1`, confirm the table is gone, upgrade again. Rename a column in
 the Orm class deliberately and confirm CI's drift check fails.
 
@@ -351,7 +367,8 @@ Build:
   `LlmSettings { model_name, request_timeout_seconds, max_output_tokens }`,
   `inputs.py`, `results.py` with
   `LlmCompletionResult { content, input_tokens, output_tokens }`
-- API key from env via `AppSettings`, never TOML
+- API key from env via `AppSettings`, never TOML; add `OPENAI_API_KEY` to
+  `.env.example`
 - Every LLM call recorded in a tracking table. Columns and migration are planned
   when this step is detailed
 - A dev-only router for making basic calls against different LLMs and checking each

@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from apps.api.core.config import AppSettings
 from apps.api.core.logging import configure_logging
@@ -14,12 +16,20 @@ logger = structlog.get_logger(__name__)
 async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     app_settings = AppSettings()
     configure_logging(app_settings)
+    db_engine = create_async_engine(app_settings.database_url)
+    redis_client = Redis.from_url(app_settings.redis_url)
     fastapi_app.state.settings = app_settings
+    fastapi_app.state.db_engine = db_engine
+    fastapi_app.state.redis_client = redis_client
 
     logger.info(
         "api_started",
         app_name=app_settings.app_name,
         environment=app_settings.environment,
     )
-    yield
-    logger.info("api_stopped", app_name=app_settings.app_name)
+    try:
+        yield
+    finally:
+        await redis_client.aclose()
+        await db_engine.dispose()
+        logger.info("api_stopped", app_name=app_settings.app_name)
