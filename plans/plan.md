@@ -10,13 +10,13 @@ directly on `main`.
 
 ## Settled decisions
 
-| Decision | Choice |
-|----------|--------|
-| Session strategy | Server-side session in Redis, session id in an httpOnly cookie |
-| Redis | In from the start, for sessions |
-| `/ai-write` persistence in step 6 | None. Request → LLM → response, nothing stored |
-| First OpenAI model | `gpt-4o-mini`, overridable in TOML |
-| Frontend styling | Tailwind, set up in step 4 |
+| Decision                          | Choice                                                         |
+| --------------------------------- | -------------------------------------------------------------- |
+| Session strategy                  | Server-side session in Redis, session id in an httpOnly cookie |
+| Redis                             | In from the start, for sessions                                |
+| `/ai-write` persistence in step 6 | None. Request → LLM → response, nothing stored                 |
+| First OpenAI model                | `gpt-4o-mini`, overridable in TOML                             |
+| Frontend styling                  | Tailwind, set up in step 4                                     |
 
 ## Naming settled for this plan
 
@@ -160,6 +160,7 @@ gh repo create persona-blog --private --source=. --remote=origin --push
 This step commits directly to `main`. Everything after it is a branch.
 
 Build:
+
 - `git init`, rename `master` → `main` (`git branch -m main`)
 - `.gitignore` — Python, Node, `.env`, `CLAUDE.local.md`, `config.local.toml`
 - `README.md` — one paragraph and the run commands
@@ -195,6 +196,7 @@ visibly applies, `npm run build` succeeds.
 No database, no libs beyond what the app needs.
 
 Build:
+
 - `backend/pyproject.toml` via `uv init`, plus `uv lock`
 - Ruff and pytest config in `pyproject.toml`
 - `apps/api/core/config.py` — `AppSettings` with `app_name: str = "Persona Blog API"`
@@ -204,7 +206,7 @@ Build:
   differs between environments. `tests/api/core/test_config.py` proves TOML beats
   the default and env beats TOML
 - `apps/api/core/dtos.py` — the shared CRUD response DTOs: `IdentityResponseDto
-  { identity: str }` for creates, `EmptyResponseDto {}` for updates and deletes.
+{ identity: str }` for creates, `EmptyResponseDto {}` for updates and deletes.
   Nothing uses them until the first CRUD domain, but `fastapi-coder` treats this as
   a setup file and won't create it
 - `apps/api/lifespan.py` — logs `api_started` with `app_name` and `environment` from
@@ -227,11 +229,13 @@ Build:
   step 3; the health test is what gives `pytest` something to collect
 
 **Verify:**
+
 ```bash
 uv run granian --interface asgi apps.api.main:app --reload
 curl localhost:8000/health
 uv run pytest
 ```
+
 The Actions run on the PR is green.
 Add `app_name = "..."` to `config.toml`, restart, confirm the log and `/health` both
 change (remove it afterwards). Then set `APP_NAME=...` as an env var and confirm it beats the TOML value.
@@ -243,9 +247,12 @@ get corrected to whatever actually works.
 
 ## Step 6 — `ai_write` skeleton, app ↔ lib wired
 
+### should this be called generate_writing (think about full system of edits and such)
+
 No LLM yet. This step proves the layering end to end.
 
 Build:
+
 - `libs/ai_write/` — `services.py` with `AiWriteService.generate_writing()`,
   `inputs.py` with `GenerateWritingInput { writing_type, prompt_text }`,
   `results.py` with `GenerateWritingResult { content, character_count }`
@@ -258,11 +265,13 @@ Build:
 - Tests both sides: service called directly, route via the test client
 
 **Verify:**
+
 ```bash
 curl -X POST localhost:8000/ai-write \
   -H 'content-type: application/json' \
   -d '{"writing_type":"BLOG_POST","prompt_text":"a post about sourdough"}'
 ```
+
 Returns the fake content and a correct `character_count`. Post an invalid
 `writing_type` and confirm a readable 422. Confirm `grep -r "from apps" libs/`
 returns nothing.
@@ -272,6 +281,7 @@ returns nothing.
 ## Step 7 — LLM lib, real output
 
 Build:
+
 - `libs/llm/` — `services.py` with `LlmService.complete()`, `settings.py` with
   `LlmSettings { model_name, request_timeout_seconds, max_output_tokens }`,
   `inputs.py`, `results.py` with
@@ -296,6 +306,7 @@ token counts. `uv run pytest` passes with no network.
 ## Step 8 — Postgres + Redis via docker compose
 
 Build:
+
 - `docker-compose.yml` — Postgres 18 and Redis 8, named volumes, healthchecks
 - `.env.example` with `DATABASE_URL`, `REDIS_URL`, and the OpenAI key name
 - `libs/database/base.py`, `session.py` (async engine + `async_sessionmaker`),
@@ -314,6 +325,7 @@ container in turn and confirm `/health` degrades without the app crashing.
 Uses the `db-migration` skill.
 
 Build:
+
 - `migrations/env.py` (no `target_metadata`), `alembic.ini` with `file_template` and
   `version_locations`, `migrations/migration_runner.py`
 - `uv add sqlparse alembic`
@@ -332,6 +344,7 @@ the Orm class deliberately and confirm CI's drift check fails.
 ## Step 10 — Users lib and domain
 
 Build:
+
 - `libs/users/` — `services.py` with `get_user_by_email`, `create_user`,
   `get_or_create_from_google`; `inputs.py`; `results.py`
 - `apps/api/domains/users/` — `dtos.py`, `dependencies.py`, `router.py` with
@@ -349,6 +362,7 @@ Needs a Google Cloud OAuth client — **manual setup by Tyler**, redirect URI
 `http://localhost:8000/auth/google/callback`.
 
 Build:
+
 - `libs/auth/` — Google token verification, session creation and validation against
   Redis. Session key holds the user id with a TTL; no sessions table
 - `apps/api/domains/auth/` — `GET /auth/google/login`,
@@ -367,6 +381,7 @@ just the cookie cleared.
 ## Step 12 — Frontend auth + write screen
 
 Build:
+
 - Sign-in button hitting the backend login route
 - A logged-in view showing `display_name` from `/users/me`
 - A form posting to `/ai-write` and rendering the result
@@ -381,6 +396,7 @@ refresh mid-session and confirm you stay signed in.
 ## Step 13 — Alpha limits + Logfire
 
 Build:
+
 - Per-user generation cap (3), Tyler's account exempt. Counter in Redis
 - structlog → Logfire wiring, request-id middleware
 - Railway deploy config
