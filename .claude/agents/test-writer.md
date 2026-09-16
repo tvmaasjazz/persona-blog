@@ -128,8 +128,8 @@ applied it. Name the rule and the file, e.g.:
 - `pytest-testing.md` › Test doubles: `LlmServiceStub` in `tests/stubs/llm.py`,
   overriding only `complete`
 - `pytest-testing.md` › §6 Route tests: overrode `get_llm_service`, not
-  `get_ai_write_service`, in `tests/api/ai_write/conftest.py`
-- `python-naming.md` › Variables: `generate_writing_response`, not `response`
+  `get_generate_text_service`, in `tests/api/generate_text/conftest.py`
+- `python-naming.md` › Variables: `generate_text_response`, not `response`
 
 Only list conventions you actually applied in this change, not every rule you read.
 

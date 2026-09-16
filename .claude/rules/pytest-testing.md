@@ -14,8 +14,8 @@ with one `pyproject.toml`. Separate apps and libs are kept apart by folders and
 `conftest.py` scope, not separate suites. If an app or lib ever becomes its own
 package with its own `pyproject.toml`, its tests move into that package.
 
-Examples leave out imports. Names that `plan.md` settles (`AiWriteService`,
-`GenerateWritingResult`, `LlmService`, `LlmCompletionResult`, `UserService`,
+Examples leave out imports. Names that `plan.md` settles (`GenerateTextService`,
+`GenerateTextResult`, `LlmService`, `LlmCompletionResult`, `UserService`,
 `UserOrm`) are real. Others, like `LlmCompletionInput`, `LlmUnavailableException` and
 `AuthSessionService`, are placeholders until their step lands.
 
@@ -111,7 +111,7 @@ backend/tests/
   name.
   - `test_create_user_returns_created_user`
   - `test_create_user_email_taken_raises_user_email_taken_exception`
-  - `test_generate_writing_unknown_writing_type_returns_422`
+  - `test_generate_text_unknown_text_type_returns_422`
 - No test classes. Group tests by file and by the `<unit>` prefix.
 - A fixture is a noun, named exactly like the production object it stands for:
   `db_session`, `redis_client`, `app_settings`, `fastapi_app`, `api_client`. Never a
@@ -156,7 +156,7 @@ default.
 
 Use `@pytest.mark.parametrize` when cases differ only in data. Argument names go in a
 tuple, and every case is a `pytest.param` with a snake_case `id` (§6 has an example).
-The one exception is iterating an enum: `list(WritingType)` can be passed as is,
+The one exception is iterating an enum: `list(TextType)` can be passed as is,
 because the member values serve as ids.
 
 Cases that need different setup are separate tests. A test body never branches on a
@@ -487,11 +487,11 @@ dispatch maps, and DTO mappers that contain logic.
 | DTO mapper with logic              | Build the DTO, call the mapper, compare the whole returned model |
 
 ```python
-# tests/libs/ai_write/test_prompts.py
+# tests/libs/generate_text/test_prompts.py
 def test_build_user_prompt_includes_prompt_text() -> None:
-    user_prompt = AiWritePrompt.build_user_prompt(
+    user_prompt = GenerateTextPrompt.build_user_prompt(
         prompt_text="a post about sourdough starters",
-        writing_type=WritingType.BLOG_POST,
+        text_type=TextType.BLOG_POST,
     )
 
     assert "a post about sourdough starters" in user_prompt
@@ -533,29 +533,29 @@ HTTP. If construction takes a client stack, move it into a fixture in the domain
 | Needs the database                | Same file, see §3 |
 
 ```python
-# tests/libs/ai_write/test_services.py
-async def test_generate_writing_returns_content_and_character_count() -> None:
+# tests/libs/generate_text/test_services.py
+async def test_generate_text_returns_content_and_character_count() -> None:
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="Sourdough is alive.")
-    ai_write_service = AiWriteService(llm_service=llm_service_stub)
-    generate_writing_input = build_generate_writing_input()
+    generate_text_service = GenerateTextService(llm_service=llm_service_stub)
+    generate_text_input = build_generate_text_input()
 
-    generate_writing_result = await ai_write_service.generate_writing(generate_writing_input)
+    generate_text_result = await generate_text_service.generate_text(generate_text_input)
 
-    assert generate_writing_result == GenerateWritingResult(
+    assert generate_text_result == GenerateTextResult(
         content="Sourdough is alive.",
         character_count=19,
     )
 
 
-async def test_generate_writing_llm_unavailable_raises_llm_unavailable_exception() -> None:
+async def test_generate_text_llm_unavailable_raises_llm_unavailable_exception() -> None:
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_error = LlmUnavailableException()
-    ai_write_service = AiWriteService(llm_service=llm_service_stub)
-    generate_writing_input = build_generate_writing_input()
+    generate_text_service = GenerateTextService(llm_service=llm_service_stub)
+    generate_text_input = build_generate_text_input()
 
     with pytest.raises(LlmUnavailableException):
-        await ai_write_service.generate_writing(generate_writing_input)
+        await generate_text_service.generate_text(generate_text_input)
 ```
 
 ## §3 Database tests
@@ -753,7 +753,7 @@ report it and propose splitting it out.
 Put the override in the domain's `conftest.py` as an `autouse` fixture:
 
 ```python
-# tests/api/ai_write/conftest.py
+# tests/api/generate_text/conftest.py
 @pytest.fixture(autouse=True)
 def llm_service_stub(fastapi_app: FastAPI) -> LlmServiceStub:
     llm_service_stub = LlmServiceStub()
@@ -804,20 +804,20 @@ async def signed_in_user(
 | Unhandled exception → 500     | Covered once in `tests/api/core/test_exception_handlers.py`, not per route |
 
 ```python
-# tests/api/ai_write/test_router.py
+# tests/api/generate_text/test_router.py
 @pytest.mark.usefixtures("signed_in_user")
-async def test_generate_writing_returns_writing_response(
+async def test_generate_text_returns_generated_text_response(
     api_client: AsyncClient, llm_service_stub: LlmServiceStub
 ) -> None:
     llm_service_stub.complete_result = build_llm_completion_result(content="Sourdough is alive.")
 
-    generate_writing_response = await api_client.post(
-        "/ai-write",
-        json={"writing_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
+    generate_text_response = await api_client.post(
+        "/generate-text",
+        json={"text_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
     )
 
-    assert generate_writing_response.status_code == 200
-    assert generate_writing_response.json() == {
+    assert generate_text_response.status_code == 200
+    assert generate_text_response.json() == {
         "content": "Sourdough is alive.",
         "character_count": 19,
     }
@@ -829,49 +829,49 @@ async def test_generate_writing_returns_writing_response(
     [
         pytest.param(
             {"prompt_text": "sourdough"},
-            ["body", "writing_type"],
-            id="missing_writing_type",
+            ["body", "text_type"],
+            id="missing_text_type",
         ),
         pytest.param(
-            {"writing_type": "HAIKU", "prompt_text": "sourdough"},
-            ["body", "writing_type"],
-            id="unknown_writing_type",
+            {"text_type": "HAIKU", "prompt_text": "sourdough"},
+            ["body", "text_type"],
+            id="unknown_text_type",
         ),
     ],
 )
-async def test_generate_writing_invalid_body_returns_422(
+async def test_generate_text_invalid_body_returns_422(
     api_client: AsyncClient,
     request_body: dict[str, str],
     expected_error_location: list[str],
 ) -> None:
-    generate_writing_response = await api_client.post("/ai-write", json=request_body)
+    generate_text_response = await api_client.post("/generate-text", json=request_body)
 
-    response_body = generate_writing_response.json()
-    assert generate_writing_response.status_code == 422
+    response_body = generate_text_response.json()
+    assert generate_text_response.status_code == 422
     assert response_body["detail"][0]["loc"] == expected_error_location
 
 
 @pytest.mark.usefixtures("signed_in_user")
-async def test_generate_writing_llm_unavailable_returns_503(
+async def test_generate_text_llm_unavailable_returns_503(
     api_client: AsyncClient, llm_service_stub: LlmServiceStub
 ) -> None:
     llm_service_stub.complete_error = LlmUnavailableException()
 
-    generate_writing_response = await api_client.post(
-        "/ai-write",
-        json={"writing_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
+    generate_text_response = await api_client.post(
+        "/generate-text",
+        json={"text_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
     )
 
-    assert generate_writing_response.status_code == 503
+    assert generate_text_response.status_code == 503
 
 
-async def test_generate_writing_signed_out_returns_401(api_client: AsyncClient) -> None:
-    generate_writing_response = await api_client.post(
-        "/ai-write",
-        json={"writing_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
+async def test_generate_text_signed_out_returns_401(api_client: AsyncClient) -> None:
+    generate_text_response = await api_client.post(
+        "/generate-text",
+        json={"text_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
     )
 
-    assert generate_writing_response.status_code == 401
+    assert generate_text_response.status_code == 401
 ```
 
 ```python

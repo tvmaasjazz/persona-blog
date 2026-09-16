@@ -106,14 +106,14 @@ Consequences to respect:
 ## Enums
 
 Postgres enum labels are `UPPER_SNAKE` and match the Python `StrEnum` members
-exactly. The type is named in snake_case after the class — `WritingType` →
-`writing_type`.
+exactly. The type is named in snake_case after the class — `TextType` →
+`text_type`.
 
 ```sql
-CREATE TYPE writing_type AS ENUM ('BLOG_POST', 'NEWSLETTER');
+CREATE TYPE text_type AS ENUM ('BLOG_POST', 'NEWSLETTER');
 ```
 
-Adding a member is `ALTER TYPE writing_type ADD VALUE 'NEWSLETTER'`, in the same
+Adding a member is `ALTER TYPE text_type ADD VALUE 'NEWSLETTER'`, in the same
 commit as the Python change. Removing one is not supported by Postgres — it requires
 creating a new type, migrating the column, and dropping the old, which is three
 statements and a transactional file.
