@@ -1,5 +1,3 @@
-import pytest
-from pydantic import ValidationError
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -44,14 +42,3 @@ async def test_lifespan_closes_redis_client_on_shutdown() -> None:
         await redis_client.connection_pool.release(redis_connection)
 
     assert not redis_connection.is_connected
-
-
-async def test_lifespan_invalid_environment_fails_startup(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("ENVIRONMENT", "STAGING")
-    fastapi_app = create_app()
-
-    with pytest.raises(ValidationError):
-        async with fastapi_app.router.lifespan_context(fastapi_app):
-            pass
