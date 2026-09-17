@@ -1,20 +1,16 @@
 from urllib.parse import parse_qs, urlparse
-from uuid import uuid4
 
 import httpx
 import pytest
 from redis.asyncio import Redis
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from libs.auth.results import AuthUser, GoogleIdentityResult
-from libs.auth.services import AuthSessionService, GoogleOAuthService, GoogleSignInService
+from libs.auth.services import OAuthStateService
 from libs.auth.settings import AuthSettings
 from libs.core.exceptions import ServiceUnavailableException, UnauthorizedException
-from libs.database.orm import UserOrm
-from libs.users.services import UserService
+from libs.google_auth.results import GoogleIdentityResult
+from libs.google_auth.services import GoogleOAuthService
+from libs.google_auth.settings import GoogleAuthSettings
 from tests.payloads.google import build_google_id_token, build_google_token_response_body
-from tests.stubs.auth import GoogleOAuthServiceStub
 from tests.stubs.http import HttpHandlerStub
 
 
@@ -45,11 +41,14 @@ async def test_build_authorization_url_stores_state_with_ttl(
     redis_client: Redis, google_handler_stub: HttpHandlerStub
 ) -> None:
     google_transport = httpx.MockTransport(google_handler_stub.handle)
+    oauth_state_service = OAuthStateService(
+        redis_client=redis_client, auth_settings=AuthSettings(oauth_state_ttl_seconds=120)
+    )
     async with httpx.AsyncClient(transport=google_transport) as google_http_client:
         google_oauth_service = GoogleOAuthService(
             http_client=google_http_client,
-            redis_client=redis_client,
-            auth_settings=AuthSettings(oauth_state_ttl_seconds=120),
+            oauth_state_service=oauth_state_service,
+            google_auth_settings=GoogleAuthSettings(),
             google_client_id="test-google-client-id",
             google_client_secret="test-google-client-secret",
         )
@@ -249,163 +248,3 @@ async def test_exchange_code_for_identity_expired_token_raises_unauthorized_exce
 
     with pytest.raises(UnauthorizedException):
         await google_oauth_service.exchange_code_for_identity("auth-code-1", oauth_state)
-
-
-async def test_create_session_stores_auth_user_json(redis_client: Redis) -> None:
-    auth_session_service = AuthSessionService(
-        redis_client=redis_client, auth_settings=AuthSettings()
-    )
-    user_identity = uuid4()
-
-    session_id = await auth_session_service.create_session(user_id=42, user_identity=user_identity)
-
-    stored_session = await redis_client.get(f"session:{session_id}")
-    assert stored_session is not None
-    assert AuthUser.model_validate_json(stored_session) == AuthUser(id=42, identity=user_identity)
-
-
-async def test_create_session_sets_ttl_within_setting(redis_client: Redis) -> None:
-    auth_session_service = AuthSessionService(
-        redis_client=redis_client, auth_settings=AuthSettings(session_ttl_seconds=600)
-    )
-
-    session_id = await auth_session_service.create_session(user_id=42, user_identity=uuid4())
-
-    session_ttl_seconds = await redis_client.ttl(f"session:{session_id}")
-    assert 0 < session_ttl_seconds <= 600
-
-
-async def test_create_session_two_calls_produce_different_session_ids(
-    redis_client: Redis,
-) -> None:
-    auth_session_service = AuthSessionService(
-        redis_client=redis_client, auth_settings=AuthSettings()
-    )
-    user_identity = uuid4()
-
-    first_session_id = await auth_session_service.create_session(
-        user_id=42, user_identity=user_identity
-    )
-    second_session_id = await auth_session_service.create_session(
-        user_id=42, user_identity=user_identity
-    )
-
-    assert first_session_id != second_session_id
-
-
-async def test_find_session_returns_auth_user(redis_client: Redis) -> None:
-    auth_session_service = AuthSessionService(
-        redis_client=redis_client, auth_settings=AuthSettings()
-    )
-    user_identity = uuid4()
-    session_id = await auth_session_service.create_session(user_id=42, user_identity=user_identity)
-
-    find_session_result = await auth_session_service.find_session(session_id)
-
-    assert find_session_result == AuthUser(id=42, identity=user_identity)
-
-
-async def test_find_session_missing_key_raises_unauthorized_exception(
-    redis_client: Redis,
-) -> None:
-    auth_session_service = AuthSessionService(
-        redis_client=redis_client, auth_settings=AuthSettings()
-    )
-
-    with pytest.raises(UnauthorizedException):
-        await auth_session_service.find_session("unknown-session-id")
-
-
-async def test_find_session_deleted_key_raises_unauthorized_exception(
-    redis_client: Redis,
-) -> None:
-    auth_session_service = AuthSessionService(
-        redis_client=redis_client, auth_settings=AuthSettings()
-    )
-    session_id = await auth_session_service.create_session(user_id=42, user_identity=uuid4())
-    await auth_session_service.delete_session(session_id)
-
-    with pytest.raises(UnauthorizedException):
-        await auth_session_service.find_session(session_id)
-
-
-async def test_delete_session_removes_key(redis_client: Redis) -> None:
-    auth_session_service = AuthSessionService(
-        redis_client=redis_client, auth_settings=AuthSettings()
-    )
-    session_id = await auth_session_service.create_session(user_id=42, user_identity=uuid4())
-
-    await auth_session_service.delete_session(session_id)
-
-    session_exists = await redis_client.exists(f"session:{session_id}")
-    assert session_exists == 0
-
-
-async def test_sign_in_with_google_new_identity_creates_user_and_session(
-    db_session: AsyncSession, redis_client: Redis
-) -> None:
-    google_sign_in_service = _build_google_sign_in_service(db_session, redis_client)
-
-    google_sign_in_result = await google_sign_in_service.sign_in_with_google(
-        "auth-code-1", "state-1"
-    )
-
-    user_query = select(UserOrm).where(UserOrm.email == "ada@example.com")
-    user_record = await db_session.scalar(user_query)
-    assert user_record is not None
-    stored_session = await redis_client.get(f"session:{google_sign_in_result.session_id}")
-    assert stored_session is not None
-    assert AuthUser.model_validate_json(stored_session) == AuthUser(
-        id=user_record.id, identity=user_record.identity
-    )
-    assert google_sign_in_result.is_new_user is True
-
-
-async def test_sign_in_with_google_known_identity_reuses_user(
-    db_session: AsyncSession, redis_client: Redis
-) -> None:
-    google_sign_in_service = _build_google_sign_in_service(db_session, redis_client)
-    first_google_sign_in_result = await google_sign_in_service.sign_in_with_google(
-        "auth-code-1", "state-1"
-    )
-
-    second_google_sign_in_result = await google_sign_in_service.sign_in_with_google(
-        "auth-code-2", "state-2"
-    )
-
-    user_count_query = select(func.count(UserOrm.id)).where(UserOrm.email == "ada@example.com")
-    user_count = await db_session.scalar(user_count_query)
-    assert second_google_sign_in_result.is_new_user is False
-    assert second_google_sign_in_result.session_id != first_google_sign_in_result.session_id
-    assert user_count == 1
-
-
-async def test_sign_in_with_google_bad_state_raises_unauthorized_exception(
-    db_session: AsyncSession, redis_client: Redis
-) -> None:
-    google_oauth_service_stub = GoogleOAuthServiceStub()
-    google_oauth_service_stub.exchange_code_for_identity_error = UnauthorizedException(
-        "Sign-in state is missing or expired"
-    )
-    google_sign_in_service = _build_google_sign_in_service(
-        db_session, redis_client, google_oauth_service_stub=google_oauth_service_stub
-    )
-
-    with pytest.raises(UnauthorizedException):
-        await google_sign_in_service.sign_in_with_google("auth-code-1", "bad-state")
-
-
-def _build_google_sign_in_service(
-    db_session: AsyncSession,
-    redis_client: Redis,
-    *,
-    google_oauth_service_stub: GoogleOAuthServiceStub | None = None,
-) -> GoogleSignInService:
-    auth_session_service = AuthSessionService(
-        redis_client=redis_client, auth_settings=AuthSettings()
-    )
-    return GoogleSignInService(
-        google_oauth_service=google_oauth_service_stub or GoogleOAuthServiceStub(),
-        user_service=UserService(db_session=db_session),
-        auth_session_service=auth_session_service,
-    )

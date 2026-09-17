@@ -1,5 +1,5 @@
-from libs.auth.results import GoogleIdentityResult
-from libs.auth.services import GoogleOAuthService
+from libs.google_auth.results import GoogleIdentityResult
+from libs.google_auth.services import GoogleOAuthService
 
 
 class GoogleOAuthServiceStub(GoogleOAuthService):

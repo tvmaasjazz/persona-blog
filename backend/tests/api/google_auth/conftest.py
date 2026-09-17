@@ -1,8 +1,8 @@
 import pytest
 from fastapi import FastAPI
 
-from apps.api.domains.auth.dependencies import get_google_oauth_service
-from tests.stubs.auth import GoogleOAuthServiceStub
+from apps.api.domains.google_auth.dependencies import get_google_oauth_service
+from tests.stubs.google_auth import GoogleOAuthServiceStub
 
 
 @pytest.fixture(autouse=True)
