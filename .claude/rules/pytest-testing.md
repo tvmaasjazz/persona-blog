@@ -67,6 +67,9 @@ backend/tests/
 
 - The test tree mirrors the source tree:
   - `libs/<domain>/<module>.py` → `tests/libs/<domain>/test_<module>.py`
+  - a lib with a `services/` package → one test module per service, flat:
+    `libs/auth/services/oauth_state_service.py` →
+    `tests/libs/auth/test_oauth_state_service.py`
   - `apps/api/domains/<domain>/<module>.py` → `tests/api/<domain>/test_<module>.py`
   - `apps/api/<module>.py` → `tests/api/test_<module>.py`
   - A second app gets `tests/<app_name>/`.
@@ -85,7 +88,7 @@ backend/tests/
 
 | Source                               | Test file                              | Required cases |
 | ------------------------------------ | -------------------------------------- | -------------- |
-| `libs/<d>/services.py`               | `tests/libs/<d>/test_services.py`      | For each public method: happy path, each branch, each exception it raises, each collaborator failure it handles. With a database, also persisted state, not found, constraint violations, related rows loaded (§2, §3) |
+| `libs/<d>/services.py`, or each module in `libs/<d>/services/` | `tests/libs/<d>/test_services.py`, or `test_<service>.py` | For each public method: happy path, each branch, each exception it raises, each collaborator failure it handles. With a database, also persisted state, not found, constraint violations, related rows loaded (§2, §3) |
 | `libs/<d>/prompts.py`                | `tests/libs/<d>/test_prompts.py`       | Each builder: the arguments appear in the output (§1) |
 | `libs/<d>/inputs.py`, `results.py`   | `tests/libs/<d>/test_inputs.py`, `test_results.py` | Only models with a validator or declared constraint: accepted and rejected values (§1) |
 | Class with an enum dispatch map      | That class's test file                 | Every enum member has a handler (§1) |
@@ -726,7 +729,7 @@ before and after each test.
 | Key and cookie names       | Assert the literal (`"session:..."`), not the imported constant. These `constants.py` values must match deployed data, and a test that reuses the constant can't catch a change |
 
 ```python
-# tests/libs/auth/test_services.py
+# tests/libs/auth/test_auth_session_service.py
 async def test_create_session_stores_user_id_with_ttl(redis_client: Redis) -> None:
     auth_settings = AuthSettings(session_ttl_seconds=600)
     auth_session_service = AuthSessionService(

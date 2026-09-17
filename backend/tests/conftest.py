@@ -20,6 +20,8 @@ TEST_ENVIRONMENT_VARIABLES = {
     "ENVIRONMENT": "TEST",
     "DATABASE_URL": "postgresql+asyncpg://pb:pb@localhost:5437/pb_test",
     "REDIS_URL": "redis://localhost:6387/15",
+    "GOOGLE_CLIENT_ID": "test-google-client-id",
+    "GOOGLE_CLIENT_SECRET": "test-google-client-secret",
 }
 TEST_DATABASE_NAME_SUFFIX = "_test"
 TEST_REDIS_DB_INDEX = 15

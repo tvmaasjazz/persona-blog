@@ -39,6 +39,11 @@ backend/
 │   │       ├── __init__.py    # imports all modules below
 │   │       ├── user.py        # UserOrm
 │   │       └── persona.py     # PersonaOrm
+│   ├── auth/
+│   │   └── services/          # a lib with more than one service
+│   │       ├── __init__.py    # re-exports both
+│   │       ├── auth_session_service.py
+│   │       └── oauth_state_service.py
 │   └── users/
 │       ├── services.py        # UserService
 │       ├── inputs.py          # CreateUserInput, ...
@@ -79,6 +84,17 @@ holds `TextType`. A domain with no lib, like `health`, keeps its enums in
 logs. Everything else only calls `structlog.get_logger(__name__)`. `libs/` never
 configures logging.
 
+## Services
+
+A lib with one service keeps it in `services.py`. A lib with more than one has a
+`services/` package instead, one module per service class, named after it in
+snake_case, with `__init__.py` re-exporting every class so callers import from
+`libs.<domain>.services`. Never both.
+
+Split a lib by what it is about, not by how big it gets: provider-specific code lives
+in its own lib (`libs/google_auth/`) next to the generic one (`libs/auth/`), and each
+gets its own domain under `apps/api/domains/` so every domain keeps one `router.py`.
+
 ## Filenames inside a domain package
 
 The folder supplies the domain, so files inside it are short: `domains/users/router.py`,
@@ -95,8 +111,13 @@ Names that escape the package stay fully explicit: `user_router`, `UserService`,
 - **`apps/api/domains/<name>/` owns HTTP concerns only**: payload shapes, status
   codes, dependency wiring. No business rules.
 - **A route never returns an `Orm` object.** Map it to a `ResponseDto`.
+- **A domain owns one `router.py`.** When a second kind of the same thing arrives, such
+  as another sign-in provider, it becomes its own domain and its own lib, rather than a
+  second router file.
 - **Cross-domain imports go through `libs/`.** `domains/posts/` may import
-  `libs.users.services`, never `domains.users.*`.
+  `libs.users.services`, never `domains.users.*`. When a route needs two domains'
+  services to do one thing, compose them in a lib service that takes both through
+  `__init__` — libs may depend on libs — so the route keeps one dependency.
 - **`core/` is for what spans every domain**: db session dependency, current-user
   dependency, root settings, shared response DTOs. Used by only two domains means it
   belongs to a domain.
@@ -135,6 +156,12 @@ them here.
 
 On a CRUD route, a custom `ResponseDto` appears only on a `GET`. Every route declares
 its response DTO as its return annotation.
+
+Two exceptions involve a real `Response`. A route that redirects returns
+`RedirectResponse`, annotated as such, and sets any cookie on that response. A route
+that returns a DTO but must set or clear a cookie takes a plain `response: Response`
+parameter, calls `response.set_cookie()` or `response.delete_cookie()` on it, and still
+returns its declared `ResponseDto`.
 
 One `dtos.py` per domain holds both directions. Never split into `requests.py` /
 `responses.py`. Split by sub-feature only, once a domain's file gets unwieldy.
@@ -207,8 +234,12 @@ class BlogPostResponseDto(BaseModel):
 created on `app.state` at startup and closed at shutdown. Nothing per-request.
 
 Domain `dependencies.py` reads `Request`, pulls from `app.state`, builds
-request-scoped objects, and constructs the service. Export an `Annotated` alias for
-each.
+request-scoped objects, and constructs the service. Each factory is followed
+immediately by its `Annotated` alias, and a factory that takes another alias comes
+after the one it uses.
+
+A route or factory taking more than one dependency puts each parameter on its own
+line, with a trailing comma, so each dependency reads as one line of the diff.
 
 ```python
 # apps/api/core/dependencies.py
