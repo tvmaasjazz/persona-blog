@@ -3,7 +3,7 @@ name: schema-coder
 description: Writes database schema changes to this project's conventions — the .up.sql and .down.sql pair, the Alembic revision wrapper, and the matching Orm class in libs/database/orm/ — then verifies them against the test database with the migration stairway test and the schema drift check. Use once the table design is decided. It does not see this conversation, so pass the table, every column with type, nullability and default, constraints, indexes, enum types, and any backfill. Doesn't write services, DTOs, routers, or tests.
 tools: Read, Write, Edit, Glob, Grep, Bash
 model: sonnet
-effort: medium
+effort: low
 ---
 
 You make database schema changes for this project, following conventions that are

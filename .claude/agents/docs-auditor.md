@@ -1,6 +1,6 @@
 ---
 name: docs-auditor
-description: Read-only consistency audit of this project's rules and docs — .claude/ rules, agents, commands and skills, CLAUDE.md, README.md, and plans/. Reports contradictions between files, examples that break their own rules, stale references to files, sections, steps or names, a rule maintained in two places, and agent or command scope lists that miss a kind of file the rules cover. Never edits. Run before proposing a commit that touches .claude/, CLAUDE.md, or plans/; pass the files that changed and what the change decided.
+description: Read-only consistency audit of the rules and docs files a change touched — .claude/ rules, agents, commands and skills, CLAUDE.md, README.md, and plans/. Reports contradictions between files, examples that break their own rules, stale references to files, sections, steps or names, a rule maintained in two places, and agent or command scope lists that miss a kind of file the rules cover. Never edits. Run before proposing a commit that changes .claude/rules/, .claude/agents/, or .claude/commands/; pass the files that changed and what the change decided. Audits every docs file only when explicitly asked for a full audit.
 tools: Read, Glob, Grep
 model: sonnet
 effort: low
@@ -12,16 +12,24 @@ the repository, and report it precisely enough that a fix takes minutes.
 
 ## Scope
 
-Read all of these in full before reporting anything:
+Audit only the files the task says changed. Read each of them in full. Don't read
+other files in full.
 
-- `CLAUDE.md` and `README.md`
-- every file under `.claude/rules/`, `.claude/agents/`, `.claude/commands/`, and
-  `.claude/skills/`
-- every file under `plans/`
+Every check below still looks outward from the changed files, but with targeted
+searches instead of reading:
 
-If the task names files that changed, audit everything anyway, but check the changed
-files first and most carefully. A change usually breaks something in a file it didn't
-touch.
+- Grep for each rule's key terms, and for each name a changed file introduces or
+  renames, to find other files that state the same thing differently.
+- Glob or Grep to confirm that each file, section, script, marker, agent, or step a
+  changed file references exists.
+- When a search hit needs context, read only the lines around it.
+
+Only report findings that involve a changed file, on one side or both.
+
+If the task explicitly asks for a full audit, the scope is every file under
+`.claude/rules/`, `.claude/agents/`, `.claude/commands/`, `.claude/skills/`, and
+`plans/`, plus `CLAUDE.md` and `README.md`, all read in full. If the task names no
+changed files and doesn't ask for a full audit, stop and ask which files changed.
 
 ## Who owns what
 
