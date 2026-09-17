@@ -10,15 +10,15 @@ from libs.database.constants import NAMING_CONVENTION, UTC_NOW_SQL
 
 
 class SoftDeleteMixin:
-    """Holds deleted_at apart from Base so session.py's soft-delete rule has a class to target.
+    """Holds deleted_at apart from BaseOrm so session.py's soft-delete rule has a class to target.
 
-    DeclarativeBase doesn't keep mapped attributes on itself, so the rule can't target Base.
+    DeclarativeBase doesn't keep mapped attributes on itself, so the rule can't target BaseOrm.
     """
 
     deleted_at: Mapped[datetime | None] = mapped_column()
 
 
-class Base(SoftDeleteMixin, DeclarativeBase):
+class BaseOrm(SoftDeleteMixin, DeclarativeBase):
     """Every table's shared columns. See plans/user-tables.md."""
 
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
@@ -31,8 +31,8 @@ class Base(SoftDeleteMixin, DeclarativeBase):
         server_default=text(UTC_NOW_SQL), onupdate=lambda: datetime.now(UTC)
     )
 
-    # The audit columns reference pb_user by name: UserOrm itself extends Base, so the
-    # class can't be imported here. UserOrm overrides the first two as nullable.
+    # The audit columns reference pb_user by name: UserOrm itself extends BaseOrm, so the
+    # class can't be imported here.
     @declared_attr
     def created_by_id(cls) -> Mapped[int]:
         return mapped_column(BigInteger, ForeignKey("pb_user.id"))

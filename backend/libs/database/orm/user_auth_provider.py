@@ -5,11 +5,11 @@ from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from libs.auth.types import AuthProviderType
-from libs.database.base import Base
+from libs.database.base import BaseOrm
 from libs.database.orm.user import UserOrm
 
 
-class UserAuthProviderOrm(Base):
+class UserAuthProviderOrm(BaseOrm):
     __tablename__ = "pb_user_auth_provider"
     __table_args__ = (
         Index(

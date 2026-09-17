@@ -449,7 +449,7 @@ What these fixtures guarantee:
 
 - **Real migrations.** `db_engine` wipes the schema and runs the real migrations once
   per session. Tests run against the schema the migrations build, never
-  `Base.metadata.create_all()`, so a broken `.up.sql` fails the suite.
+  `BaseOrm.metadata.create_all()`, so a broken `.up.sql` fails the suite.
 - **Rollback per test.** Each test gets one connection inside an outer transaction
   that's rolled back at teardown. `join_transaction_mode="create_savepoint"` turns
   every session's `begin()` and `commit()` into a savepoint, so services and routes

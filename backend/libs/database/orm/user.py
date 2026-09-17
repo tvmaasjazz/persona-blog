@@ -4,10 +4,10 @@ from sqlalchemy import BigInteger, ForeignKey, Index, false, text, true
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
-from libs.database.base import Base
+from libs.database.base import BaseOrm
 
 
-class UserOrm(Base):
+class UserOrm(BaseOrm):
     __tablename__ = "pb_user"
     __table_args__ = (
         Index(
@@ -30,6 +30,6 @@ class UserOrm(Base):
     last_login_at: Mapped[datetime | None]
     last_activity_at: Mapped[datetime | None]
 
-    # A person signing up has no creator, so pb_user relaxes Base's audit columns.
+    # A person signing up has no creator, so pb_user relaxes BaseOrm's audit columns.
     created_by_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("pb_user.id"))
     updated_by_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("pb_user.id"))

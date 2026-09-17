@@ -29,7 +29,7 @@ For step 7 of `plan.md`. This is the design to review before any SQL is written.
 
 ### Shared columns
 
-These are defined once, on `Base` in `libs/database/base.py`. Every Orm class inherits
+These are defined once, on `BaseOrm` in `libs/database/base.py`. Every Orm class inherits
 them.
 
 | Column          | Type        | Null     | Default                           | Notes |
@@ -94,7 +94,7 @@ One row per sign-in provider linked to a user. This lets a user add a second pro
 | ------------------- | ----------------------- | -------- | ------- | ----- |
 | *shared columns*    |                         |          |         | See above |
 | `user_id`           | `BIGINT`                | not null | —       | FK `pb_user(id)` `ON DELETE CASCADE` |
-| `provider`          | `pb_auth_provider_type` | not null | —       | `GOOGLE`, `AUTH0` |
+| `provider`          | `pb_auth_provider_type` | not null | —       | `GOOGLE` |
 | `provider_subject`  | `TEXT`                  | not null | —       | The provider's `sub` claim |
 | `email_at_provider` | `CITEXT`                | null     | —       | Can drift from `pb_user.email` |
 | `last_used_at`      | `TIMESTAMP`             | null     | —       | UTC |
@@ -115,14 +115,15 @@ This replaces `google_subject_id` on the user table in `plan.md`.
 
 | Postgres type           | Python `StrEnum`   | Labels |
 | ----------------------- | ------------------ | ------ |
-| `pb_auth_provider_type` | `AuthProviderType` | `GOOGLE`, `AUTH0` |
+| `pb_auth_provider_type` | `AuthProviderType` | `GOOGLE`. More providers are added as labels when they're built |
 
 ## Migrations
 
 | Revision | Runs | Notes |
 | -------- | ---- | ----- |
-| 1 `create_user_tables` | `extensions/0001_enable_citext`, `pb_user/0001_create_pb_user`, `pb_user_auth_provider/0001_create_pb_user_auth_provider` | Extension first, then the tables in dependency order. Down files run in reverse |
-| 2 `insert_system_user` | `pb_user/0002_insert_system_user` | The down file deletes the row |
+| 1 `enable_citext` | `extensions/0001_enable_citext` | Its own revision: other features' tables will use `citext` too, so rolling back the user tables mustn't drop it |
+| 2 `create_user_tables` | `pb_user/0001_create_pb_user`, `pb_user_auth_provider/0001_create_pb_user_auth_provider` | The tables in dependency order. Down files run in reverse |
+| 3 `insert_system_user` | `pb_user/0002_insert_system_user` | Seed row in its own revision. The down file deletes the row |
 
 - **Extensions:**
   - `CREATE EXTENSION IF NOT EXISTS citext` works the same locally and on Railway, so

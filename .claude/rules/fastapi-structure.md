@@ -31,7 +31,7 @@ backend/
 │   ├── core/
 │   │   └── exceptions.py      # standard exceptions: NotFoundException, ...
 │   ├── database/              # tables, Orm classes: see database.md
-│   │   ├── base.py            # Base: shared columns every table inherits
+│   │   ├── base.py            # BaseOrm: shared columns every table inherits
 │   │   ├── column_types.py    # UtcDateTime
 │   │   ├── constants.py       # naming convention, UTC_NOW_SQL
 │   │   ├── session.py         # create_db_session_factory(), soft-delete rule
