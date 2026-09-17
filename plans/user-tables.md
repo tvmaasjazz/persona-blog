@@ -45,7 +45,7 @@ them.
 
 - **Nullability of `created_by_id` and `updated_by_id`:** nullable on `pb_user`, since a
   person signing up has no creator. On every other table they're `NOT NULL`.
-- **Foreign-key names:** `pb_<table>_created_by_id_fkey` and so on.
+- **Foreign-key names:** `<table>_created_by_id_fkey` and so on, e.g. `pb_user_created_by_id_fkey`.
 - **`ON DELETE`:** the default (`NO ACTION`). Soft delete means real deletes are rare,
   and when one happens it should fail loudly rather than lose history.
 - **Python side:** a column type converts timezone-aware UTC datetimes to naive ones on
@@ -87,8 +87,8 @@ Constraints and indexes:
 
 ## `pb_user_auth_provider`
 
-One row per sign-in provider linked to a user. This lets a user add a second provider
-(Auth0, for example) without ending up with two accounts.
+One row per sign-in provider linked to a user. When a second provider is added later,
+a user can link it without ending up with two accounts.
 
 | Column              | Type                    | Null     | Default | Notes |
 | ------------------- | ----------------------- | -------- | ------- | ----- |
