@@ -153,7 +153,7 @@ one with a 422 before a service sees it. Routes and services look rows up by
 
 A service method taking a structured payload takes a Pydantic `Input` model from
 `libs/<domain>/inputs.py`. Scalar identifiers stay plain parameters —
-`get_user(user_identity: UUID)` gets no wrapper. Create and update share the one
+`find_user(user_identity: UUID)` gets no wrapper. Create and update share the one
 `Input` their shared `Dto` maps to:
 `create_blog_post(blog_post_input: BlogPostInput, auth_user: AuthUser)` and
 `update_blog_post(blog_post_identity: UUID, blog_post_input: BlogPostInput, auth_user: AuthUser)`.
@@ -197,7 +197,7 @@ class BlogPostResponseDto(BaseModel):
     body: str
 
     @classmethod
-    def from_result(cls, result: GetBlogPostResult) -> "BlogPostResponseDto":
+    def from_result(cls, result: FindBlogPostResult) -> "BlogPostResponseDto":
         return cls(identity=result.identity, title=result.title, body=result.body)
 ```
 
@@ -244,11 +244,11 @@ blog_post_router = APIRouter(prefix="/blog-posts", tags=["blog-posts"])
 
 
 @blog_post_router.get("/{blog_post_identity}")
-async def get_blog_post(
+async def find_blog_post(
     blog_post_identity: UUID, blog_post_service: BlogPostServiceDep
 ) -> BlogPostResponseDto:
-    get_blog_post_result = await blog_post_service.get_blog_post(blog_post_identity)
-    return BlogPostResponseDto.from_result(get_blog_post_result)
+    find_blog_post_result = await blog_post_service.find_blog_post(blog_post_identity)
+    return BlogPostResponseDto.from_result(find_blog_post_result)
 
 
 @blog_post_router.post("/")
@@ -326,36 +326,42 @@ DbTransactionDep = Annotated[AsyncSession, Depends(get_db_transaction)]
 2.0-style `select()`, never `session.query()`. Statement, execute, extract:
 
 ```python
-    async def get_user_by_email(self, email: str) -> GetUserByEmailResult | None:
+    async def find_user_by_email(self, email: str) -> FindUserByEmailResult:
         query = (
             select(UserOrm)
             .where(UserOrm.email == email)
             .options(selectinload(UserOrm.personas))
         )
         query_result = await self._db_session.execute(query)
-        user_orm = query_result.scalar_one_or_none()
+        user_record = query_result.scalar_one_or_none()
 
-        if user_orm is None:
-            return None
-        return GetUserByEmailResult.model_validate(user_orm)
+        if user_record is None:
+            raise NotFoundException("User not found")
+        return FindUserByEmailResult.model_validate(user_record, from_attributes=True)
 ```
 
-`scalar_one_or_none()` for an optional row, `scalar_one()` when absence is a bug,
-`scalars().all()` for a list.
+A record becomes a `Result` through `model_validate(<entity>_record, from_attributes=True)`,
+which copies only the fields the `Result` declares, including nested `Result`s. The
+flag goes on the call; a `Result` class never sets `model_config`, so it stays a plain
+shape.
+
+`scalar_one_or_none()` then raise `NotFoundException` for a single row,
+`scalars().all()` for a list, which is empty rather than an error when nothing
+matches.
 
 Creates use `add()` then `flush()`, never `commit()`. `flush()` populates the primary
 key and other server-side defaults:
 
 ```python
     async def create_user(self, user_input: CreateUserInput) -> CreateUserResult:
-        user_orm = UserOrm(
+        user_record = UserOrm(
             email=user_input.email,
             display_name=user_input.display_name,
         )
-        self._db_session.add(user_orm)
+        self._db_session.add(user_record)
         await self._db_session.flush()
 
-        return CreateUserResult.model_validate(user_orm)
+        return CreateUserResult.model_validate(user_record, from_attributes=True)
 ```
 
 Updates: load the Orm, mutate attributes, `flush()`. Use `update()` statements only
@@ -551,12 +557,13 @@ class UserEmailTakenException(ConflictException): ...
 ```
 
 Raise a standard exception directly when its category says everything:
-`raise NotFoundException(f"Blog post {blog_post_id} not found")`. Declare a lib
+`raise NotFoundException(f"Blog post {blog_post_identity} not found")`. Declare a lib
 exception when code or a test needs to tell it apart from others in its category.
 
-A service method that a `GET /{id}` route calls raises `NotFoundException` when the row
-is missing, so the route stays one line. A lookup that only other services use may
-return `None` instead.
+A `find_` method for a single row raises `NotFoundException` when the row is missing,
+never returns `None`, so the route that calls it stays one line. That holds for
+lookups only other services use too: a caller that expects absence catches the
+exception.
 
 ### Mapping to status codes
 

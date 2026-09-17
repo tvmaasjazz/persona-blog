@@ -274,10 +274,10 @@ def build_create_user_input(
 async def insert_user_row(
     db_session: AsyncSession, *, email: str | None = None, display_name: str = "Ada Lovelace"
 ) -> UserOrm:
-    user_orm = UserOrm(email=email or _build_unique_email(), display_name=display_name)
-    db_session.add(user_orm)
+    user_record = UserOrm(email=email or _build_unique_email(), display_name=display_name)
+    db_session.add(user_record)
     await db_session.flush()
-    return user_orm
+    return user_record
 
 
 def _build_unique_email() -> str:
@@ -571,7 +571,7 @@ rolled back after each test.
 | Soft delete                       | Call, then assert the ORM `select()` no longer finds the row and a raw `text()` select still does, with `deleted_at` and `deleted_by_id` set |
 | Audit columns                     | Assert `created_by_id` / `updated_by_id` equal the `AuthUser` the test passed in |
 | Read, found                       | `insert_*_row`, call, compare the whole `Result` built from the row's values |
-| Read, not found                   | Call with a key that was never inserted and assert the result `is None` |
+| Read, not found                   | Call with a key that was never inserted and `pytest.raises(NotFoundException)` |
 | Update                            | Insert, call, select back, and assert both the changed and unchanged columns |
 | Unique, foreign-key, or check constraint | Insert the conflicting row first, then `pytest.raises` the lib or standard exception the service raises. The session can't be used afterwards, so the test ends at the `with` block |
 | Relationships                     | Insert the parent and at least one child, and assert the child appears. A missing `selectinload()` fails as `MissingGreenlet` |
@@ -589,9 +589,9 @@ async def test_create_user_persists_row(db_session: AsyncSession) -> None:
     create_user_result = await user_service.create_user(create_user_input)
 
     user_query = select(UserOrm).where(UserOrm.id == create_user_result.id)
-    user_orm = await db_session.scalar(user_query)
-    assert user_orm is not None
-    assert user_orm.email == "ada@example.com"
+    user_record = await db_session.scalar(user_query)
+    assert user_record is not None
+    assert user_record.email == "ada@example.com"
 
 
 async def test_create_user_email_taken_raises_user_email_taken_exception(
@@ -605,15 +605,14 @@ async def test_create_user_email_taken_raises_user_email_taken_exception(
         await user_service.create_user(create_user_input)
 
 
-async def test_get_user_by_email_includes_personas(db_session: AsyncSession) -> None:
-    user_orm = await insert_user_row(db_session, email="ada@example.com")
-    await insert_persona_row(db_session, user_id=user_orm.id, name="Baker Bea")
+async def test_find_user_by_email_includes_personas(db_session: AsyncSession) -> None:
+    user_record = await insert_user_row(db_session, email="ada@example.com")
+    await insert_persona_row(db_session, user_id=user_record.id, name="Baker Bea")
     user_service = UserService(db_session=db_session)
 
-    get_user_by_email_result = await user_service.get_user_by_email("ada@example.com")
+    find_user_by_email_result = await user_service.find_user_by_email("ada@example.com")
 
-    assert get_user_by_email_result is not None
-    assert [persona.name for persona in get_user_by_email_result.personas] == ["Baker Bea"]
+    assert [persona.name for persona in find_user_by_email_result.personas] == ["Baker Bea"]
 ```
 
 Link child rows by foreign key (`user_id=`), never with `parent.children.append()`.
@@ -775,13 +774,13 @@ async def signed_in_user(
     redis_client: Redis,
     app_settings: AppSettings,
 ) -> UserOrm:
-    user_orm = await insert_user_row(db_session)
+    user_record = await insert_user_row(db_session)
     auth_session_service = AuthSessionService(
         redis_client=redis_client, auth_settings=app_settings.auth
     )
-    session_id = await auth_session_service.create_session(user_id=user_orm.id)
+    session_id = await auth_session_service.create_session(user_id=user_record.id)
     api_client.cookies.set("sid", session_id)
-    return user_orm
+    return user_record
 ```
 
 | Situation                     | Pattern |
@@ -890,24 +889,24 @@ async def test_create_blog_post_persists_row_and_returns_identity(
     response_body = create_blog_post_response.json()
     blog_post_identity = UUID(response_body["identity"])
     blog_post_query = select(BlogPostOrm).where(BlogPostOrm.identity == blog_post_identity)
-    blog_post_orm = await db_session.scalar(blog_post_query)
+    blog_post_record = await db_session.scalar(blog_post_query)
     assert create_blog_post_response.status_code == 200
-    assert blog_post_orm is not None
-    assert blog_post_orm.title == "Starter care"
+    assert blog_post_record is not None
+    assert blog_post_record.title == "Starter care"
 
 
 @pytest.mark.usefixtures("signed_in_user")
 async def test_update_blog_post_persists_changes(
     api_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    blog_post_orm = await insert_blog_post_row(db_session, title="Draft title")
+    blog_post_record = await insert_blog_post_row(db_session, title="Draft title")
 
     update_blog_post_response = await api_client.put(
-        f"/blog-posts/{blog_post_orm.identity}",
+        f"/blog-posts/{blog_post_record.identity}",
         json={"title": "Final title", "body": "Feed it daily."},
     )
 
-    title_query = select(BlogPostOrm.title).where(BlogPostOrm.id == blog_post_orm.id)
+    title_query = select(BlogPostOrm.title).where(BlogPostOrm.id == blog_post_record.id)
     persisted_title = await db_session.scalar(title_query)
     assert update_blog_post_response.status_code == 200
     assert update_blog_post_response.json() == {}
@@ -1006,9 +1005,9 @@ async def test_get_db_session_discards_uncommitted_writes(
     insert_user_response = await api_client.post("/insert-user-without-transaction")
 
     user_query = select(UserOrm).where(UserOrm.email == "ada@example.com")
-    inserted_user_orm = await db_session.scalar(user_query)
+    inserted_user_record = await db_session.scalar(user_query)
     assert insert_user_response.status_code == 200
-    assert inserted_user_orm is None
+    assert inserted_user_record is None
 ```
 
 ## §8 Settings
@@ -1189,7 +1188,7 @@ CI.
 ```bash
 uv run pytest                                    # all but live_llm and migration
 uv run pytest tests/libs/users                   # one folder
-uv run pytest tests/api/users/test_router.py::test_get_me_signed_out_returns_401
+uv run pytest tests/api/users/test_router.py::test_find_signed_in_user_signed_out_returns_401
 uv run pytest -k duplicate_email                 # names containing a substring
 uv run pytest -x --lf                            # rerun last failures, stop at the first
 uv run pytest -m migration                       # stairway migration test

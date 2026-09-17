@@ -20,7 +20,7 @@ Every class ends in the suffix for what it is:
 | `Settings`   | Config models: the root `AppSettings` (`BaseSettings`) and each domain's frozen `BaseModel` | `HumanizerSettings` |
 | `Prompt`     | A grouped set of LLM prompt builders         | `HumanizerPrompt`                |
 | `Input`      | A service method's payload (`libs/` only)    | `CreateUserInput`                |
-| `Result`     | A function's return shape                    | `GetUserByEmailResult`           |
+| `Result`     | A function's return shape                    | `FindUserByEmailResult`          |
 | `Router`     | FastAPI `APIRouter` modules                  | `account_router` (an `APIRouter` instance) |
 | `Service`    | Business logic, framework-free               | `AccountService`                 |
 | `Middleware` | ASGI / FastAPI middleware                    | `RequestLogMiddleware`           |
@@ -39,10 +39,17 @@ hold (`UtcDateTime`). `AuthUser`, the signed-in user in request scope, is named 
 what it is everywhere it's passed.
 
 A `Result` is named for **the function that returns it**, not the entity it carries:
-`GetUserByEmailResult`, `CreateUserResult`, `HumanizeDraftResult`. `UserResult` says
+`FindUserByEmailResult`, `CreateUserResult`, `HumanizeDraftResult`. `UserResult` says
 nothing about what the shape is for. If two functions genuinely return an identical
 shape, reuse one class named for the shape's meaning (`UserDetailResult`) rather than
 duplicating — but never fall back to a bare entity name.
+
+A function that reads database rows starts with `find_`: the service method
+(`find_user_by_identity`, `find_or_create_user_from_auth_provider`) and the route that
+calls it (`find_blog_post` for `GET /blog-posts/{blog_post_identity}`), and so its
+`Result` too (`FindUserByIdentityResult`). `get_` is for functions that return
+something without reading a row: dependency factories (`get_db_session`) and routes
+like `get_health`.
 
 Never use the word `Schema`. A Pydantic class at the HTTP boundary is a `Dto`; one
 returned by a service is a `Result`.
@@ -130,11 +137,20 @@ outside an Orm, `Result`, or DTO field.
 Booleans start with `is_` wherever they live: columns, Orm attributes,
 Pydantic fields, and local variables. `is_active`, not `active`.
 
+An `Orm` class describes a table; an instance of it is a row, named `<entity>_record`:
+`user_record`, `user_auth_provider_record`. That holds whether the row was loaded or
+just created and flushed. Never `user_orm`.
+
 One exception: the root `AppSettings` instance is `app.state.settings`. There is only
 ever one settings object on `app.state`, so the qualifier adds nothing. Local
 variables holding it are still `app_settings`.
 
 ## Statements and readability
+
+**A function that does more than one thing is split into private helpers named for
+each thing.** `find_or_create_user_from_auth_provider` tries `_find_user_from_auth_provider`
+and falls back to `_create_user_from_auth_provider`. When a split wouldn't read better,
+short plain comments mark each section instead.
 
 **An `await` result is bound to a name unless it is returned directly or unused.** An
 `await` expression may appear in exactly three places: as the whole right-hand side of
@@ -144,17 +160,17 @@ attribute-accessed, bind it to a variable first.
 
 ```python
 # no — the awaited value is being wrapped
-return UserResponseDto.from_result(await user_service.get_user(user_id))
+return UserResponseDto.from_result(await user_service.find_user(user_identity))
 
 # yes
-get_user_result = await user_service.get_user(user_id)
-return UserResponseDto.from_result(get_user_result)
+find_user_result = await user_service.find_user(user_identity)
+return UserResponseDto.from_result(find_user_result)
 
 # also fine — returned directly, nothing wrapping it
-return await user_service.get_user(user_id)
+return await user_service.find_user(user_identity)
 
 # also fine — a statement on its own, the value is unused
-await user_service.delete_user(user_id)
+await user_service.delete_user(user_identity, auth_user)
 await redis_client.flushdb()
 ```
 
@@ -173,7 +189,7 @@ posts = sorted(raw_posts, key=lambda p: p.created_at)
 ```
 
 The same applies to chained attribute access into a call:
-`(await get_user(user_id)).persona.name` becomes three lines, not one clever one.
+`(await find_user(user_identity)).persona.name` becomes three lines, not one clever one.
 
 ## Other conventions
 
