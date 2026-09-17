@@ -387,35 +387,36 @@ than re-fetching Google's keys. Library: `google-auth` for decoding that token, 
 Build:
 
 - `uv add google-auth`, and move `httpx` from the dev group to the dependencies
-- `libs/auth/`:
-  - `constants.py` — `SESSION_COOKIE_NAME = "sid"`, the Redis key prefixes, Google's
-    authorization and token URLs, the scopes
+- `libs/auth/` — what isn't provider-specific:
+  - `constants.py` — `SESSION_COOKIE_NAME = "sid"` and the Redis key prefixes
   - `settings.py` — `AuthSettings { session_ttl_seconds, oauth_state_ttl_seconds,
-    google_redirect_url, frontend_url, http_timeout_seconds }`
-  - `services.py` — `GoogleOAuthService.build_authorization_url()` stores `state`, the
-    PKCE verifier and the nonce in Redis and returns the URL;
-    `.exchange_code_for_identity(code, state)` checks the stored state, exchanges the
-    code, decodes the ID token and returns the provider identity.
-    `AuthSessionService.create_session()`, `.find_session()` (raises
-    `UnauthorizedException`), `.delete_session()`
-  - `results.py` — `GoogleIdentityResult`, `GoogleSignInResult`, and
-    `AuthUser { id, identity }`
+    frontend_url }`
+  - `results.py` — `OAuthStateResult`, and `AuthUser { id, identity }`
+  - `services/` — `AuthSessionService` (create, find, delete) and `OAuthStateService`
+    (`create_state()` stores state, nonce and PKCE verifier; `consume_state()` reads and
+    deletes, so a sign-in attempt can't be replayed)
+- `libs/google_auth/` — everything Google-specific: `constants.py`, `settings.py`
+  (`GoogleAuthSettings { redirect_url, request_timeout_seconds }`), `results.py`
+  (`GoogleIdentityResult`, `GoogleSignInResult`), and `services/`:
+  - `GoogleOAuthService.build_authorization_url()` and
+    `.exchange_code_for_identity(code, state)`, which decodes the ID token and checks
+    `aud`, `iss`, `exp` and the nonce
   - `GoogleSignInService.sign_in_with_google(code, state)` composes the flow: Google
     identity, then the user row through `UserService`, then the session. A route that
     would otherwise need another domain's service composes in a lib instead, so
-    `domains/auth/` never imports `domains/users/`
+    `domains/google_auth/` never imports `domains/users/`
 - `apps/api/core/dependencies.py` — `AuthUserDep`, the guard: reads the cookie,
   resolves the session, and 401s otherwise. Routes needing auth take it and pass the
   `AuthUser` to services, which use `auth_user.id` for the audit columns. That's the
   Passport-equivalent: FastAPI has no strategy or guard registry, just dependencies
-- `apps/api/domains/auth/` — `GET /auth/google/login` redirects to Google;
-  `GET /auth/google/callback` exchanges the code, calls
-  `UserService.find_or_create_user_from_auth_provider`, creates the session, sets the
-  cookie and redirects to `frontend_url`; `POST /auth/logout` deletes the session and
-  clears the cookie. A refused sign-in (403 inactive, 409 email taken) surfaces as that
-  status code, not a redirect; the frontend gets a friendlier version when the `state`
-  record carries a return path. The cookie is httpOnly, `SameSite=Lax`, and `secure` outside
-  `DEVELOPMENT`
+- `apps/api/domains/google_auth/` — `GET /auth/google/login` redirects to Google;
+  `GET /auth/google/callback` signs in, sets the cookie and redirects to
+  `frontend_url`. The cookie is httpOnly, `SameSite=Lax`, and `secure` outside
+  `DEVELOPMENT`. A refused sign-in (403 inactive, 409 email taken) surfaces as that
+  status code, not a redirect
+- `apps/api/domains/auth/` — `POST /auth/logout` deletes the session and clears the
+  cookie. A second sign-in provider later becomes its own lib and domain beside
+  `google_auth`, so each domain keeps one `router.py`
 - `apps/api/domains/users/` — `dtos.py`, `dependencies.py`, and `router.py` with
   `GET /users/me` (`find_signed_in_user`), guarded by `AuthUserDep` and calling
   `UserService.find_user_by_identity`. `/generate-text` takes the guard when it lands

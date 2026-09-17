@@ -33,7 +33,8 @@ the routes with their status codes and errors, and the Orm classes from step 1. 
 for the files the domain needs from this list:
 
 - `libs/$1/`
-  - `services.py` — `$1`'s service class, framework-free, dependencies via `__init__`
+  - `services.py` — `$1`'s service class, framework-free, dependencies via `__init__`;
+    a `services/` package with one module per class if the domain has more than one
   - `inputs.py` — one `Input` model per method taking a structured payload
   - `results.py` — one `Result` per method, named after the method
   - `settings.py` — only if the domain has tunable values
