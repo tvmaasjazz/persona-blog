@@ -60,28 +60,23 @@ otherwise (`provider_subject`). Boolean columns start with `is_`.
 
 ## Table shape
 
-Every `CREATE TABLE` carries the shared columns that `Base` maps
-(`fastapi-structure.md` › Shared columns), in this order, with constraints named in
-full:
+Every `CREATE TABLE` carries the shared columns that `BaseOrm` maps
+(`fastapi-structure.md` › Shared columns), in this order, with single-column
+constraints inline and unnamed. Postgres names them `<table>_pkey`, `<table>_<column>_key`
+and `<table>_<column>_fkey`, which is the naming convention:
 
 ```sql
 CREATE TABLE pb_persona (
-    id BIGINT GENERATED ALWAYS AS IDENTITY,
-    identity UUID NOT NULL DEFAULT gen_random_uuid(),
-    user_id BIGINT NOT NULL,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    identity UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+    user_id BIGINT NOT NULL REFERENCES pb_user (id),
     name TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
     updated_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
     deleted_at TIMESTAMP,
-    created_by_id BIGINT NOT NULL,
-    updated_by_id BIGINT NOT NULL,
-    deleted_by_id BIGINT,
-    CONSTRAINT pb_persona_pkey PRIMARY KEY (id),
-    CONSTRAINT pb_persona_identity_key UNIQUE (identity),
-    CONSTRAINT pb_persona_user_id_fkey FOREIGN KEY (user_id) REFERENCES pb_user (id),
-    CONSTRAINT pb_persona_created_by_id_fkey FOREIGN KEY (created_by_id) REFERENCES pb_user (id),
-    CONSTRAINT pb_persona_updated_by_id_fkey FOREIGN KEY (updated_by_id) REFERENCES pb_user (id),
-    CONSTRAINT pb_persona_deleted_by_id_fkey FOREIGN KEY (deleted_by_id) REFERENCES pb_user (id)
+    created_by_id BIGINT NOT NULL REFERENCES pb_user (id),
+    updated_by_id BIGINT NOT NULL REFERENCES pb_user (id),
+    deleted_by_id BIGINT REFERENCES pb_user (id)
 );
 
 CREATE INDEX pb_persona_user_id_idx ON pb_persona (user_id);

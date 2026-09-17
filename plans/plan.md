@@ -294,10 +294,10 @@ Build:
   skill, executing through `op.get_bind().exec_driver_sql()` instead of `op.execute()`,
   so a `:word` inside SQL isn't parsed as a bind parameter
 - Ruff ignores N999 in `migrations/revisions/` (filenames start with digits)
-- `libs/database/base.py` — `Base` with a constraint naming convention matching
+- `libs/database/base.py` — `BaseOrm` with a constraint naming convention matching
   Postgres's defaults and the shared columns from `user-tables.md`: `id`, `identity`,
   timestamps, soft delete, audit foreign keys. `deleted_at` sits on `SoftDeleteMixin`,
-  which `Base` inherits, because the soft-delete rule needs an unmapped class to
+  which `BaseOrm` inherits, because the soft-delete rule needs an unmapped class to
   target. `UtcDateTime` in `column_types.py` stores naive UTC and returns aware UTC
 - `libs/database/session.py` — `create_db_session_factory(db_engine)` with
   `expire_on_commit=False`, plus the global soft-delete rule adding
@@ -307,24 +307,25 @@ Build:
 - `lifespan` stores `db_session_factory` on `app.state`
 - `get_db_session` / `DbSessionDep` and `get_db_transaction` / `DbTransactionDep` in
   `apps/api/core/dependencies.py`
-- Revision 1 `create_user_tables`: `extensions/0001_enable_citext`,
-  `pb_user/0001_create_pb_user`, `pb_user_auth_provider/0001_create_pb_user_auth_provider`
-- Revision 2 `insert_system_user`: `pb_user/0002_insert_system_user`
+- Revision 1 `enable_citext`: `extensions/0001_enable_citext`
+- Revision 2 `create_user_tables`: `pb_user/0001_create_pb_user`,
+  `pb_user_auth_provider/0001_create_pb_user_auth_provider`
+- Revision 3 `insert_system_user`: `pb_user/0002_insert_system_user`
 - `scripts/check_schema_drift.py` — compares a database already at head with
-  `Base.metadata` (ignoring `alembic_version`) and exits non-zero on any difference.
+  `BaseOrm.metadata` (ignoring `alembic_version`) and exits non-zero on any difference.
   Run with `uv run python -m scripts.check_schema_drift`
 - Tests:
   - root `db_engine`, `db_connection`, `db_session_factory` and `db_session` fixtures;
     `fastapi_app` points at the test session factory
   - `tests/factories/users.py` with `insert_user_row`
   - `tests/api/core/test_dependencies.py`
-  - `Base` behaviour: `updated_at` set on update, UTC round trip, soft-deleted rows
+  - `BaseOrm` behaviour: `updated_at` set on update, UTC round trip, soft-deleted rows
     hidden
   - `tests/migrations/`: single head, every up file has a down file, and the stairway
     test marked `migration`
 - CI: the existing job runs migrations through the fixtures. A new `migrations` job
   runs `alembic upgrade head`, the drift check, and `pytest -m migration`
-- Rules updated for the new conventions: shared columns on `Base`, `identity` in routes
+- Rules updated for the new conventions: shared columns on `BaseOrm`, `identity` in routes
   and DTOs, naive UTC timestamps, no triggers, `is_` booleans, `sql/extensions/`, the
   string foreign key exception for the audit columns, global soft delete, `AuthUser`
   passed to services, and the `MigrationRunner` example matching the skill
