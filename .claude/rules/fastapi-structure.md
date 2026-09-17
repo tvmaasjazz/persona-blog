@@ -96,7 +96,9 @@ Names that escape the package stay fully explicit: `user_router`, `UserService`,
   codes, dependency wiring. No business rules.
 - **A route never returns an `Orm` object.** Map it to a `ResponseDto`.
 - **Cross-domain imports go through `libs/`.** `domains/posts/` may import
-  `libs.users.services`, never `domains.users.*`.
+  `libs.users.services`, never `domains.users.*`. When a route needs two domains'
+  services to do one thing, compose them in a lib service that takes both through
+  `__init__` — libs may depend on libs — so the route keeps one dependency.
 - **`core/` is for what spans every domain**: db session dependency, current-user
   dependency, root settings, shared response DTOs. Used by only two domains means it
   belongs to a domain.

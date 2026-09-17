@@ -7,11 +7,9 @@ from apps.api.core.types import EnvironmentType
 from apps.api.domains.auth.dependencies import (
     AuthSessionServiceDep,
     GoogleOAuthServiceDep,
-    UserTransactionServiceDep,
+    GoogleSignInServiceDep,
 )
 from libs.auth.constants import SESSION_COOKIE_NAME
-from libs.auth.types import AuthProviderType
-from libs.users.inputs import FindOrCreateUserFromAuthProviderInput
 
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -27,33 +25,14 @@ async def get_google_callback(
     code: str,
     state: str,
     app_settings: AppSettingsDep,
-    google_oauth_service: GoogleOAuthServiceDep,
-    auth_session_service: AuthSessionServiceDep,
-    user_service: UserTransactionServiceDep,
+    google_sign_in_service: GoogleSignInServiceDep,
 ) -> RedirectResponse:
-    google_identity_result = await google_oauth_service.exchange_code_for_identity(code, state)
-    find_or_create_user_from_auth_provider_input = FindOrCreateUserFromAuthProviderInput(
-        provider=AuthProviderType.GOOGLE,
-        provider_subject=google_identity_result.provider_subject,
-        email=google_identity_result.email,
-        is_email_verified=google_identity_result.is_email_verified,
-        display_name=google_identity_result.display_name,
-        avatar_url=google_identity_result.avatar_url,
-    )
-    find_or_create_user_from_auth_provider_result = (
-        await user_service.find_or_create_user_from_auth_provider(
-            find_or_create_user_from_auth_provider_input
-        )
-    )
-    session_id = await auth_session_service.create_session(
-        user_id=find_or_create_user_from_auth_provider_result.id,
-        user_identity=find_or_create_user_from_auth_provider_result.identity,
-    )
+    google_sign_in_result = await google_sign_in_service.sign_in_with_google(code, state)
 
     redirect_response = RedirectResponse(app_settings.auth.frontend_url, status_code=303)
     redirect_response.set_cookie(
         SESSION_COOKIE_NAME,
-        session_id,
+        google_sign_in_result.session_id,
         httponly=True,
         samesite="lax",
         secure=app_settings.environment != EnvironmentType.DEVELOPMENT,

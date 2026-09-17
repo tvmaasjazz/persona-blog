@@ -4,7 +4,7 @@ from fastapi import Depends, Request
 
 from apps.api.core.config import AppSettings
 from apps.api.core.dependencies import DbTransactionDep
-from libs.auth.services import AuthSessionService, GoogleOAuthService
+from libs.auth.services import AuthSessionService, GoogleOAuthService, GoogleSignInService
 from libs.users.services import UserService
 
 
@@ -26,10 +26,20 @@ def get_auth_session_service(request: Request) -> AuthSessionService:
     )
 
 
-def get_user_transaction_service(db_session: DbTransactionDep) -> UserService:
-    return UserService(db_session=db_session)
-
-
 GoogleOAuthServiceDep = Annotated[GoogleOAuthService, Depends(get_google_oauth_service)]
-UserTransactionServiceDep = Annotated[UserService, Depends(get_user_transaction_service)]
 AuthSessionServiceDep = Annotated[AuthSessionService, Depends(get_auth_session_service)]
+
+
+def get_google_sign_in_service(
+    google_oauth_service: GoogleOAuthServiceDep,
+    auth_session_service: AuthSessionServiceDep,
+    db_session: DbTransactionDep,
+) -> GoogleSignInService:
+    return GoogleSignInService(
+        google_oauth_service=google_oauth_service,
+        user_service=UserService(db_session=db_session),
+        auth_session_service=auth_session_service,
+    )
+
+
+GoogleSignInServiceDep = Annotated[GoogleSignInService, Depends(get_google_sign_in_service)]

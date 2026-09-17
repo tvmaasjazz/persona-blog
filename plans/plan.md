@@ -398,7 +398,12 @@ Build:
     code, decodes the ID token and returns the provider identity.
     `AuthSessionService.create_session()`, `.find_session()` (raises
     `UnauthorizedException`), `.delete_session()`
-  - `results.py` — `GoogleIdentityResult`, and `AuthUser { id, identity }`
+  - `results.py` — `GoogleIdentityResult`, `GoogleSignInResult`, and
+    `AuthUser { id, identity }`
+  - `GoogleSignInService.sign_in_with_google(code, state)` composes the flow: Google
+    identity, then the user row through `UserService`, then the session. A route that
+    would otherwise need another domain's service composes in a lib instead, so
+    `domains/auth/` never imports `domains/users/`
 - `apps/api/core/dependencies.py` — `AuthUserDep`, the guard: reads the cookie,
   resolves the session, and 401s otherwise. Routes needing auth take it and pass the
   `AuthUser` to services, which use `auth_user.id` for the audit columns. That's the

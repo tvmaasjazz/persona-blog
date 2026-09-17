@@ -11,6 +11,11 @@ class GoogleIdentityResult(BaseModel):
     avatar_url: str | None
 
 
+class GoogleSignInResult(BaseModel):
+    session_id: str
+    is_new_user: bool
+
+
 class AuthUser(BaseModel):
     """The signed-in user in request scope, read back from the session."""
 
