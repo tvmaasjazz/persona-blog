@@ -371,30 +371,62 @@ sign-in creating nothing, the inactive and email-conflict paths, and not found.
 
 ## Step 9 — Google sign-in
 
-Needs a Google Cloud OAuth client — **manual setup by Tyler**, redirect URI
-`http://localhost:8000/auth/google/callback`.
+Needs a Google Cloud OAuth client — **manual setup by Tyler**. One client per
+environment; "persona-blog local" has the redirect URI
+`http://localhost:8000/auth/google/callback` (exact match, and `localhost` is not
+`127.0.0.1`), scopes `openid email profile`, consent screen in Testing with Tyler as a
+test user. Google redirects the browser, never calls the API, so localhost needs no
+tunnel. `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are env-only secrets.
+
+No JWT of our own: the cookie holds an opaque random token and Redis holds the state,
+so logout is immediate. Google's ID token is the only JWT, and it arrives over TLS
+straight from the token endpoint, so we check `aud`, `iss`, `exp` and the nonce rather
+than re-fetching Google's keys. Library: `google-auth` for decoding that token, plus
+`httpx` for the code exchange.
 
 Build:
 
-- `libs/auth/` — Google token verification, session creation and validation against
-  Redis. Session key holds the user id with a TTL; no sessions table. The callback
-  calls `UserService.find_or_create_user_from_auth_provider` and maps its 403 and 409
-  to a redirect the frontend can show
-- `apps/api/domains/auth/` — `GET /auth/google/login`,
-  `GET /auth/google/callback`, `POST /auth/logout`
-- `AuthUserDep` in `apps/api/core/dependencies.py` — the guard. It resolves the
-  session to an `AuthUser { id, identity }` in request scope and 401s otherwise. Routes
-  needing auth take it and pass the `AuthUser` to services, which use `auth_user.id`
-  for the audit columns. That's the Passport-equivalent
+- `uv add google-auth`, and move `httpx` from the dev group to the dependencies
+- `libs/auth/`:
+  - `constants.py` — `SESSION_COOKIE_NAME = "sid"`, the Redis key prefixes, Google's
+    authorization and token URLs, the scopes
+  - `settings.py` — `AuthSettings { session_ttl_seconds, oauth_state_ttl_seconds,
+    google_redirect_url, frontend_url, http_timeout_seconds }`
+  - `services.py` — `GoogleOAuthService.build_authorization_url()` stores `state`, the
+    PKCE verifier and the nonce in Redis and returns the URL;
+    `.exchange_code_for_identity(code, state)` checks the stored state, exchanges the
+    code, decodes the ID token and returns the provider identity.
+    `AuthSessionService.create_session()`, `.find_session()` (raises
+    `UnauthorizedException`), `.delete_session()`
+  - `results.py` — `GoogleIdentityResult`, and `AuthUser { id, identity }`
+- `apps/api/core/dependencies.py` — `AuthUserDep`, the guard: reads the cookie,
+  resolves the session, and 401s otherwise. Routes needing auth take it and pass the
+  `AuthUser` to services, which use `auth_user.id` for the audit columns. That's the
+  Passport-equivalent: FastAPI has no strategy or guard registry, just dependencies
+- `apps/api/domains/auth/` — `GET /auth/google/login` redirects to Google;
+  `GET /auth/google/callback` exchanges the code, calls
+  `UserService.find_or_create_user_from_auth_provider`, creates the session, sets the
+  cookie and redirects to `frontend_url`; `POST /auth/logout` deletes the session and
+  clears the cookie. A refused sign-in (403 inactive, 409 email taken) surfaces as that
+  status code, not a redirect; the frontend gets a friendlier version when the `state`
+  record carries a return path. The cookie is httpOnly, `SameSite=Lax`, and `secure` outside
+  `DEVELOPMENT`
 - `apps/api/domains/users/` — `dtos.py`, `dependencies.py`, and `router.py` with
   `GET /users/me` (`find_signed_in_user`), guarded by `AuthUserDep` and calling
   `UserService.find_user_by_identity`. `/generate-text` takes the guard when it lands
   in step 13
+- Tests: stubbed Google HTTP responses and ID tokens, never the real API; the session
+  service against real Redis; the routes through the real guard
 
 **Verify:** full browser round trip to a logged-in state. Cookie is httpOnly, and
 `secure` is off only in dev. Call `/users/me` without the cookie and get a 401. Log
 out, then confirm the Redis key is actually gone (`redis-cli KEYS 'session:*'`), not
 just the cookie cleared.
+
+**Deferred:** a refresh or sliding-expiry scheme, so a long session doesn't end
+mid-use. The `state` record in Redis is also where a post-sign-in redirect path or an
+invite token would live, and the callback would then send the browser somewhere other
+than `frontend_url`.
 
 ---
 

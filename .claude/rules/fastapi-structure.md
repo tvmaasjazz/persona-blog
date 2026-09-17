@@ -136,6 +136,12 @@ them here.
 On a CRUD route, a custom `ResponseDto` appears only on a `GET`. Every route declares
 its response DTO as its return annotation.
 
+Two exceptions involve a real `Response`. A route that redirects returns
+`RedirectResponse`, annotated as such, and sets any cookie on that response. A route
+that returns a DTO but must set or clear a cookie takes a plain `response: Response`
+parameter, calls `response.set_cookie()` or `response.delete_cookie()` on it, and still
+returns its declared `ResponseDto`.
+
 One `dtos.py` per domain holds both directions. Never split into `requests.py` /
 `responses.py`. Split by sub-feature only, once a domain's file gets unwieldy.
 
