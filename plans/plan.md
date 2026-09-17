@@ -14,7 +14,7 @@ directly on `main`.
 | --------------------------------- | -------------------------------------------------------------- |
 | Session strategy                  | Server-side session in Redis, session id in an httpOnly cookie |
 | Redis                             | In from the start, for sessions                                |
-| `/generate-text` persistence      | No saved output. Only the LLM call log from step 11 is stored  |
+| `/generate-text` persistence      | No saved output. Only the LLM call log from step 12 is stored  |
 | First OpenAI model                | `gpt-4o-mini`, overridable in TOML                             |
 | Frontend styling                  | Tailwind, set up in step 4                                     |
 
@@ -22,7 +22,7 @@ directly on `main`.
 
 - Python packages snake_case, URL paths kebab-case: `libs/generate_text/`,
   `apps/api/domains/generate_text/`, router prefix `/generate-text`.
-- Step 12 names are prefixed `GenerateText`: `GenerateTextService.generate_text()`,
+- Step 13 names are prefixed `GenerateText`: `GenerateTextService.generate_text()`,
   `GenerateTextInput`, `GenerateTextResult`, `GenerateTextDto`,
   `GeneratedTextResponseDto`, `GenerateTextPrompt`. The enum is `TextType`.
 - `character_count`, not `char_length`.
@@ -221,7 +221,7 @@ Build:
 - `apps/api/app_factory.py` — `create_app()`, registers exception handlers, includes
   routers
 - `apps/api/main.py` — `app = create_app()`
-- structlog with a console renderer for dev; Logfire deferred to step 13
+- structlog with a console renderer for dev; Logfire deferred to step 14
 - `apps/api/domains/health/` — `router.py`, `dtos.py` with
   `HealthResponseDto { status, app_name, environment }`. No lib: health has no
   business logic and is the one domain allowed to skip `libs/`
@@ -260,7 +260,7 @@ Build:
 - `backend/docker/postgres/init/` — creates `pb_test` beside `pb_local` when the
   volume is first created
 - `backend/.env.example` with `DATABASE_URL` and `REDIS_URL`; `AppSettings` loads
-  `.env`. The OpenAI key name joins it in step 11, since `AppSettings` rejects
+  `.env`. The OpenAI key name joins it in step 12, since `AppSettings` rejects
   undeclared `.env` keys
 - SQLAlchemy async engine and Redis client created in `lifespan`, stored on
   `app.state`, closed on shutdown. `tests/api/test_lifespan.py` covers both
@@ -337,21 +337,35 @@ Orm class deliberately and confirm the drift check fails.
 
 ---
 
-## Step 8 — Users lib and domain
+## Step 8 — Users lib
+
+Lib only. There is no create-user route or `create_user` method: Google sign-in is the
+only way an account is created, and tests insert users with factories. `GET /users/me`
+lands in step 9, once `AuthUserDep` exists to guard it.
 
 Build:
 
-- `libs/users/` — `services.py` with `get_user_by_email`, `create_user`, and
-  `get_or_create_from_auth_provider`, which looks up `pb_user_auth_provider` by
-  `(provider, provider_subject)` and creates the user and provider rows when missing;
-  `inputs.py`; `results.py`. Whether a new provider sign-in links to an existing user
-  by email is decided here
-- `apps/api/domains/users/` — `dtos.py`, `dependencies.py`, `router.py` with
-  `GET /users/me` (401 until step 9)
-- Tests against a real test database, transaction rolled back per test
+- `libs/users/services.py` — `UserService`, taking a db session:
+  - `find_or_create_user_from_auth_provider(find_or_create_user_from_auth_provider_input)`,
+    the sign-in path. The input carries what the provider returns: `provider`,
+    `provider_subject`, `email`, `is_email_verified`, `display_name`, `avatar_url`.
+    1. Finds the `pb_user_auth_provider` row by `(provider, provider_subject)`, then its
+       user. A user that is inactive, or soft-deleted while its provider row isn't,
+       raises `ForbiddenException` (403)
+    2. Otherwise, if a live user already has the email, raises `ConflictException`
+       (409). No linking by email while Google is the only provider
+    3. Otherwise creates the `pb_user` row, flushes for its `id`, and creates the
+       `pb_user_auth_provider` row with that `id` as `created_by_id` and
+       `updated_by_id`
+    - Returns the user's `id` and `identity`, what step 9's `AuthUser` needs
+  - `find_user_by_identity(user_identity)` — raises `NotFoundException` (404) when
+    missing
+- `libs/users/inputs.py`, `libs/users/results.py`
+- `tests/factories/users.py` gains `insert_user_auth_provider_row`
+- `tests/libs/users/test_services.py` against the real test database
 
-**Verify:** create a user through the service in a test and confirm the row lands.
-Confirm a duplicate email raises the domain exception and maps to a 409.
+**Verify:** the service tests cover a first sign-in creating both rows, a returning
+sign-in creating nothing, the inactive and email-conflict paths, and not found.
 
 ---
 
@@ -363,17 +377,19 @@ Needs a Google Cloud OAuth client — **manual setup by Tyler**, redirect URI
 Build:
 
 - `libs/auth/` — Google token verification, session creation and validation against
-  Redis. Session key holds the user id with a TTL; no sessions table. Sign-in sets
-  `last_login_at` on `pb_user` and `last_used_at` on `pb_user_auth_provider`
+  Redis. Session key holds the user id with a TTL; no sessions table. The callback
+  calls `UserService.find_or_create_user_from_auth_provider` and maps its 403 and 409
+  to a redirect the frontend can show
 - `apps/api/domains/auth/` — `GET /auth/google/login`,
   `GET /auth/google/callback`, `POST /auth/logout`
 - `AuthUserDep` in `apps/api/core/dependencies.py` — the guard. It resolves the
   session to an `AuthUser { id, identity }` in request scope and 401s otherwise. Routes
   needing auth take it and pass the `AuthUser` to services, which use `auth_user.id`
   for the audit columns. That's the Passport-equivalent
-- Activity middleware — sets `last_activity_at` for the signed-in user, at most once
-  per interval (a setting)
-- `/users/me` now requires it. `/generate-text` takes it when it lands in step 12
+- `apps/api/domains/users/` — `dtos.py`, `dependencies.py`, and `router.py` with
+  `GET /users/me` (`find_signed_in_user`), guarded by `AuthUserDep` and calling
+  `UserService.find_user_by_identity`. `/generate-text` takes the guard when it lands
+  in step 13
 
 **Verify:** full browser round trip to a logged-in state. Cookie is httpOnly, and
 `secure` is off only in dev. Call `/users/me` without the cookie and get a 401. Log
@@ -382,9 +398,35 @@ just the cookie cleared.
 
 ---
 
-## Step 10 — Frontend auth
+## Step 10 — Sign-in activity middleware
 
-Sign-in only. The write screen waits for step 12, when there is an endpoint behind
+Runs after auth has resolved the signed-in user and before the route.
+
+Build:
+
+- Sets `last_activity_at` on `pb_user` for the signed-in user, at most once per
+  interval (a setting)
+- Sets `last_login_at` on `pb_user` and `last_used_at` on `pb_user_auth_provider` when
+  a session signs in
+
+**Open when detailing:**
+
+- FastAPI middleware runs before route dependencies, so it can't see an `AuthUser`
+  that `AuthUserDep` resolves. Either session resolution moves into a middleware that
+  sets `request.state`, or this becomes a router-level dependency that runs after
+  `AuthUserDep`.
+- A per-request hook can't tell a sign-in from any other request. The session needs to
+  record that it's new, and which provider it came from, for `last_login_at` and
+  `last_used_at`.
+
+**Verify:** make two requests inside the interval and confirm one write; sign in again
+and confirm `last_login_at` moves.
+
+---
+
+## Step 11 — Frontend auth
+
+Sign-in only. The write screen waits for step 13, when there is an endpoint behind
 it.
 
 Build:
@@ -401,7 +443,7 @@ direct call to `/users/me` 401s.
 
 ---
 
-## Step 11 — LLM lib + dev LLM router
+## Step 12 — LLM lib + dev LLM router
 
 Outline only — detailed when this step starts.
 
@@ -431,9 +473,9 @@ network.
 
 ---
 
-## Step 12 — `generate_text` lib + domain
+## Step 13 — `generate_text` lib + domain
 
-Outline only — detailed once step 11 has settled the LLM lib. This is the app's core
+Outline only — detailed once step 12 has settled the LLM lib. This is the app's core
 logic, built as a LangGraph workflow on top of `LlmService`.
 
 Build:
@@ -462,7 +504,7 @@ Build:
 
 ---
 
-## Step 13 — Alpha limits + Logfire
+## Step 14 — Alpha limits + Logfire
 
 Build:
 
@@ -479,5 +521,5 @@ message. Confirm traces appear in Logfire.
 
 Personas, saved posts and the blog feed, the human-in-the-loop review flow, the
 un-AI-ify module, Anthropic as a second provider, scheduled publishing, RSS context.
-Step 13 ends with a working single-user writing tool, which is the point at which
+Step 14 ends with a working single-user writing tool, which is the point at which
 the persona model can be designed against something real.
