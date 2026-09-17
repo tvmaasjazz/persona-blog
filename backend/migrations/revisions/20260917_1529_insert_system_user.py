@@ -1,7 +1,7 @@
 from migration_runner import MigrationRunner
 
-revision = "20260916_1935"
-down_revision = "20260916_1934"
+revision = "20260917_1529"
+down_revision = "20260917_1528"
 
 MIGRATION_RUNNER = MigrationRunner()
 
