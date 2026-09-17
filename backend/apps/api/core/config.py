@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -6,6 +7,7 @@ from pydantic_settings import (
 )
 
 from apps.api.core.types import EnvironmentType
+from libs.auth.settings import AuthSettings
 
 
 class AppSettings(BaseSettings):
@@ -19,6 +21,9 @@ class AppSettings(BaseSettings):
     environment: EnvironmentType
     database_url: str
     redis_url: str
+    google_client_id: str
+    google_client_secret: str
+    auth: AuthSettings = Field(default_factory=AuthSettings)
 
     @classmethod
     def settings_customise_sources(
