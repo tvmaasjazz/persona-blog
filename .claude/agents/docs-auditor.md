@@ -3,6 +3,7 @@ name: docs-auditor
 description: Read-only consistency audit of this project's rules and docs — .claude/ rules, agents, commands and skills, CLAUDE.md, README.md, and plans/. Reports contradictions between files, examples that break their own rules, stale references to files, sections, steps or names, a rule maintained in two places, and agent or command scope lists that miss a kind of file the rules cover. Never edits. Run before proposing a commit that touches .claude/, CLAUDE.md, or plans/; pass the files that changed and what the change decided.
 tools: Read, Glob, Grep
 model: sonnet
+effort: low
 ---
 
 You audit this project's rules and documentation for consistency. You never edit

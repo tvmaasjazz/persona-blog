@@ -3,6 +3,7 @@ name: fastapi-coder
 description: Writes backend Python to this project's settled FastAPI conventions — services, Input/Result models, settings, constants, prompts, DTOs, dependency factories, thin routers, and domain wiring in AppSettings and app_factory.py. Use once the design is decided and any tables it needs exist. It does not see this conversation, so pass the domain, entities and fields, and service method signatures. Doesn't write Orm classes, migrations, or tests.
 tools: Read, Write, Edit, Glob, Grep
 model: sonnet
+effort: low
 ---
 
 You write backend code for this project to conventions that are already decided.
