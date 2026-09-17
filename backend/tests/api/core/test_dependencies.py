@@ -19,9 +19,9 @@ async def test_get_db_session_discards_uncommitted_writes(
     insert_user_response = await api_client.post("/insert-user-without-transaction")
 
     user_query = select(UserOrm).where(UserOrm.email == "ada@example.com")
-    inserted_user_orm = await db_session.scalar(user_query)
+    inserted_user_record = await db_session.scalar(user_query)
     assert insert_user_response.status_code == 200
-    assert inserted_user_orm is None
+    assert inserted_user_record is None
 
 
 async def test_get_db_transaction_commits_writes(
@@ -34,9 +34,9 @@ async def test_get_db_transaction_commits_writes(
     insert_user_response = await api_client.post("/insert-user-in-transaction")
 
     user_query = select(UserOrm).where(UserOrm.email == "ada@example.com")
-    inserted_user_orm = await db_session.scalar(user_query)
+    inserted_user_record = await db_session.scalar(user_query)
     assert insert_user_response.status_code == 200
-    assert inserted_user_orm is not None
+    assert inserted_user_record is not None
 
 
 async def test_get_db_transaction_rolls_back_on_error(
@@ -51,5 +51,5 @@ async def test_get_db_transaction_rolls_back_on_error(
         await api_client.post("/insert-user-then-fail")
 
     user_query = select(UserOrm).where(UserOrm.email == "ada@example.com")
-    inserted_user_orm = await db_session.scalar(user_query)
-    assert inserted_user_orm is None
+    inserted_user_record = await db_session.scalar(user_query)
+    assert inserted_user_record is None

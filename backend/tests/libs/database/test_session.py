@@ -8,11 +8,11 @@ from tests.factories.users import insert_user_row
 
 
 async def test_orm_select_excludes_soft_deleted_rows(db_session: AsyncSession) -> None:
-    live_user_orm = await insert_user_row(db_session)
-    deleted_user_orm = await insert_user_row(
+    live_user_record = await insert_user_row(db_session)
+    deleted_user_record = await insert_user_row(
         db_session, deleted_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
     )
-    user_ids = [live_user_orm.id, deleted_user_orm.id]
+    user_ids = [live_user_record.id, deleted_user_record.id]
 
     user_id_query = select(UserOrm.id).where(UserOrm.id.in_(user_ids))
     visible_user_ids = (await db_session.scalars(user_id_query)).all()
@@ -21,7 +21,7 @@ async def test_orm_select_excludes_soft_deleted_rows(db_session: AsyncSession) -
         {"user_ids": user_ids},
     )
 
-    assert visible_user_ids == [live_user_orm.id]
+    assert visible_user_ids == [live_user_record.id]
     assert stored_row_count == 2
 
 

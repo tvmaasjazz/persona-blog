@@ -17,16 +17,16 @@ async def insert_user_row(
     deleted_at: datetime | None = None,
     is_active: bool = True,
 ) -> UserOrm:
-    user_orm = UserOrm(
+    user_record = UserOrm(
         email=email or _build_unique_email(),
         display_name=display_name,
         last_login_at=last_login_at,
         deleted_at=deleted_at,
         is_active=is_active,
     )
-    db_session.add(user_orm)
+    db_session.add(user_record)
     await db_session.flush()
-    return user_orm
+    return user_record
 
 
 async def insert_user_auth_provider_row(
@@ -38,7 +38,7 @@ async def insert_user_auth_provider_row(
     email_at_provider: str | None = None,
     deleted_at: datetime | None = None,
 ) -> UserAuthProviderOrm:
-    user_auth_provider_orm = UserAuthProviderOrm(
+    user_auth_provider_record = UserAuthProviderOrm(
         user_id=user_id,
         provider=provider,
         provider_subject=provider_subject or _build_unique_provider_subject(),
@@ -47,9 +47,9 @@ async def insert_user_auth_provider_row(
         created_by_id=user_id,
         updated_by_id=user_id,
     )
-    db_session.add(user_auth_provider_orm)
+    db_session.add(user_auth_provider_record)
     await db_session.flush()
-    return user_auth_provider_orm
+    return user_auth_provider_record
 
 
 def build_find_or_create_user_from_auth_provider_input(
