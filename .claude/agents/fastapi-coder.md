@@ -84,7 +84,7 @@ you applied it. Name the rule and the file, e.g.:
 - `fastapi-structure.md` › DTOs: `PersonaDto.to_input()` shared by create and
   update, `IdentityResponseDto` returned from `create_persona` in
   `domains/personas/router.py`
-- `python-naming.md` › Result naming: `GetPersonaBySlugResult` named for the method,
+- `python-naming.md` › Result naming: `FindPersonaBySlugResult` named for the method,
   not the entity
 - `python-naming.md` › Statements: bound the awaited service call before
   `from_result()` in `create_persona`

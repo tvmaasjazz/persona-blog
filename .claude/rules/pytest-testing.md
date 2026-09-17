@@ -571,7 +571,7 @@ rolled back after each test.
 | Soft delete                       | Call, then assert the ORM `select()` no longer finds the row and a raw `text()` select still does, with `deleted_at` and `deleted_by_id` set |
 | Audit columns                     | Assert `created_by_id` / `updated_by_id` equal the `AuthUser` the test passed in |
 | Read, found                       | `insert_*_row`, call, compare the whole `Result` built from the row's values |
-| Read, not found                   | Call with a key that was never inserted and assert the result `is None` |
+| Read, not found                   | Call with a key that was never inserted and `pytest.raises(NotFoundException)` |
 | Update                            | Insert, call, select back, and assert both the changed and unchanged columns |
 | Unique, foreign-key, or check constraint | Insert the conflicting row first, then `pytest.raises` the lib or standard exception the service raises. The session can't be used afterwards, so the test ends at the `with` block |
 | Relationships                     | Insert the parent and at least one child, and assert the child appears. A missing `selectinload()` fails as `MissingGreenlet` |
@@ -605,15 +605,14 @@ async def test_create_user_email_taken_raises_user_email_taken_exception(
         await user_service.create_user(create_user_input)
 
 
-async def test_get_user_by_email_includes_personas(db_session: AsyncSession) -> None:
+async def test_find_user_by_email_includes_personas(db_session: AsyncSession) -> None:
     user_orm = await insert_user_row(db_session, email="ada@example.com")
     await insert_persona_row(db_session, user_id=user_orm.id, name="Baker Bea")
     user_service = UserService(db_session=db_session)
 
-    get_user_by_email_result = await user_service.get_user_by_email("ada@example.com")
+    find_user_by_email_result = await user_service.find_user_by_email("ada@example.com")
 
-    assert get_user_by_email_result is not None
-    assert [persona.name for persona in get_user_by_email_result.personas] == ["Baker Bea"]
+    assert [persona.name for persona in find_user_by_email_result.personas] == ["Baker Bea"]
 ```
 
 Link child rows by foreign key (`user_id=`), never with `parent.children.append()`.
@@ -1189,7 +1188,7 @@ CI.
 ```bash
 uv run pytest                                    # all but live_llm and migration
 uv run pytest tests/libs/users                   # one folder
-uv run pytest tests/api/users/test_router.py::test_get_me_signed_out_returns_401
+uv run pytest tests/api/users/test_router.py::test_find_signed_in_user_signed_out_returns_401
 uv run pytest -k duplicate_email                 # names containing a substring
 uv run pytest -x --lf                            # rerun last failures, stop at the first
 uv run pytest -m migration                       # stairway migration test
