@@ -333,12 +333,17 @@ DbTransactionDep = Annotated[AsyncSession, Depends(get_db_transaction)]
             .options(selectinload(UserOrm.personas))
         )
         query_result = await self._db_session.execute(query)
-        user_orm = query_result.scalar_one_or_none()
+        user_record = query_result.scalar_one_or_none()
 
-        if user_orm is None:
+        if user_record is None:
             raise NotFoundException("User not found")
-        return FindUserByEmailResult.model_validate(user_orm)
+        return FindUserByEmailResult.model_validate(user_record, from_attributes=True)
 ```
+
+A record becomes a `Result` through `model_validate(<entity>_record, from_attributes=True)`,
+which copies only the fields the `Result` declares, including nested `Result`s. The
+flag goes on the call; a `Result` class never sets `model_config`, so it stays a plain
+shape.
 
 `scalar_one_or_none()` then raise `NotFoundException` for a single row,
 `scalars().all()` for a list, which is empty rather than an error when nothing
@@ -349,14 +354,14 @@ key and other server-side defaults:
 
 ```python
     async def create_user(self, user_input: CreateUserInput) -> CreateUserResult:
-        user_orm = UserOrm(
+        user_record = UserOrm(
             email=user_input.email,
             display_name=user_input.display_name,
         )
-        self._db_session.add(user_orm)
+        self._db_session.add(user_record)
         await self._db_session.flush()
 
-        return CreateUserResult.model_validate(user_orm)
+        return CreateUserResult.model_validate(user_record, from_attributes=True)
 ```
 
 Updates: load the Orm, mutate attributes, `flush()`. Use `update()` statements only

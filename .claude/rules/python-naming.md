@@ -137,11 +137,20 @@ outside an Orm, `Result`, or DTO field.
 Booleans start with `is_` wherever they live: columns, Orm attributes,
 Pydantic fields, and local variables. `is_active`, not `active`.
 
+An `Orm` class describes a table; an instance of it is a row, named `<entity>_record`:
+`user_record`, `user_auth_provider_record`. That holds whether the row was loaded or
+just created and flushed. Never `user_orm`.
+
 One exception: the root `AppSettings` instance is `app.state.settings`. There is only
 ever one settings object on `app.state`, so the qualifier adds nothing. Local
 variables holding it are still `app_settings`.
 
 ## Statements and readability
+
+**A function that does more than one thing is split into private helpers named for
+each thing.** `find_or_create_user_from_auth_provider` tries `_find_user_from_auth_provider`
+and falls back to `_create_user_from_auth_provider`. When a split wouldn't read better,
+short plain comments mark each section instead.
 
 **An `await` result is bound to a name unless it is returned directly or unused.** An
 `await` expression may appear in exactly three places: as the whole right-hand side of
