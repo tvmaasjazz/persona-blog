@@ -5,10 +5,12 @@ argument-hint: <domain-name> [quirks or notes in quotes]
 
 Scaffold the `$1` domain. Notes on this domain: $2
 
-Follow `.claude/rules/fastapi-structure.md` and `.claude/rules/python-naming.md` for
-every file. Do not restate those conventions back to me — apply them.
+You design the domain and brief the agents that write it: `schema-coder` for tables,
+`fastapi-coder` for application code, and `test-writer` for tests. Don't write those
+files yourself. None of the agents see this conversation, so every brief carries the
+decisions it needs.
 
-## Before writing anything
+## Before briefing any agent
 
 1. Check whether `libs/$1/` or `apps/api/domains/$1/` already exists. If either does,
    stop and tell me rather than merging into it.
@@ -19,48 +21,44 @@ every file. Do not restate those conventions back to me — apply them.
 
 ## Create
 
-**`libs/database/orm/<entity>.py`** for each new table, exported from
-`libs/database/orm/__init__.py`. Skip if the domain owns no tables.
+**1. Tables.** If the domain owns tables, hand them to the `schema-coder` agent first.
+It writes the SQL, the revision, and the Orm classes, and verifies them. Pass each
+table's columns (type, nullability, default), constraints, indexes, and enum types.
+Wait for its report; the application code uses the Orm classes it creates. Skip if the
+domain owns no tables.
 
-Each new package folder below gets an empty `__init__.py`.
+**2. Application code.** Hand the rest to the `fastapi-coder` agent. Pass the domain
+name, the entities and their fields, each service method's signature and behaviour,
+the routes with their status codes and errors, and the Orm classes from step 1. Ask
+for the files the domain needs from this list:
 
-**`libs/$1/`**
-- `services.py` — `$1`'s service class, framework-free, dependencies via `__init__`
-- `inputs.py` — one `Input` model per method taking a structured payload
-- `results.py` — one `Result` per method, named after the method
-- `settings.py` — only if the domain has tunable values
-- `constants.py` — only if the domain has values that must not be overridden
-- `types.py` — only if the domain has enums; all of them go here
-- `prompts.py` — only if the domain calls an LLM
-- `exceptions.py` — only if the domain needs exceptions callers must tell apart; each
-  subclasses one standard exception from `libs/core/exceptions.py`
+- `libs/$1/`
+  - `services.py` — `$1`'s service class, framework-free, dependencies via `__init__`
+  - `inputs.py` — one `Input` model per method taking a structured payload
+  - `results.py` — one `Result` per method, named after the method
+  - `settings.py` — only if the domain has tunable values
+  - `constants.py` — only if the domain has values that must not be overridden
+  - `types.py` — only if the domain has enums; all of them go here
+  - `prompts.py` — only if the domain calls an LLM
+  - `exceptions.py` — only if the domain needs exceptions callers must tell apart
+- `apps/api/domains/$1/`
+  - `dtos.py`, `dependencies.py`, and `router.py`
+- Wiring: the router in `apps/api/app_factory.py`, and the settings model on
+  `AppSettings` in `apps/api/core/config.py`
 
-**`apps/api/domains/$1/`**
-- `dtos.py` — `<Entity>Dto` shared by POST/PUT with `to_input()`; `<Entity>ResponseDto`
-  with `from_result()` for GET routes only. Create, update and delete use the shared
-  DTOs in `core/dtos.py`.
-- `dependencies.py` — service factory plus its `Annotated` alias
-- `router.py` — thin routes only
+If its report lists a schema change under "Follow-up needed", send that back to
+`schema-coder`, then return to `fastapi-coder` for the code that depends on it.
 
-**Wire it up**
-- Register the router in `apps/api/app_factory.py`
-- Add the settings model to `AppSettings` in `apps/api/core/config.py`
-
-**Migrations** — follow the `db-migration` skill: for each new table, a `.up.sql` and
-`.down.sql` under `migrations/sql/<table>/` with the shared columns every table
-carries, plus the revision wrapper in `migrations/revisions/`. Chain `down_revision`
-to the current head.
-
-**Tests** — once every file above exists, hand off to the `test-writer` agent. Don't
-write tests yourself. It doesn't see this conversation, so pass it the new source
-files, each service method and route, and the intended behaviour from the notes:
-error cases, status codes, limits.
+**3. Tests.** Once the code exists, hand off to the `test-writer` agent. Pass it the
+new source files, each service method and route, and the intended behaviour from the
+notes: error cases, status codes, limits.
 
 ## After
 
 Report as a list: files created, decisions you made where the notes were thin, and
-anything the rules files didn't cover. Include the test-writer's Coverage, Test run,
-and Source problems sections. If a quirk of this domain conflicts with an
+anything the rules files didn't cover. Include the schema-coder's Verification and
+Follow-up sections, the fastapi-coder's Judgement calls and Contradictions sections,
+and the test-writer's Coverage, Test run, and Source problems sections. If a quirk of this domain conflicts with an
 existing rule, say so and propose wording — don't quietly deviate.
 
 Stop before running migrations or committing.
