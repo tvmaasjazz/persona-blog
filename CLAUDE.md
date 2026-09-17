@@ -27,6 +27,9 @@ uv lock                      # regenerate lockfile after dependency changes (has
 uv run ruff check --fix .    # lint
 uv run ruff format .         # format
 uv run pytest                # tests
+uv run pytest -m migration   # migration stairway test (rebuilds the test schema)
+uv run alembic upgrade head  # apply migrations to the database in .env
+uv run python -m scripts.check_schema_drift  # Orm metadata vs the migrated schema
 uv run granian --interface asgi apps.api.main:app --reload   # dev server
 ```
 

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from apps.api.core.config import AppSettings
 from apps.api.core.logging import configure_logging
+from libs.database.session import create_db_session_factory
 
 logger = structlog.get_logger(__name__)
 
@@ -20,6 +21,7 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     redis_client = Redis.from_url(app_settings.redis_url)
     fastapi_app.state.settings = app_settings
     fastapi_app.state.db_engine = db_engine
+    fastapi_app.state.db_session_factory = create_db_session_factory(db_engine)
     fastapi_app.state.redis_client = redis_client
 
     logger.info(

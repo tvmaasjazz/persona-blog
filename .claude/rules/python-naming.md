@@ -31,7 +31,12 @@ Every class ends in the suffix for what it is:
 | `Key`        | Defined key objects                          | `CacheKey`, `StateKey`           |
 | `Exception`  | Exceptions: standard ones in `libs/core/`, domain-prefixed ones in their lib | `NotFoundException`, `GenerateTextInappropriateException` |
 | `Stub`       | A hand-written test double (`tests/` only)   | `LlmServiceStub`, `HttpHandlerStub` |
+| `Mixin`      | SQLAlchemy column mixins (`libs/database/` only) | `SoftDeleteMixin`            |
 | `Model`      | Only when the purpose is genuinely unclear   | —                                |
+
+Two classes take no suffix. SQLAlchemy column types are named for the value they
+hold (`UtcDateTime`). `AuthUser`, the signed-in user in request scope, is named for
+what it is everywhere it's passed.
 
 A `Result` is named for **the function that returns it**, not the entity it carries:
 `GetUserByEmailResult`, `CreateUserResult`, `HumanizeDraftResult`. `UserResult` says
@@ -126,6 +131,13 @@ session, client, and config in this codebase:
 This extends to attributes (`self._db_session`), constructor parameters, dependency
 factories (`get_db_session`, `db_session_factory`), and anything on `app.state`. If a
 name would still be correct in an unrelated module, it is too generic.
+
+Identifiers name their entity and their kind. `blog_post_id` is the `BIGINT` key,
+`blog_post_identity` is the UUID the API exposes. Never a bare `id` or `identity`
+outside an Orm, `Result`, or DTO field.
+
+Booleans start with `is_` wherever they live: columns, Orm attributes,
+Pydantic fields, and local variables. `is_active`, not `active`.
 
 One exception: the root `AppSettings` instance is `app.state.settings`. There is only
 ever one settings object on `app.state`, so the qualifier adds nothing. Local

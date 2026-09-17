@@ -43,8 +43,8 @@ The rules files say where each of these lives and how it is shaped.
   "Follow-up needed", naming the table and the change.
 - **Tests** — owned by the `test-writer` agent. List the source files, service
   methods, and routes that need tests, so the work can be handed to it.
-- **App setup files** — `lifespan.py`, `main.py`, the database base and session
-  modules, `core/dependencies.py`, `core/dtos.py`, `core/exception_handlers.py`,
+- **App setup files** — `lifespan.py`, `main.py`, `libs/database/base.py`,
+  `session.py`, `column_types.py` and `constants.py`, `core/dependencies.py`, `core/dtos.py`, `core/exception_handlers.py`,
   `core/logging.py`, `core/types.py`, `libs/core/exceptions.py`. Written
   once; if a task seems to need a change there (including a new standard exception
   category), report it instead.

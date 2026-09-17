@@ -259,6 +259,8 @@ Test data comes from `tests/factories/<domain>.py`, one module per lib domain:
   service working.
 - Every parameter is keyword-only with a valid default, so a test passes only the
   values it asserts on. Unique columns default to a fresh value.
+- Datetimes are aware UTC literals: `datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)`. A
+  naive datetime fails at flush.
 - Write out keyword parameters, never `**overrides`, so a typo fails.
 
 ```python
@@ -378,11 +380,11 @@ async def db_engine(
     async with db_engine.begin() as db_connection:
         await db_connection.execute(text("DROP SCHEMA public CASCADE"))
         await db_connection.execute(text("CREATE SCHEMA public"))
-    subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        cwd=pytestconfig.rootpath,
-        check=True,
+    alembic_process = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", "alembic", "upgrade", "head", cwd=pytestconfig.rootpath
     )
+    if await alembic_process.wait() != 0:
+        raise RuntimeError("alembic upgrade head failed against the test database")
     yield db_engine
     await db_engine.dispose()
 
@@ -397,11 +399,9 @@ async def db_connection(db_engine: AsyncEngine) -> AsyncIterator[AsyncConnection
 
 @pytest.fixture
 def db_session_factory(db_connection: AsyncConnection) -> async_sessionmaker[AsyncSession]:
-    return async_sessionmaker(
-        bind=db_connection,
-        expire_on_commit=False,
-        join_transaction_mode="create_savepoint",
-    )
+    db_session_factory = create_db_session_factory(db_connection)
+    db_session_factory.configure(join_transaction_mode="create_savepoint")
+    return db_session_factory
 
 
 @pytest.fixture
@@ -449,12 +449,13 @@ What these fixtures guarantee:
 
 - **Real migrations.** `db_engine` wipes the schema and runs the real migrations once
   per session. Tests run against the schema the migrations build, never
-  `Base.metadata.create_all()`, so a broken `.up.sql` fails the suite.
+  `BaseOrm.metadata.create_all()`, so a broken `.up.sql` fails the suite.
 - **Rollback per test.** Each test gets one connection inside an outer transaction
   that's rolled back at teardown. `join_transaction_mode="create_savepoint"` turns
   every session's `begin()` and `commit()` into a savepoint, so services and routes
-  that commit still leave nothing behind. Every other session option must match
-  `libs/database/session.py`.
+  that commit still leave nothing behind. The factory comes from
+  `create_db_session_factory()`, so every other session option and the soft-delete
+  rule match production. Only `join_transaction_mode` is added.
 - **Real lifespan.** `fastapi_app` runs the real lifespan, because httpx's
   `ASGITransport` never sends lifespan events. It then points
   `app.state.db_session_factory` at the test connection. Each request still opens its
@@ -566,7 +567,9 @@ rolled back after each test.
 | Situation                         | Pattern |
 | --------------------------------- | ------- |
 | Create                            | Call, then `select()` the row back and assert on it. The returned `Result` alone proves nothing about persistence |
-| Primary key and server defaults   | Assert `id` is set and `created_at is not None`. Never assert an exact timestamp |
+| Primary key and server defaults   | Assert `id` and `identity` are set and `created_at is not None`. Never assert an exact timestamp |
+| Soft delete                       | Call, then assert the ORM `select()` no longer finds the row and a raw `text()` select still does, with `deleted_at` and `deleted_by_id` set |
+| Audit columns                     | Assert `created_by_id` / `updated_by_id` equal the `AuthUser` the test passed in |
 | Read, found                       | `insert_*_row`, call, compare the whole `Result` built from the row's values |
 | Read, not found                   | Call with a key that was never inserted and assert the result `is None` |
 | Update                            | Insert, call, select back, and assert both the changed and unchanged columns |
@@ -787,7 +790,8 @@ async def signed_in_user(
 | Wire format                   | Request bodies and expected responses are dict literals, never `Dto(...).model_dump()`. The test is what pins the JSON contract |
 | Validation → 422              | Parametrize one missing required field plus one case per constraint the DTO declares. Assert the status and `detail[0]["loc"]`, never the message |
 | Exception → status            | Set up the real condition (insert the duplicate row), or set the stub's `<method>_error`. Assert the status and the `{"detail": ...}` body |
-| Create (`POST`)               | Select the row by the returned `identity` and assert its columns. The body is `{"identity": "<id>"}` |
+| Create (`POST`)               | Select the row by the returned `identity` and assert its columns. The body is `{"identity": "<uuid>"}` |
+| Malformed identity → 422      | One test per route with an identity path parameter: a non-UUID value returns 422 |
 | Update (`PUT`) or `DELETE`    | Assert the body `== {}`, then select to prove the row changed or is gone |
 | Write persists                | After a 2xx, select the row through `db_session`. This catches a write route wired to `DbSessionDep` |
 | List (`GET` with a `FetchAllQueryDto`) | An invalid query value → 422 with `loc` starting `"query"`. Pagination and filter cases wait on the conventions `fastapi-structure.md` hasn't settled yet |
@@ -884,8 +888,9 @@ async def test_create_blog_post_persists_row_and_returns_identity(
     )
 
     response_body = create_blog_post_response.json()
-    blog_post_id = int(response_body["identity"])
-    blog_post_orm = await db_session.get(BlogPostOrm, blog_post_id)
+    blog_post_identity = UUID(response_body["identity"])
+    blog_post_query = select(BlogPostOrm).where(BlogPostOrm.identity == blog_post_identity)
+    blog_post_orm = await db_session.scalar(blog_post_query)
     assert create_blog_post_response.status_code == 200
     assert blog_post_orm is not None
     assert blog_post_orm.title == "Starter care"
@@ -898,7 +903,7 @@ async def test_update_blog_post_persists_changes(
     blog_post_orm = await insert_blog_post_row(db_session, title="Draft title")
 
     update_blog_post_response = await api_client.put(
-        f"/blog-posts/{blog_post_orm.id}",
+        f"/blog-posts/{blog_post_orm.identity}",
         json={"title": "Final title", "body": "Feed it daily."},
     )
 

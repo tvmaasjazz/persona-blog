@@ -275,29 +275,65 @@ Build:
 
 ---
 
-## Step 7 — Migration system + users table
+## Step 7 — Migration system + user tables
 
-Uses the `db-migration` skill.
+Uses the `db-migration` skill. The schema is designed in
+[`user-tables.md`](user-tables.md): tables, shared columns, constraints, and the
+system user.
 
 Build:
 
-- `migrations/env.py` (no `target_metadata`), `alembic.ini` with `file_template` and
-  `version_locations`, `migrations/migration_runner.py`
-- `uv add sqlparse alembic`
-- `libs/database/base.py`, `session.py` (`async_sessionmaker`), empty
-  `orm/__init__.py`. Moved from step 6: nothing needs them until there is a table
-- `get_db_session` and `get_db_transaction` in `apps/api/core/dependencies.py`, with
-  `tests/api/core/test_dependencies.py`, plus the `db_engine` / `db_session` test
-  fixtures
-- First revision: `pb_user` — `id`, `email` (unique), `display_name`,
-  `google_subject_id`, `created_at`, `updated_at`
-- `libs/database/orm/user.py` with `UserOrm`, exported from `orm/__init__.py`
-- CI job: apply migrations to an empty database, then the drift check against Orm
-  metadata
+- `uv add alembic sqlparse python-dotenv`
+- `alembic.ini` with `file_template`, `version_locations` pointing at
+  `migrations/revisions/`, and `prepend_sys_path = migrations` (commented) so
+  revisions import `from migration_runner import MigrationRunner`
+- `migrations/env.py` — async template with asyncpg, no `target_metadata`, no app
+  imports. Loads `.env` with python-dotenv and reads `DATABASE_URL`.
+  `transaction_per_migration=True`
+- `migrations/migration_runner.py` — the reference runner from the `db-migration`
+  skill, executing through `op.get_bind().exec_driver_sql()` instead of `op.execute()`,
+  so a `:word` inside SQL isn't parsed as a bind parameter
+- Ruff ignores N999 in `migrations/revisions/` (filenames start with digits)
+- `libs/database/base.py` — `BaseOrm` with a constraint naming convention matching
+  Postgres's defaults and the shared columns from `user-tables.md`: `id`, `identity`,
+  timestamps, soft delete, audit foreign keys. `deleted_at` sits on `SoftDeleteMixin`,
+  which `BaseOrm` inherits, because the soft-delete rule needs an unmapped class to
+  target. `UtcDateTime` in `column_types.py` stores naive UTC and returns aware UTC
+- `libs/database/session.py` — `create_db_session_factory(db_engine)` with
+  `expire_on_commit=False`, plus the global soft-delete rule adding
+  `deleted_at IS NULL` to every ORM query
+- `libs/database/orm/` — `UserOrm` and `UserAuthProviderOrm`, exported from
+  `__init__.py`. `AuthProviderType` in `libs/auth/types.py`
+- `lifespan` stores `db_session_factory` on `app.state`
+- `get_db_session` / `DbSessionDep` and `get_db_transaction` / `DbTransactionDep` in
+  `apps/api/core/dependencies.py`
+- Revision 1 `enable_citext`: `extensions/0001_enable_citext`
+- Revision 2 `create_user_tables`: `pb_user/0001_create_pb_user`,
+  `pb_user_auth_provider/0001_create_pb_user_auth_provider`
+- Revision 3 `insert_system_user`: `pb_user/0002_insert_system_user`
+- `scripts/check_schema_drift.py` — compares a database already at head with
+  `BaseOrm.metadata` (ignoring `alembic_version`) and exits non-zero on any difference.
+  Run with `uv run python -m scripts.check_schema_drift`
+- Tests:
+  - root `db_engine`, `db_connection`, `db_session_factory` and `db_session` fixtures;
+    `fastapi_app` points at the test session factory
+  - `tests/factories/users.py` with `insert_user_row`
+  - `tests/api/core/test_dependencies.py`
+  - `BaseOrm` behaviour: `updated_at` set on update, UTC round trip, soft-deleted rows
+    hidden
+  - `tests/migrations/`: single head, every up file has a down file, and the stairway
+    test marked `migration`
+- CI: the existing job runs migrations through the fixtures. A new `migrations` job
+  runs `alembic upgrade head`, the drift check, and `pytest -m migration`
+- Rules updated for the new conventions: shared columns on `BaseOrm`, `identity` in routes
+  and DTOs, naive UTC timestamps, no triggers, `is_` booleans, `sql/extensions/`, the
+  string foreign key exception for the audit columns, global soft delete, `AuthUser`
+  passed to services, and the `MigrationRunner` example matching the skill
 
-**Verify:** `alembic upgrade head` on a fresh database, inspect with `psql \d pb_user`.
-`alembic downgrade -1`, confirm the table is gone, upgrade again. Rename a column in
-the Orm class deliberately and confirm CI's drift check fails.
+**Verify:** `alembic upgrade head` on a fresh database, inspect with `psql \d pb_user`
+and `\d pb_user_auth_provider`, and confirm the system user row. `alembic downgrade
+base`, confirm both tables and `citext` are gone, upgrade again. Rename a column in an
+Orm class deliberately and confirm the drift check fails.
 
 ---
 
@@ -305,8 +341,11 @@ the Orm class deliberately and confirm CI's drift check fails.
 
 Build:
 
-- `libs/users/` — `services.py` with `get_user_by_email`, `create_user`,
-  `get_or_create_from_google`; `inputs.py`; `results.py`
+- `libs/users/` — `services.py` with `get_user_by_email`, `create_user`, and
+  `get_or_create_from_auth_provider`, which looks up `pb_user_auth_provider` by
+  `(provider, provider_subject)` and creates the user and provider rows when missing;
+  `inputs.py`; `results.py`. Whether a new provider sign-in links to an existing user
+  by email is decided here
 - `apps/api/domains/users/` — `dtos.py`, `dependencies.py`, `router.py` with
   `GET /users/me` (401 until step 9)
 - Tests against a real test database, transaction rolled back per test
@@ -324,11 +363,16 @@ Needs a Google Cloud OAuth client — **manual setup by Tyler**, redirect URI
 Build:
 
 - `libs/auth/` — Google token verification, session creation and validation against
-  Redis. Session key holds the user id with a TTL; no sessions table
+  Redis. Session key holds the user id with a TTL; no sessions table. Sign-in sets
+  `last_login_at` on `pb_user` and `last_used_at` on `pb_user_auth_provider`
 - `apps/api/domains/auth/` — `GET /auth/google/login`,
   `GET /auth/google/callback`, `POST /auth/logout`
-- `CurrentUserDep` in `apps/api/core/dependencies.py` — the guard. Routes needing
-  auth take it; that's the Passport-equivalent
+- `AuthUserDep` in `apps/api/core/dependencies.py` — the guard. It resolves the
+  session to an `AuthUser { id, identity }` in request scope and 401s otherwise. Routes
+  needing auth take it and pass the `AuthUser` to services, which use `auth_user.id`
+  for the audit columns. That's the Passport-equivalent
+- Activity middleware — sets `last_activity_at` for the signed-in user, at most once
+  per interval (a setting)
 - `/users/me` now requires it. `/generate-text` takes it when it lands in step 12
 
 **Verify:** full browser round trip to a logged-in state. Cookie is httpOnly, and
