@@ -147,6 +147,32 @@ variables holding it are still `app_settings`.
 
 ## Statements and readability
 
+**Independent awaits run together.** Two awaits that don't depend on each other, and
+that wait on different things, run together with `asyncio.gather`. An await that uses a
+previous await's value stays sequential.
+
+```python
+# no — two independent HTTP calls, one after the other
+llm_result = await self._llm_service.complete(llm_input)
+rss_result = await self._rss_service.fetch_feed(feed_url)
+
+# yes
+llm_result, rss_result = await asyncio.gather(
+    self._llm_service.complete(llm_input),
+    self._rss_service.fetch_feed(feed_url),
+)
+```
+
+- **Never gather two calls that share one `AsyncSession`.** Concurrent use raises
+  `InvalidRequestError` and leaves the session unusable, so even closing it fails. One
+  query at a time per session, or a session each. A Redis client and an HTTP client are
+  both safe to use concurrently, since each call takes its own pooled connection.
+- **Only when the wait is real.** Two Redis reads finish in under a millisecond;
+  gathering them buys nothing and costs a line. It earns its place for HTTP, LLM calls,
+  and slow queries.
+- `gather` raises the first error and lets the rest run on. Use `asyncio.TaskGroup`
+  when there are more than two, or when the others should be cancelled.
+
 **A function that does more than one thing is split into private helpers named for
 each thing.** `find_or_create_user_from_auth_provider` tries `_find_user_from_auth_provider`
 and falls back to `_create_user_from_auth_provider`. When a split wouldn't read better,
