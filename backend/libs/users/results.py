@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
 class FindOrCreateUserFromAuthProviderResult(BaseModel):
@@ -10,8 +10,6 @@ class FindOrCreateUserFromAuthProviderResult(BaseModel):
 
 
 class FindUserByIdentityResult(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
     identity: UUID
     email: str
