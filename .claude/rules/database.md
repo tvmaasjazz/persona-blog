@@ -45,7 +45,7 @@ Database. The procedure for making a schema change is the `db-migration` skill.
 
 ### Shared columns
 
-Every table has these columns. `Base` in `libs/database/base.py` maps them, so an Orm
+Every table has these columns. `BaseOrm` in `libs/database/base.py` maps them, so an Orm
 class never redeclares them.
 
 | Column          | SQL                                                          | Orm                        | Notes |
@@ -54,7 +54,7 @@ class never redeclares them.
 | `identity`      | `UUID NOT NULL DEFAULT gen_random_uuid()`                    | `Mapped[UUID]`             | Unique. The ID the API exposes |
 | `created_at`    | `TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')`      | `Mapped[datetime]`         | |
 | `updated_at`    | `TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')`      | `Mapped[datetime]`         | SQLAlchemy `onupdate` sets it on every ORM update |
-| `deleted_at`    | `TIMESTAMP`                                                  | `Mapped[datetime \| None]` | On `SoftDeleteMixin`, which `Base` inherits |
+| `deleted_at`    | `TIMESTAMP`                                                  | `Mapped[datetime \| None]` | On `SoftDeleteMixin`, which `BaseOrm` inherits |
 | `created_by_id` | `BIGINT NOT NULL`, FK `pb_user (id)`                         | `Mapped[int]`              | |
 | `updated_by_id` | `BIGINT NOT NULL`, FK `pb_user (id)`                         | `Mapped[int]`              | |
 | `deleted_by_id` | `BIGINT`, FK `pb_user (id)`                                  | `Mapped[int \| None]`      | |
@@ -67,34 +67,36 @@ real delete is rare and should fail loudly rather than lose history.
 
 ### Table shape
 
-Every `CREATE TABLE` lists the shared columns in this order, with every constraint
-named:
+Every `CREATE TABLE` lists the shared columns in this order:
 
 ```sql
 -- migrations/sql/pb_persona/0001_create_pb_persona.up.sql
 CREATE TABLE pb_persona (
-    id BIGINT GENERATED ALWAYS AS IDENTITY,
-    identity UUID NOT NULL DEFAULT gen_random_uuid(),
-    user_id BIGINT NOT NULL,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    identity UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+    user_id BIGINT NOT NULL REFERENCES pb_user (id),
     name TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
     updated_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
     deleted_at TIMESTAMP,
-    created_by_id BIGINT NOT NULL,
-    updated_by_id BIGINT NOT NULL,
-    deleted_by_id BIGINT,
-    CONSTRAINT pb_persona_pkey PRIMARY KEY (id),
-    CONSTRAINT pb_persona_identity_key UNIQUE (identity),
-    CONSTRAINT pb_persona_user_id_fkey FOREIGN KEY (user_id) REFERENCES pb_user (id),
-    CONSTRAINT pb_persona_created_by_id_fkey FOREIGN KEY (created_by_id) REFERENCES pb_user (id),
-    CONSTRAINT pb_persona_updated_by_id_fkey FOREIGN KEY (updated_by_id) REFERENCES pb_user (id),
-    CONSTRAINT pb_persona_deleted_by_id_fkey FOREIGN KEY (deleted_by_id) REFERENCES pb_user (id)
+    created_by_id BIGINT NOT NULL REFERENCES pb_user (id),
+    updated_by_id BIGINT NOT NULL REFERENCES pb_user (id),
+    deleted_by_id BIGINT REFERENCES pb_user (id)
 );
 
 CREATE INDEX pb_persona_user_id_idx ON pb_persona (user_id);
 ```
 
 - Table-specific columns go between `identity` and `created_at`.
+- A constraint on a single column is written inline and unnamed: `PRIMARY KEY`,
+  `UNIQUE`, `REFERENCES pb_user (id) ON DELETE CASCADE`, `CHECK (...)`. Postgres names
+  it `<table>_pkey`, `<table>_<column>_key`, or `<table>_<column>_fkey`, which is the
+  naming convention, and the drift check confirms the names match.
+- A constraint spanning several columns goes at table level, named:
+  `CONSTRAINT pb_persona_tag_persona_id_tag_id_key UNIQUE (persona_id, tag_id)`.
+- Postgres truncates generated names longer than 63 characters, and SQLAlchemy
+  shortens them differently. If a table and column name are that long, name the
+  constraint explicitly in both the SQL and the Orm class.
 - Text is `TEXT`, never `VARCHAR(n)`. Case-insensitive text is `CITEXT`.
 - Postgres doesn't index foreign keys. Add an index for each one you query by.
 - A unique constraint on a soft-deletable table is usually a partial unique index,
@@ -130,14 +132,14 @@ exactly (`python-naming.md` › Enums). The type is `pb_` plus the class name in
 snake_case: `AuthProviderType` → `pb_auth_provider_type`.
 
 ```sql
-CREATE TYPE pb_auth_provider_type AS ENUM ('GOOGLE', 'AUTH0');
+CREATE TYPE pb_auth_provider_type AS ENUM ('GOOGLE');
 ```
 
 - The Orm column names the type: `mapped_column(Enum(AuthProviderType, name="pb_auth_provider_type"))`.
   The `StrEnum` lives in the owning domain's `libs/<domain>/types.py`.
-- Adding a member is `ALTER TYPE pb_auth_provider_type ADD VALUE 'GITHUB'`, in the
-  same commit as the Python change. Postgres won't let the same transaction use the new
-  value, so a backfill that needs it goes in a later revision.
+- Adding a member goes in its own revision:
+  `ALTER TYPE pb_auth_provider_type ADD VALUE 'GITHUB'`, in the same commit as the
+  Python change.
 - Removing a member isn't supported by Postgres. It takes a new type, a column
   migration, and dropping the old type.
 - The `.down.sql` for a table using a type drops the type after the table.
@@ -156,7 +158,7 @@ from libs.database.orm.user import UserOrm
 __all__ = ["PersonaOrm", "UserOrm"]
 ```
 
-- Every Orm class extends `Base`. `Base` maps annotations to column types:
+- Every Orm class extends `BaseOrm`. `BaseOrm` maps annotations to column types:
   `str` → `TEXT`, `datetime` → `UtcDateTime`, `UUID` → `UUID`. Declare `CITEXT`,
   `BIGINT` foreign keys, and enums explicitly.
 - Nullability comes from the annotation: `Mapped[str | None]` is nullable. Server
@@ -175,7 +177,7 @@ Use direct symbols where import order allows:
 
 ```python
 # libs/database/orm/persona.py
-class PersonaOrm(Base):
+class PersonaOrm(BaseOrm):
     __tablename__ = "pb_persona"
 
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey(UserOrm.id))
@@ -184,8 +186,8 @@ class PersonaOrm(Base):
 
 - `ForeignKey(UserOrm.id)`, never `ForeignKey("pb_user.id")`.
 - `__tablename__` and the `back_populates` attribute name are the only permitted loose
-  strings, with one exception: `ForeignKey("pb_user.id")` on `Base`'s audit columns and
-  `UserOrm`'s own overrides of them, because `UserOrm` extends `Base` and can't be
+  strings, with one exception: `ForeignKey("pb_user.id")` on `BaseOrm`'s audit columns and
+  `UserOrm`'s own overrides of them, because `UserOrm` extends `BaseOrm` and can't be
   imported there.
 - A quoted class name in `relationship()` or `Mapped[...]` is allowed on **one** side
   of a mutual relationship only. Put the forward reference on the parent
@@ -197,7 +199,7 @@ Migrations are raw SQL in `backend/migrations/`. They never import application c
 and application code never imports them.
 
 - Alembic is a runner only. **Never** `alembic revision --autogenerate`.
-- `migrations/env.py` imports no `Base` or Orm module and has no `target_metadata`.
+- `migrations/env.py` imports no `BaseOrm` or Orm module and has no `target_metadata`.
   It reads `DATABASE_URL` from the environment, loading `.env` with python-dotenv;
   real environment variables win.
 - Every schema change produces three things in the same commit: the `.up.sql` and
@@ -212,8 +214,9 @@ backend/migrations/
 ├── migration_runner.py
 ├── script.py.mako
 ├── revisions/
-│   ├── 20260916_1934_create_user_tables.py
-│   └── 20260916_1935_insert_system_user.py
+│   ├── 20260917_1527_enable_citext.py
+│   ├── 20260917_1528_create_user_tables.py
+│   └── 20260917_1529_insert_system_user.py
 └── sql/
     ├── extensions/                 # CREATE EXTENSION files
     │   ├── 0001_enable_citext.up.sql
@@ -232,8 +235,11 @@ backend/migrations/
   `sql/extensions/`.
 - The numeric prefix orders changes within one folder, for human reading only.
   Ordering across tables is Alembic's `down_revision` chain.
-- A change spanning two tables still gets one revision. Each table's SQL goes in its
-  own folder, and the revision runs the files in dependency order.
+- A revision is a unit that ships and rolls back together, usually one feature's
+  tables. Each table's SQL goes in its own folder, and the revision runs the files in
+  dependency order.
+- Extensions get their own revision, since several features depend on them. Seed rows
+  (the system user) get their own revision, after the tables they fill.
 - One logical change per `.up.sql` file.
 
 ### Revisions
@@ -242,29 +248,33 @@ Revision files are `<YYYYMMDD>_<HHMM>_<slug>.py`, from `file_template` in
 `alembic.ini`. The revision id is the same timestamp in UTC, passed explicitly:
 
 ```bash
-uv run alembic revision --rev-id 20260916_1934 -m create_user_tables
+uv run alembic revision --rev-id 20260917_1528 -m create_user_tables
 ```
 
 The wrapper names SQL files and contains no SQL:
 
 ```python
-# revisions/20260916_1934_create_user_tables.py
+# revisions/20260917_1528_create_user_tables.py
 from migration_runner import MigrationRunner
 
-revision = "20260916_1934"
-down_revision = None
+revision = "20260917_1528"
+down_revision = "20260917_1527"
 
 MIGRATION_RUNNER = MigrationRunner()
 
 
 def upgrade() -> None:
-    MIGRATION_RUNNER.run_transactional("extensions/0001_enable_citext.up.sql")
     MIGRATION_RUNNER.run_transactional("pb_user/0001_create_pb_user.up.sql")
+    MIGRATION_RUNNER.run_transactional(
+        "pb_user_auth_provider/0001_create_pb_user_auth_provider.up.sql"
+    )
 
 
 def downgrade() -> None:
+    MIGRATION_RUNNER.run_transactional(
+        "pb_user_auth_provider/0001_create_pb_user_auth_provider.down.sql"
+    )
     MIGRATION_RUNNER.run_transactional("pb_user/0001_create_pb_user.down.sql")
-    MIGRATION_RUNNER.run_transactional("extensions/0001_enable_citext.down.sql")
 ```
 
 - `upgrade()` runs the `.up.sql` files it names; `downgrade()` runs the matching
@@ -287,9 +297,11 @@ Each revision runs in its own transaction (`transaction_per_migration=True`).
 - **`run_transactional(path)`** is the default. It splits the file with `sqlparse` and
   runs every statement inside the revision's transaction. In Postgres that covers
   nearly everything, including DDL.
-- **`run_non_transactional(path)`** runs the file in an `autocommit_block()` and raises
-  if the file holds more than one statement, because a partial failure outside a
-  transaction leaves the schema half-changed. Use it only for statements Postgres
+- **`run_non_transactional(path)`** runs the file in Alembic's `autocommit_block()`,
+  which commits the revision's transaction so far, runs the statement with autocommit,
+  and opens a fresh transaction for the rest. It raises if the file holds more than one
+  statement, because a partial failure outside a transaction leaves the schema
+  half-changed. Use it only for statements Postgres
   refuses to run in a transaction: `CREATE INDEX CONCURRENTLY`,
   `DROP INDEX CONCURRENTLY`, `REINDEX CONCURRENTLY`, `VACUUM`.
   - A non-transactional statement gets its own file and its own revision. Never
@@ -320,7 +332,7 @@ CI applies all migrations to an empty database, then runs:
 uv run python -m scripts.check_schema_drift
 ```
 
-The script compares the database with `Base.metadata` through Alembic's
+The script compares the database with `BaseOrm.metadata` through Alembic's
 `compare_metadata`, ignoring `alembic_version`, and exits non-zero on any difference:
 a column, type, nullability, index, or constraint that doesn't match. Autogenerate is a
 detector that fails the build, never a generator that writes files.
