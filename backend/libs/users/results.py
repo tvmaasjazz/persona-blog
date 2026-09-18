@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class FindOrCreateUserFromAuthProviderResult(BaseModel):
     id: int
     identity: UUID
+    user_auth_provider_id: int
     is_new_user: bool
 
 

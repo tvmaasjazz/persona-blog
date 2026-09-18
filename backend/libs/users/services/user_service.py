@@ -58,15 +58,11 @@ class UserService:
             raise ForbiddenException("User account is not available")
         if not user_record.is_active:
             raise ForbiddenException("User account is inactive")
-
-        user_record.last_login_at = find_or_create_user_from_auth_provider_input.signed_in_at
-        user_auth_provider_record.last_used_at = (
-            find_or_create_user_from_auth_provider_input.signed_in_at
-        )
-        await self._db_session.flush()
-
         return FindOrCreateUserFromAuthProviderResult(
-            id=user_record.id, identity=user_record.identity, is_new_user=False
+            id=user_record.id,
+            identity=user_record.identity,
+            user_auth_provider_id=user_auth_provider_record.id,
+            is_new_user=False,
         )
 
     async def _create_user_from_auth_provider(
@@ -87,7 +83,6 @@ class UserService:
             is_email_verified=find_or_create_user_from_auth_provider_input.is_email_verified,
             display_name=find_or_create_user_from_auth_provider_input.display_name,
             avatar_url=find_or_create_user_from_auth_provider_input.avatar_url,
-            last_login_at=find_or_create_user_from_auth_provider_input.signed_in_at,
         )
         self._db_session.add(user_record)
         await self._db_session.flush()
@@ -97,7 +92,6 @@ class UserService:
             provider=find_or_create_user_from_auth_provider_input.provider,
             provider_subject=find_or_create_user_from_auth_provider_input.provider_subject,
             email_at_provider=find_or_create_user_from_auth_provider_input.email,
-            last_used_at=find_or_create_user_from_auth_provider_input.signed_in_at,
             created_by_id=user_record.id,
             updated_by_id=user_record.id,
         )
@@ -105,5 +99,8 @@ class UserService:
         await self._db_session.flush()
 
         return FindOrCreateUserFromAuthProviderResult(
-            id=user_record.id, identity=user_record.identity, is_new_user=True
+            id=user_record.id,
+            identity=user_record.identity,
+            user_auth_provider_id=user_auth_provider_record.id,
+            is_new_user=True,
         )
