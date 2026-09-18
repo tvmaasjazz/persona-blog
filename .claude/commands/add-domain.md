@@ -6,7 +6,7 @@ argument-hint: <domain-name> [quirks or notes in quotes]
 Scaffold the `$1` domain. Notes on this domain: $2
 
 You design the domain and brief the agents that write it: `schema-coder` for tables,
-`fastapi-coder` for application code, and `test-writer` for tests. Don't write those
+`fastapi-coder` for application code, and `be-test-writer` for tests. Don't write those
 files yourself. None of the agents see this conversation, so every brief carries the
 decisions it needs.
 
@@ -51,7 +51,7 @@ for the files the domain needs from this list:
 If its report lists a schema change under "Follow-up needed", send that back to
 `schema-coder`, then return to `fastapi-coder` for the code that depends on it.
 
-**3. Tests.** Once the code exists, hand off to the `test-writer` agent. Pass it the
+**3. Tests.** Once the code exists, hand off to the `be-test-writer` agent. Pass it the
 new source files, each service method and route, and the intended behaviour from the
 notes: error cases, status codes, limits.
 
@@ -60,7 +60,7 @@ notes: error cases, status codes, limits.
 Report as a list: files created, decisions you made where the notes were thin, and
 anything the rules files didn't cover. Include the schema-coder's Verification and
 Follow-up sections, the fastapi-coder's Judgement calls and Contradictions sections,
-and the test-writer's Coverage, Test run, and Source problems sections. If a quirk of this domain conflicts with an
+and the be-test-writer's Coverage, Test run, and Source problems sections. If a quirk of this domain conflicts with an
 existing rule, say so and propose wording — don't quietly deviate.
 
 Stop before running migrations or committing.
