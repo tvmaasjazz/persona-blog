@@ -31,7 +31,7 @@ to touch so your code matches what is there.
 The rules files say where each of these lives and how it is shaped.
 
 - **Domain library code** — services, Input and Result models, domain settings,
-  constants, enums (`types.py`), prompts, exceptions
+  constants, enums (`types.py`), background tasks (`tasks.py`), prompts, exceptions
 - **HTTP layer** — DTOs, dependency factories with their `Annotated` aliases, thin
   routers
 - **Wiring a domain in** — add its settings field to `AppSettings` and register its

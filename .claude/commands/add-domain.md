@@ -40,6 +40,7 @@ for the files the domain needs from this list:
   - `settings.py` — only if the domain has tunable values
   - `constants.py` — only if the domain has values that must not be overridden
   - `types.py` — only if the domain has enums; all of them go here
+  - `tasks.py` — only if the domain has work that runs after a response
   - `prompts.py` — only if the domain calls an LLM
   - `exceptions.py` — only if the domain needs exceptions callers must tell apart
 - `apps/api/domains/$1/`

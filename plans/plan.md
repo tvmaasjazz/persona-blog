@@ -448,21 +448,22 @@ because it happens on every authenticated request.
 Build:
 
 - `libs/users/` — `services/` package now that there are two services:
-  - `UserService.find_or_create_user_from_auth_provider` also stamps `last_login_at` on
-    `pb_user` and `last_used_at` on `pb_user_auth_provider`, in both the found and
-    created branches. `FindOrCreateUserFromAuthProviderInput` gains `signed_in_at`, so
-    the caller supplies the time and tests pass a literal
   - `UserActivityService.record_activity(user_id, activity_at)` — a Redis
     `SET NX EX` on `user-activity:<user_id>` throttles it to once per
     `activity_interval_seconds`; when it's due, one `UPDATE` sets `last_activity_at`
+  - `UserActivityService.record_sign_in(user_id, user_auth_provider_id, signed_in_at)`
+    sets `last_login_at` and `last_used_at`. `UserService` stays identity resolution
+    only, returning `user_auth_provider_id` so the sign-in flow can stamp both rows in
+    the same transaction
   - `settings.py` — `UserSettings { activity_interval_seconds }`, on `AppSettings`
   - `constants.py` — the Redis key prefix
 - `apps/api/core/dependencies.py` — `get_auth_user` takes `BackgroundTasks` and
   schedules the activity update after resolving the session, so it never delays the
   response and never runs for a signed-out request
-- `apps/api/core/background_tasks.py` — the task opens its own session from
-  `app.state.db_session_factory` and owns its transaction. A request's session is
-  closed by the time a background task runs, so it can't be reused
+- `libs/users/tasks.py` — `record_user_activity` opens its own session from the factory
+  it's given and owns its transaction. A request's session is closed by the time a
+  background task runs, so it can't be reused. Settings, the Redis client and the time
+  are passed in, so `libs/` still never imports `AppSettings`
 - Tests: the throttle writing once per interval, sign-in stamps in both branches, and
   the background task called directly. A route test can't prove the task ran: it opens
   a second session on the shared test connection and the harness loses that write,
