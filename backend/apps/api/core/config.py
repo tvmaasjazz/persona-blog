@@ -9,6 +9,7 @@ from pydantic_settings import (
 from apps.api.core.types import EnvironmentType
 from libs.auth.settings import AuthSettings
 from libs.google_auth.settings import GoogleAuthSettings
+from libs.users.settings import UserSettings
 
 
 class AppSettings(BaseSettings):
@@ -26,6 +27,7 @@ class AppSettings(BaseSettings):
     google_client_secret: str
     auth: AuthSettings = Field(default_factory=AuthSettings)
     google_auth: GoogleAuthSettings = Field(default_factory=GoogleAuthSettings)
+    users: UserSettings = Field(default_factory=UserSettings)
 
     @classmethod
     def settings_customise_sources(

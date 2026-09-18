@@ -1,9 +1,10 @@
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import BackgroundTasks, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.api.core.background_tasks import record_user_activity
 from apps.api.core.config import AppSettings
 from libs.auth.constants import SESSION_COOKIE_NAME
 from libs.auth.results import AuthUser
@@ -27,7 +28,7 @@ async def get_db_transaction(request: Request) -> AsyncIterator[AsyncSession]:
         yield db_session
 
 
-async def get_auth_user(request: Request) -> AuthUser:
+async def get_auth_user(request: Request, background_tasks: BackgroundTasks) -> AuthUser:
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     if session_id is None:
         raise UnauthorizedException("Not signed in")
@@ -36,7 +37,11 @@ async def get_auth_user(request: Request) -> AuthUser:
     auth_session_service = AuthSessionService(
         redis_client=request.app.state.redis_client, auth_settings=app_settings.auth
     )
-    return await auth_session_service.find_session(session_id)
+    auth_user = await auth_session_service.find_session(session_id)
+
+    # After the response, so a signed-in request never waits on the activity write.
+    background_tasks.add_task(record_user_activity, request.app.state, auth_user.id)
+    return auth_user
 
 
 AppSettingsDep = Annotated[AppSettings, Depends(get_app_settings)]

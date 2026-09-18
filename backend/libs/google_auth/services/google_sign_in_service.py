@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from libs.auth.services import AuthSessionService
 from libs.auth.types import AuthProviderType
 from libs.google_auth.results import GoogleSignInResult
@@ -30,6 +32,7 @@ class GoogleSignInService:
             is_email_verified=google_identity_result.is_email_verified,
             display_name=google_identity_result.display_name,
             avatar_url=google_identity_result.avatar_url,
+            signed_in_at=datetime.now(UTC),
         )
         find_or_create_user_from_auth_provider_result = (
             await self._user_service.find_or_create_user_from_auth_provider(
