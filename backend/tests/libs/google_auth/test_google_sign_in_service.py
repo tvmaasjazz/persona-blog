@@ -7,9 +7,10 @@ from libs.auth.results import AuthUser
 from libs.auth.services import AuthSessionService
 from libs.auth.settings import AuthSettings
 from libs.core.exceptions import UnauthorizedException
-from libs.database.orm import UserOrm
+from libs.database.orm import UserAuthProviderOrm, UserOrm
 from libs.google_auth.services import GoogleSignInService
-from libs.users.services import UserService
+from libs.users.services import UserActivityService, UserService
+from libs.users.settings import UserSettings
 from tests.stubs.google_auth import GoogleOAuthServiceStub
 
 
@@ -25,12 +26,19 @@ async def test_sign_in_with_google_new_identity_creates_user_and_session(
     user_query = select(UserOrm).where(UserOrm.email == "ada@example.com")
     user_record = await db_session.scalar(user_query)
     assert user_record is not None
+    user_auth_provider_query = select(UserAuthProviderOrm).where(
+        UserAuthProviderOrm.user_id == user_record.id
+    )
+    user_auth_provider_record = await db_session.scalar(user_auth_provider_query)
+    assert user_auth_provider_record is not None
     stored_session = await redis_client.get(f"session:{google_sign_in_result.session_id}")
     assert stored_session is not None
     assert AuthUser.model_validate_json(stored_session) == AuthUser(
         id=user_record.id, identity=user_record.identity
     )
     assert google_sign_in_result.is_new_user is True
+    assert user_record.last_login_at is not None
+    assert user_auth_provider_record.last_used_at is not None
 
 
 async def test_sign_in_with_google_known_identity_reuses_user(
@@ -76,8 +84,12 @@ def _build_google_sign_in_service(
     auth_session_service = AuthSessionService(
         redis_client=redis_client, auth_settings=AuthSettings()
     )
+    user_activity_service = UserActivityService(
+        db_session=db_session, redis_client=redis_client, user_settings=UserSettings()
+    )
     return GoogleSignInService(
         google_oauth_service=google_oauth_service_stub or GoogleOAuthServiceStub(),
         user_service=UserService(db_session=db_session),
+        user_activity_service=user_activity_service,
         auth_session_service=auth_session_service,
     )

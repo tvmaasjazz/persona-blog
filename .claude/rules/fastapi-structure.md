@@ -52,6 +52,7 @@ backend/
 │       ├── prompts.py         # ...Prompt classes, if the domain uses an LLM
 │       ├── exceptions.py      # UserEmailTakenException, if the domain needs its own
 │       ├── types.py           # every StrEnum the domain owns
+│       ├── tasks.py           # background task functions, if the domain has any
 │       └── constants.py
 ├── migrations/                # raw SQL; see database.md
 ├── scripts/                   # developer and CI scripts: check_schema_drift.py
@@ -94,6 +95,18 @@ snake_case, with `__init__.py` re-exporting every class so callers import from
 Split a lib by what it is about, not by how big it gets: provider-specific code lives
 in its own lib (`libs/google_auth/`) next to the generic one (`libs/auth/`), and each
 gets its own domain under `apps/api/domains/` so every domain keeps one `router.py`.
+
+### Background tasks
+
+Work that runs after the response is sent is a function in `libs/<domain>/tasks.py`,
+scheduled with FastAPI's `BackgroundTasks` from the dependency or route that knows it's
+needed. A task takes a session factory and opens its own session and transaction: a
+request's session is closed by the time the task runs. That is the one place a lib
+creates a session, and the reason a task is a function rather than a service.
+
+Everything else a task needs — the Redis client, the domain's settings, the values it
+acts on — is passed in, so `libs/` still never imports `AppSettings`. The caller also
+passes the time, so the task doesn't read the clock.
 
 ## Filenames inside a domain package
 

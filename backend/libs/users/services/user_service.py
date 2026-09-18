@@ -59,7 +59,10 @@ class UserService:
         if not user_record.is_active:
             raise ForbiddenException("User account is inactive")
         return FindOrCreateUserFromAuthProviderResult(
-            id=user_record.id, identity=user_record.identity, is_new_user=False
+            id=user_record.id,
+            identity=user_record.identity,
+            user_auth_provider_id=user_auth_provider_record.id,
+            is_new_user=False,
         )
 
     async def _create_user_from_auth_provider(
@@ -96,5 +99,8 @@ class UserService:
         await self._db_session.flush()
 
         return FindOrCreateUserFromAuthProviderResult(
-            id=user_record.id, identity=user_record.identity, is_new_user=True
+            id=user_record.id,
+            identity=user_record.identity,
+            user_auth_provider_id=user_auth_provider_record.id,
+            is_new_user=True,
         )

@@ -7,7 +7,7 @@ from apps.api.core.dependencies import DbTransactionDep
 from apps.api.domains.auth.dependencies import AuthSessionServiceDep
 from libs.auth.services import OAuthStateService
 from libs.google_auth.services import GoogleOAuthService, GoogleSignInService
-from libs.users.services import UserService
+from libs.users.services import UserActivityService, UserService
 
 
 def get_oauth_state_service(request: Request) -> OAuthStateService:
@@ -38,13 +38,21 @@ GoogleOAuthServiceDep = Annotated[GoogleOAuthService, Depends(get_google_oauth_s
 
 
 def get_google_sign_in_service(
+    request: Request,
     google_oauth_service: GoogleOAuthServiceDep,
     auth_session_service: AuthSessionServiceDep,
     db_session: DbTransactionDep,
 ) -> GoogleSignInService:
+    app_settings: AppSettings = request.app.state.settings
+    user_activity_service = UserActivityService(
+        db_session=db_session,
+        redis_client=request.app.state.redis_client,
+        user_settings=app_settings.users,
+    )
     return GoogleSignInService(
         google_oauth_service=google_oauth_service,
         user_service=UserService(db_session=db_session),
+        user_activity_service=user_activity_service,
         auth_session_service=auth_session_service,
     )
 

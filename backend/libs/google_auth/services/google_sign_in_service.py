@@ -1,9 +1,11 @@
+from datetime import UTC, datetime
+
 from libs.auth.services import AuthSessionService
 from libs.auth.types import AuthProviderType
 from libs.google_auth.results import GoogleSignInResult
 from libs.google_auth.services.google_oauth_service import GoogleOAuthService
 from libs.users.inputs import FindOrCreateUserFromAuthProviderInput
-from libs.users.services import UserService
+from libs.users.services import UserActivityService, UserService
 
 
 class GoogleSignInService:
@@ -13,10 +15,12 @@ class GoogleSignInService:
         self,
         google_oauth_service: GoogleOAuthService,
         user_service: UserService,
+        user_activity_service: UserActivityService,
         auth_session_service: AuthSessionService,
     ) -> None:
         self._google_oauth_service = google_oauth_service
         self._user_service = user_service
+        self._user_activity_service = user_activity_service
         self._auth_session_service = auth_session_service
 
     async def sign_in_with_google(self, code: str, oauth_state: str) -> GoogleSignInResult:
@@ -35,6 +39,13 @@ class GoogleSignInService:
             await self._user_service.find_or_create_user_from_auth_provider(
                 find_or_create_user_from_auth_provider_input
             )
+        )
+        await self._user_activity_service.record_sign_in(
+            user_id=find_or_create_user_from_auth_provider_result.id,
+            user_auth_provider_id=(
+                find_or_create_user_from_auth_provider_result.user_auth_provider_id
+            ),
+            signed_in_at=datetime.now(UTC),
         )
         session_id = await self._auth_session_service.create_session(
             user_id=find_or_create_user_from_auth_provider_result.id,

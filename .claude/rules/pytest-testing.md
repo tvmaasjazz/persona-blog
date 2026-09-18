@@ -100,6 +100,7 @@ backend/tests/
 | `apps/api/core/exception_handlers.py` | `tests/api/core/test_exception_handlers.py` | Each standard exception maps to its status; a lib exception gets its parent's; unhandled errors return 500 without internals (§7) |
 | `libs/core/exceptions.py`, `libs/<d>/exceptions.py` | None                   | The app factory tests and the service tests that raise them cover these |
 | `apps/api/lifespan.py`               | `tests/api/test_lifespan.py`           | Resources created at startup and closed at shutdown (§7) |
+| `libs/<d>/tasks.py`                  | `tests/libs/<d>/test_tasks.py`         | Call the task directly with the `db_session_factory` and `redis_client` fixtures, and assert the persisted effect. Don't assert a background task ran from a route test: the task opens a second session on the shared test connection, and the harness loses that write |
 | Middleware                           | `tests/api/test_<module>.py`           | Observable effect on a real route (§9) |
 | `libs/database/orm/*.py`             | None                                   | Service database tests cover them; CI's drift check catches mismatches with migrations |
 | `migrations/`                        | `tests/migrations/test_revisions.py`   | One file covers every revision (§10) |

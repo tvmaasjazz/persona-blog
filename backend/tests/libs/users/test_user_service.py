@@ -46,8 +46,12 @@ async def test_find_or_create_user_from_auth_provider_creates_user_and_provider_
     )
     user_auth_provider_record = await db_session.scalar(user_auth_provider_query)
     assert user_record is not None
+    assert user_auth_provider_record is not None
     assert find_or_create_user_from_auth_provider_result == FindOrCreateUserFromAuthProviderResult(
-        id=user_record.id, identity=user_record.identity, is_new_user=True
+        id=user_record.id,
+        identity=user_record.identity,
+        user_auth_provider_id=user_auth_provider_record.id,
+        is_new_user=True,
     )
     assert user_record.email == "ada@example.com"
     assert user_record.is_email_verified is True
@@ -55,7 +59,6 @@ async def test_find_or_create_user_from_auth_provider_creates_user_and_provider_
     assert user_record.avatar_url == "https://example.com/ada.png"
     assert user_record.created_by_id is None
     assert user_record.updated_by_id is None
-    assert user_auth_provider_record is not None
     assert user_auth_provider_record.user_id == user_record.id
     assert user_auth_provider_record.provider == AuthProviderType.GOOGLE
     assert user_auth_provider_record.provider_subject == "google-subject-1"
@@ -68,7 +71,7 @@ async def test_find_or_create_user_from_auth_provider_existing_provider_returns_
     db_session: AsyncSession,
 ) -> None:
     user_record = await insert_user_row(db_session, email="ada@example.com")
-    await insert_user_auth_provider_row(
+    user_auth_provider_record = await insert_user_auth_provider_row(
         db_session,
         user_id=user_record.id,
         provider_subject="google-subject-2",
@@ -90,7 +93,10 @@ async def test_find_or_create_user_from_auth_provider_existing_provider_returns_
     )
     user_auth_provider_count = await db_session.scalar(user_auth_provider_count_query)
     assert find_or_create_user_from_auth_provider_result == FindOrCreateUserFromAuthProviderResult(
-        id=user_record.id, identity=user_record.identity, is_new_user=False
+        id=user_record.id,
+        identity=user_record.identity,
+        user_auth_provider_id=user_auth_provider_record.id,
+        is_new_user=False,
     )
     assert user_auth_provider_count == 1
 
