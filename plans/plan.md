@@ -436,29 +436,40 @@ than `frontend_url`.
 
 ---
 
-## Step 10 — Sign-in activity middleware
+## Step 10 — Sign-in and activity timestamps
 
-Runs after auth has resolved the signed-in user and before the route.
+No middleware. Auth resolves in `AuthUserDep`, so a middleware would run before it and
+see nothing; the work happens where the signed-in user is already known. Sign-in
+timestamps are part of the sign-in transaction, not background work: they are two
+column updates in a request that already writes rows, and being atomic with the user
+row beats being off the critical path. Only `last_activity_at` runs in the background,
+because it happens on every authenticated request.
 
 Build:
 
-- Sets `last_activity_at` on `pb_user` for the signed-in user, at most once per
-  interval (a setting)
-- Sets `last_login_at` on `pb_user` and `last_used_at` on `pb_user_auth_provider` when
-  a session signs in
+- `libs/users/` — `services/` package now that there are two services:
+  - `UserService.find_or_create_user_from_auth_provider` also stamps `last_login_at` on
+    `pb_user` and `last_used_at` on `pb_user_auth_provider`, in both the found and
+    created branches. `FindOrCreateUserFromAuthProviderInput` gains `signed_in_at`, so
+    the caller supplies the time and tests pass a literal
+  - `UserActivityService.record_activity(user_id, activity_at)` — a Redis
+    `SET NX EX` on `user-activity:<user_id>` throttles it to once per
+    `activity_interval_seconds`; when it's due, one `UPDATE` sets `last_activity_at`
+  - `settings.py` — `UserSettings { activity_interval_seconds }`, on `AppSettings`
+  - `constants.py` — the Redis key prefix
+- `apps/api/core/dependencies.py` — `get_auth_user` takes `BackgroundTasks` and
+  schedules the activity update after resolving the session, so it never delays the
+  response and never runs for a signed-out request
+- `apps/api/core/background_tasks.py` — the task opens its own session from
+  `app.state.db_session_factory` and owns its transaction. A request's session is
+  closed by the time a background task runs, so it can't be reused
+- Tests: the throttle writing once per interval, sign-in stamps in both branches, and
+  the background task called directly. A route test can't prove the task ran: it opens
+  a second session on the shared test connection and the harness loses that write,
+  which is a harness limit, not a production one — verified against a pooled engine
 
-**Open when detailing:**
-
-- FastAPI middleware runs before route dependencies, so it can't see an `AuthUser`
-  that `AuthUserDep` resolves. Either session resolution moves into a middleware that
-  sets `request.state`, or this becomes a router-level dependency that runs after
-  `AuthUserDep`.
-- A per-request hook can't tell a sign-in from any other request. The session needs to
-  record that it's new, and which provider it came from, for `last_login_at` and
-  `last_used_at`.
-
-**Verify:** make two requests inside the interval and confirm one write; sign in again
-and confirm `last_login_at` moves.
+**Verify:** sign in, call `/users/me` twice inside the interval, and confirm one
+activity write and that `last_login_at` and `last_used_at` moved.
 
 ---
 
