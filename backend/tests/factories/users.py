@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ async def insert_user_row(
     email: str | None = None,
     display_name: str | None = "Ada Lovelace",
     last_login_at: datetime | None = None,
+    last_activity_at: datetime | None = None,
     deleted_at: datetime | None = None,
     is_active: bool = True,
 ) -> UserOrm:
@@ -21,6 +22,7 @@ async def insert_user_row(
         email=email or _build_unique_email(),
         display_name=display_name,
         last_login_at=last_login_at,
+        last_activity_at=last_activity_at,
         deleted_at=deleted_at,
         is_active=is_active,
     )
@@ -36,6 +38,7 @@ async def insert_user_auth_provider_row(
     provider: AuthProviderType = AuthProviderType.GOOGLE,
     provider_subject: str | None = None,
     email_at_provider: str | None = None,
+    last_used_at: datetime | None = None,
     deleted_at: datetime | None = None,
 ) -> UserAuthProviderOrm:
     user_auth_provider_record = UserAuthProviderOrm(
@@ -43,6 +46,7 @@ async def insert_user_auth_provider_row(
         provider=provider,
         provider_subject=provider_subject or _build_unique_provider_subject(),
         email_at_provider=email_at_provider,
+        last_used_at=last_used_at,
         deleted_at=deleted_at,
         created_by_id=user_id,
         updated_by_id=user_id,
@@ -59,6 +63,7 @@ def build_find_or_create_user_from_auth_provider_input(
     is_email_verified: bool = True,
     display_name: str | None = "Ada Lovelace",
     avatar_url: str | None = None,
+    signed_in_at: datetime = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
 ) -> FindOrCreateUserFromAuthProviderInput:
     return FindOrCreateUserFromAuthProviderInput(
         provider=AuthProviderType.GOOGLE,
@@ -67,6 +72,7 @@ def build_find_or_create_user_from_auth_provider_input(
         is_email_verified=is_email_verified,
         display_name=display_name,
         avatar_url=avatar_url,
+        signed_in_at=signed_in_at,
     )
 
 
