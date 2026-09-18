@@ -88,8 +88,8 @@ export const apiClient = createClient<paths>({ baseUrl: '/api' })
 
 Request and response types always come from `api-schema.gen.ts`, never from a
 hand-written interface that mirrors a backend DTO. When the backend changes, run
-`npm run api:types` with the dev server up and commit the regenerated file. A type
-error it causes is the change working as intended.
+`npm run api:types` with the backend API running on port 8000 and commit the
+regenerated file. A type error it causes is the change working as intended.
 
 In dev, Vite proxies `/api/*` to the API on `localhost:8000` and strips the `/api`
 prefix, so the browser sees one origin and the session cookie needs no CORS. The

@@ -60,9 +60,19 @@ written. They are expected to grow.
   matching edits to their descriptions and scope lists.
 - Propose the edit; don't apply it unless asked.
 - Before proposing a commit that changes `.claude/rules/`, `.claude/agents/`, or
-  `.claude/commands/`, run the `docs-auditor` agent on the changed files. Fix what it
-  finds in those files, and report the rest. Plan edits and small wording changes
-  skip it.
+  `.claude/commands/`, run the auditor for each side the change touches on the
+  changed files: `be-docs-auditor` for the backend, `fe-docs-auditor` for the
+  frontend. Fix what it finds in those files, and report the rest. Plan edits and
+  small wording changes skip it.
+
+## Agents
+
+An agent in `.claude/agents/` is named for the side of the stack it works on:
+
+- `react-` for frontend agents that write or review React code: `react-coder`
+- `fe-` for other frontend work, such as styling or the frontend docs: `fe-docs-auditor`
+- `be-` for backend agents: `be-test-writer`, `be-docs-auditor`. Agents named for a
+  backend tool, `fastapi-coder` and `schema-coder`, keep the tool name instead
 
 ## Git
 
