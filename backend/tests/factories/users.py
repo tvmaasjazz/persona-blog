@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,7 +63,6 @@ def build_find_or_create_user_from_auth_provider_input(
     is_email_verified: bool = True,
     display_name: str | None = "Ada Lovelace",
     avatar_url: str | None = None,
-    signed_in_at: datetime = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
 ) -> FindOrCreateUserFromAuthProviderInput:
     return FindOrCreateUserFromAuthProviderInput(
         provider=AuthProviderType.GOOGLE,
@@ -72,7 +71,6 @@ def build_find_or_create_user_from_auth_provider_input(
         is_email_verified=is_email_verified,
         display_name=display_name,
         avatar_url=avatar_url,
-        signed_in_at=signed_in_at,
     )
 
 
