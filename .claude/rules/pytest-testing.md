@@ -14,10 +14,12 @@ with one `pyproject.toml`. Separate apps and libs are kept apart by folders and
 `conftest.py` scope, not separate suites. If an app or lib ever becomes its own
 package with its own `pyproject.toml`, its tests move into that package.
 
-Examples leave out imports. Names that `plan.md` settles (`GenerateTextService`,
-`GenerateTextResult`, `LlmService`, `LlmCompletionResult`, `UserService`,
-`UserOrm`) are real. Others, like `LlmCompletionInput`, `LlmUnavailableException` and
-`AuthSessionService`, are placeholders until their step lands.
+Examples leave out imports, and the domains in them are invented, so a pattern here
+never goes stale when the app changes: a `weather` lib whose `WeatherService` calls a
+third-party forecast API, and a `forecast_digest` lib whose `ForecastDigestService`
+composes it. They stand in for whatever the real domains are. Only infrastructure
+names are real — the fixtures, the folder layout, `AuthUserDep`, `BaseOrm`, and the
+markers in `pyproject.toml`.
 
 ## Stack
 
@@ -42,9 +44,9 @@ backend/tests/
 │   └── users.py             # build_* and insert_*_row for one lib domain
 ├── stubs/
 │   ├── http.py              # HttpHandlerStub
-│   └── llm.py               # LlmServiceStub
+│   └── weather.py           # WeatherServiceStub
 ├── payloads/
-│   └── openai.py            # third-party response bodies, as builder functions
+│   └── weather_api.py       # third-party response bodies, as builder functions
 ├── libs/
 │   └── users/
 │       ├── conftest.py      # only if the domain's lib tests share fixtures
@@ -79,9 +81,9 @@ backend/tests/
 - No `__init__.py` anywhere under `tests/`.
 - A test module never imports from another test module or from a `conftest.py`.
   Shared code lives in `factories/`, `stubs/`, or `payloads/`, imported as
-  `from tests.stubs.llm import LlmServiceStub`.
+  `from tests.stubs.weather import WeatherServiceStub`.
 - `factories/` and `stubs/` have one module per lib domain, named after the lib
-  package. `tests/stubs/llm.py` stubs `libs/llm/`. `payloads/` has one module per
+  package. `tests/stubs/weather.py` stubs `libs/weather/`. `payloads/` has one module per
   third-party provider.
 
 ## What to write for each source file
@@ -115,14 +117,14 @@ backend/tests/
   name.
   - `test_create_user_returns_created_user`
   - `test_create_user_email_taken_raises_user_email_taken_exception`
-  - `test_generate_text_unknown_text_type_returns_422`
+  - `test_build_digest_unknown_region_type_returns_422`
 - No test classes. Group tests by file and by the `<unit>` prefix.
 - A fixture is a noun, named exactly like the production object it stands for:
   `db_session`, `redis_client`, `app_settings`, `fastapi_app`, `api_client`. Never a
   `test_`, `get_`, or `mock_` prefix.
 - `python-naming.md` applies in full, so write `create_user_response`, not
   `response`, and `user_query_result`, not `result`.
-- A stub class is named `<Class>Stub`, e.g. `LlmServiceStub`.
+- A stub class is named `<Class>Stub`, e.g. `WeatherServiceStub`.
 - A named expected value is `expected_<thing>`.
 
 ### Shape of a test
@@ -239,18 +241,18 @@ How to write a stub:
   - `<method>_error`: an exception to raise instead
 
 ```python
-# tests/stubs/llm.py
-class LlmServiceStub(LlmService):
+# tests/stubs/weather.py
+class WeatherServiceStub(WeatherService):
     def __init__(self) -> None:
-        self.complete_inputs: list[LlmCompletionInput] = []
-        self.complete_result = build_llm_completion_result()
-        self.complete_error: Exception | None = None
+        self.fetch_forecast_inputs: list[FetchForecastInput] = []
+        self.fetch_forecast_result = build_fetch_forecast_result()
+        self.fetch_forecast_error: Exception | None = None
 
-    async def complete(self, llm_completion_input: LlmCompletionInput) -> LlmCompletionResult:
-        self.complete_inputs.append(llm_completion_input)
-        if self.complete_error is not None:
-            raise self.complete_error
-        return self.complete_result
+    async def fetch_forecast(self, fetch_forecast_input: FetchForecastInput) -> FetchForecastResult:
+        self.fetch_forecast_inputs.append(fetch_forecast_input)
+        if self.fetch_forecast_error is not None:
+            raise self.fetch_forecast_error
+        return self.fetch_forecast_result
 ```
 
 ### Test data
@@ -492,14 +494,14 @@ dispatch maps, and DTO mappers that contain logic.
 | DTO mapper with logic              | Build the DTO, call the mapper, compare the whole returned model |
 
 ```python
-# tests/libs/generate_text/test_prompts.py
-def test_build_user_prompt_includes_prompt_text() -> None:
-    user_prompt = GenerateTextPrompt.build_user_prompt(
-        prompt_text="a post about sourdough starters",
-        text_type=TextType.BLOG_POST,
+# tests/libs/forecast_digest/test_prompts.py
+def test_build_user_prompt_includes_station_name() -> None:
+    user_prompt = ForecastDigestPrompt.build_user_prompt(
+        station_name="pier-17",
+        region_type=RegionType.COASTAL,
     )
 
-    assert "a post about sourdough starters" in user_prompt
+    assert "pier-17" in user_prompt
 ```
 
 ```python
@@ -538,29 +540,29 @@ HTTP. If construction takes a client stack, move it into a fixture in the domain
 | Needs the database                | Same file, see §3 |
 
 ```python
-# tests/libs/generate_text/test_services.py
-async def test_generate_text_returns_content_and_character_count() -> None:
-    llm_service_stub = LlmServiceStub()
-    llm_service_stub.complete_result = build_llm_completion_result(content="Sourdough is alive.")
-    generate_text_service = GenerateTextService(llm_service=llm_service_stub)
-    generate_text_input = build_generate_text_input()
+# tests/libs/forecast_digest/test_services.py
+async def test_build_digest_returns_content_and_character_count() -> None:
+    weather_service_stub = WeatherServiceStub()
+    weather_service_stub.fetch_forecast_result = build_fetch_forecast_result(summary="Rain all day")
+    forecast_digest_service = ForecastDigestService(weather_service=weather_service_stub)
+    build_digest_input = build_build_digest_input()
 
-    generate_text_result = await generate_text_service.generate_text(generate_text_input)
+    build_digest_result = await forecast_digest_service.build_digest(build_digest_input)
 
-    assert generate_text_result == GenerateTextResult(
-        content="Sourdough is alive.",
-        character_count=19,
+    assert build_digest_result == BuildDigestResult(
+        content="Rain all day",
+        character_count=12,
     )
 
 
-async def test_generate_text_llm_unavailable_raises_llm_unavailable_exception() -> None:
-    llm_service_stub = LlmServiceStub()
-    llm_service_stub.complete_error = LlmUnavailableException()
-    generate_text_service = GenerateTextService(llm_service=llm_service_stub)
-    generate_text_input = build_generate_text_input()
+async def test_build_digest_weather_unavailable_raises_weather_unavailable_exception() -> None:
+    weather_service_stub = WeatherServiceStub()
+    weather_service_stub.fetch_forecast_error = WeatherUnavailableException()
+    forecast_digest_service = ForecastDigestService(weather_service=weather_service_stub)
+    build_digest_input = build_build_digest_input()
 
-    with pytest.raises(LlmUnavailableException):
-        await generate_text_service.generate_text(generate_text_input)
+    with pytest.raises(WeatherUnavailableException):
+        await forecast_digest_service.build_digest(build_digest_input)
 ```
 
 ## §3 Database tests
@@ -659,59 +661,60 @@ class HttpHandlerStub:
 ```
 
 ```python
-# tests/libs/llm/conftest.py
+# tests/libs/weather/conftest.py
 @pytest.fixture
-def openai_handler_stub() -> HttpHandlerStub:
+def weather_api_handler_stub() -> HttpHandlerStub:
     return HttpHandlerStub()
 
 
 @pytest.fixture
-async def llm_service(openai_handler_stub: HttpHandlerStub) -> AsyncIterator[LlmService]:
-    openai_transport = httpx.MockTransport(openai_handler_stub.handle)
-    async with httpx.AsyncClient(transport=openai_transport) as openai_http_client:
-        llm_client = AsyncOpenAI(
-            api_key="test-openai-api-key",
-            http_client=openai_http_client,
-            max_retries=0,
+async def weather_service(
+    weather_api_handler_stub: HttpHandlerStub,
+) -> AsyncIterator[WeatherService]:
+    weather_api_transport = httpx.MockTransport(weather_api_handler_stub.handle)
+    async with httpx.AsyncClient(transport=weather_api_transport) as weather_http_client:
+        weather_settings = WeatherSettings(station_name="test-station")
+        yield WeatherService(
+            http_client=weather_http_client, weather_settings=weather_settings
         )
-        llm_settings = LlmSettings(model_name="test-model")
-        yield LlmService(llm_client=llm_client, llm_settings=llm_settings)
 ```
 
 ```python
-# tests/libs/llm/test_services.py
-async def test_complete_sends_model_from_settings_and_returns_token_counts(
-    llm_service: LlmService, openai_handler_stub: HttpHandlerStub
+# tests/libs/weather/test_services.py
+async def test_fetch_forecast_sends_station_from_settings_and_returns_summary(
+    weather_service: WeatherService, weather_api_handler_stub: HttpHandlerStub
 ) -> None:
-    openai_payload = build_openai_chat_completion_payload(
-        content="Sourdough is alive.", prompt_tokens=12, completion_tokens=5
+    weather_api_payload = build_weather_api_forecast_payload(
+        summary="Rain all day", high_celsius=14
     )
-    openai_handler_stub.handle_responses.append(httpx.Response(200, json=openai_payload))
-    llm_completion_input = build_llm_completion_input()
+    weather_api_handler_stub.handle_responses.append(
+        httpx.Response(200, json=weather_api_payload)
+    )
+    fetch_forecast_input = build_fetch_forecast_input()
 
-    llm_completion_result = await llm_service.complete(llm_completion_input)
+    fetch_forecast_result = await weather_service.fetch_forecast(fetch_forecast_input)
 
-    sent_request_body = json.loads(openai_handler_stub.handle_requests[0].content)
-    assert sent_request_body["model"] == "test-model"
-    assert llm_completion_result == LlmCompletionResult(
-        content="Sourdough is alive.", input_tokens=12, output_tokens=5
+    sent_request_url = weather_api_handler_stub.handle_requests[0].url
+    assert sent_request_url.params["station"] == "test-station"
+    assert fetch_forecast_result == FetchForecastResult(
+        summary="Rain all day", high_celsius=14
     )
 
 
 @pytest.mark.parametrize("status_code", [401, 429, 500])
-async def test_complete_error_status_raises_llm_unavailable_exception(
-    llm_service: LlmService, openai_handler_stub: HttpHandlerStub, status_code: int
+async def test_fetch_forecast_error_status_raises_weather_unavailable_exception(
+    weather_service: WeatherService, weather_api_handler_stub: HttpHandlerStub, status_code: int
 ) -> None:
-    openai_error_payload = build_openai_error_payload()
-    openai_handler_stub.handle_responses.append(
-        httpx.Response(status_code, json=openai_error_payload)
+    weather_api_error_payload = build_weather_api_error_payload()
+    weather_api_handler_stub.handle_responses.append(
+        httpx.Response(status_code, json=weather_api_error_payload)
     )
-    llm_completion_input = build_llm_completion_input()
+    fetch_forecast_input = build_fetch_forecast_input()
 
-    with pytest.raises(LlmUnavailableException):
-        await llm_service.complete(llm_completion_input)
+    with pytest.raises(WeatherUnavailableException):
+        await weather_service.fetch_forecast(fetch_forecast_input)
 
-    assert len(openai_handler_stub.handle_requests) == 1
+    assert len(weather_api_handler_stub.handle_requests) == 1
 ```
 
 ## §5 Redis
@@ -751,7 +754,7 @@ These use `api_client` against the real app, with real dependency factories and 
 real session factory.
 
 **Override only the lowest dependency that reaches a third party** (such as
-`get_llm_service` or the Google token verifier's factory), never the service the
+`get_weather_service` or the Google token verifier's factory), never the service the
 route calls. That way the domain's `dependencies.py` still runs for real. If no such
 dependency exists because the domain factory builds a third-party client inline,
 report it and propose splitting it out.
@@ -759,12 +762,12 @@ report it and propose splitting it out.
 Put the override in the domain's `conftest.py` as an `autouse` fixture:
 
 ```python
-# tests/api/generate_text/conftest.py
+# tests/api/forecast_digest/conftest.py
 @pytest.fixture(autouse=True)
-def llm_service_stub(fastapi_app: FastAPI) -> LlmServiceStub:
-    llm_service_stub = LlmServiceStub()
-    fastapi_app.dependency_overrides[get_llm_service] = lambda: llm_service_stub
-    return llm_service_stub
+def weather_service_stub(fastapi_app: FastAPI) -> WeatherServiceStub:
+    weather_service_stub = WeatherServiceStub()
+    fastapi_app.dependency_overrides[get_weather_service] = lambda: weather_service_stub
+    return weather_service_stub
 ```
 
 **Signed-in requests go through the real guard.** Never override `get_current_user`.
@@ -810,22 +813,24 @@ async def signed_in_user(
 | Unhandled exception → 500     | Covered once in `tests/api/core/test_exception_handlers.py`, not per route |
 
 ```python
-# tests/api/generate_text/test_router.py
+# tests/api/forecast_digest/test_router.py
 @pytest.mark.usefixtures("signed_in_user")
-async def test_generate_text_returns_generated_text_response(
-    api_client: AsyncClient, llm_service_stub: LlmServiceStub
+async def test_build_digest_returns_forecast_digest_response(
+    api_client: AsyncClient, weather_service_stub: WeatherServiceStub
 ) -> None:
-    llm_service_stub.complete_result = build_llm_completion_result(content="Sourdough is alive.")
-
-    generate_text_response = await api_client.post(
-        "/generate-text",
-        json={"text_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
+    weather_service_stub.fetch_forecast_result = build_fetch_forecast_result(
+        summary="Rain all day"
     )
 
-    assert generate_text_response.status_code == 200
-    assert generate_text_response.json() == {
-        "content": "Sourdough is alive.",
-        "character_count": 19,
+    build_digest_response = await api_client.post(
+        "/forecast-digest",
+        json={"region_type": "COASTAL", "station_name": "pier-17"},
+    )
+
+    assert build_digest_response.status_code == 200
+    assert build_digest_response.json() == {
+        "content": "Rain all day",
+        "character_count": 12,
     }
 
 
@@ -834,50 +839,50 @@ async def test_generate_text_returns_generated_text_response(
     ("request_body", "expected_error_location"),
     [
         pytest.param(
-            {"prompt_text": "sourdough"},
-            ["body", "text_type"],
-            id="missing_text_type",
+            {"station_name": "pier-17"},
+            ["body", "region_type"],
+            id="missing_region_type",
         ),
         pytest.param(
-            {"text_type": "HAIKU", "prompt_text": "sourdough"},
-            ["body", "text_type"],
-            id="unknown_text_type",
+            {"region_type": "LUNAR", "station_name": "pier-17"},
+            ["body", "region_type"],
+            id="unknown_region_type",
         ),
     ],
 )
-async def test_generate_text_invalid_body_returns_422(
+async def test_build_digest_invalid_body_returns_422(
     api_client: AsyncClient,
     request_body: dict[str, str],
     expected_error_location: list[str],
 ) -> None:
-    generate_text_response = await api_client.post("/generate-text", json=request_body)
+    build_digest_response = await api_client.post("/forecast-digest", json=request_body)
 
-    response_body = generate_text_response.json()
-    assert generate_text_response.status_code == 422
+    response_body = build_digest_response.json()
+    assert build_digest_response.status_code == 422
     assert response_body["detail"][0]["loc"] == expected_error_location
 
 
 @pytest.mark.usefixtures("signed_in_user")
-async def test_generate_text_llm_unavailable_returns_503(
-    api_client: AsyncClient, llm_service_stub: LlmServiceStub
+async def test_build_digest_weather_unavailable_returns_503(
+    api_client: AsyncClient, weather_service_stub: WeatherServiceStub
 ) -> None:
-    llm_service_stub.complete_error = LlmUnavailableException()
+    weather_service_stub.fetch_forecast_error = WeatherUnavailableException()
 
-    generate_text_response = await api_client.post(
-        "/generate-text",
-        json={"text_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
+    build_digest_response = await api_client.post(
+        "/forecast-digest",
+        json={"region_type": "COASTAL", "station_name": "pier-17"},
     )
 
-    assert generate_text_response.status_code == 503
+    assert build_digest_response.status_code == 503
 
 
-async def test_generate_text_signed_out_returns_401(api_client: AsyncClient) -> None:
-    generate_text_response = await api_client.post(
-        "/generate-text",
-        json={"text_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
+async def test_build_digest_signed_out_returns_401(api_client: AsyncClient) -> None:
+    build_digest_response = await api_client.post(
+        "/forecast-digest",
+        json={"region_type": "COASTAL", "station_name": "pier-17"},
     )
 
-    assert generate_text_response.status_code == 401
+    assert build_digest_response.status_code == 401
 ```
 
 ```python
@@ -1048,7 +1053,7 @@ def test_app_settings_env_var_overrides_toml(
 
 | Situation                         | Pattern |
 | --------------------------------- | ------- |
-| A log event is a requirement (token counts per LLM call) | Wrap the act in `structlog.testing.capture_logs()`; find the event by name and assert its keys |
+| A log event is a requirement (token counts per LLM call, see §12) | Wrap the act in `structlog.testing.capture_logs()`; find the event by name and assert its keys |
 | Request-id middleware             | A route test on any route: the response carries the header, and a header sent in is echoed back |
 | Not tested                        | Log formatting, renderer output, Logfire export |
 
@@ -1056,24 +1061,26 @@ def test_app_settings_env_var_overrides_toml(
 `cache_logger_on_first_use` when `ENVIRONMENT` is `TEST`.
 
 ```python
-async def test_complete_logs_token_counts(
-    llm_service: LlmService, openai_handler_stub: HttpHandlerStub
+async def test_fetch_forecast_logs_station_and_high(
+    weather_service: WeatherService, weather_api_handler_stub: HttpHandlerStub
 ) -> None:
-    openai_payload = build_openai_chat_completion_payload(prompt_tokens=12, completion_tokens=5)
-    openai_handler_stub.handle_responses.append(httpx.Response(200, json=openai_payload))
-    llm_completion_input = build_llm_completion_input()
+    weather_api_payload = build_weather_api_forecast_payload(high_celsius=14)
+    weather_api_handler_stub.handle_responses.append(
+        httpx.Response(200, json=weather_api_payload)
+    )
+    fetch_forecast_input = build_fetch_forecast_input()
 
     with structlog.testing.capture_logs() as captured_log_events:
-        await llm_service.complete(llm_completion_input)
+        await weather_service.fetch_forecast(fetch_forecast_input)
 
-    completion_log_events = [
+    forecast_log_events = [
         log_event
         for log_event in captured_log_events
-        if log_event["event"] == "llm_completion_finished"
+        if log_event["event"] == "forecast_fetched"
     ]
-    assert len(completion_log_events) == 1
-    assert completion_log_events[0]["input_tokens"] == 12
-    assert completion_log_events[0]["output_tokens"] == 5
+    assert len(forecast_log_events) == 1
+    assert forecast_log_events[0]["station_name"] == "test-station"
+    assert forecast_log_events[0]["high_celsius"] == 14
 ```
 
 ## §10 Migrations
@@ -1161,17 +1168,17 @@ first graph lands.
 | Resume after review         | From the interrupt, `ainvoke(Command(resume=...))` and assert where the graph went: publish on approval, back to rewrite on rejection |
 
 ```python
-async def test_post_review_graph_publishes_after_approval() -> None:
-    llm_service_stub = LlmServiceStub()
-    post_review_graph = build_post_review_graph(
-        llm_service=llm_service_stub, checkpointer=InMemorySaver()
+async def test_forecast_digest_graph_publishes_after_approval() -> None:
+    weather_service_stub = WeatherServiceStub()
+    forecast_digest_graph = build_forecast_digest_graph(
+        weather_service=weather_service_stub, checkpointer=InMemorySaver()
     )
     graph_run_config = {"configurable": {"thread_id": "test-thread"}}
-    await post_review_graph.ainvoke({"draft_text": "Sourdough is alive."}, graph_run_config)
+    await forecast_digest_graph.ainvoke({"draft_text": "Rain all day"}, graph_run_config)
 
-    await post_review_graph.ainvoke(Command(resume={"approved": True}), graph_run_config)
+    await forecast_digest_graph.ainvoke(Command(resume={"approved": True}), graph_run_config)
 
-    graph_state_snapshot = await post_review_graph.aget_state(graph_run_config)
+    graph_state_snapshot = await forecast_digest_graph.aget_state(graph_run_config)
     assert graph_state_snapshot.values["review_status"] == ReviewStatusType.PUBLISHED
 ```
 
