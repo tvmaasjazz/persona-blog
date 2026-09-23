@@ -503,9 +503,9 @@ than on the call. A caller that needs a particular model is asking for a new tie
 `RESEARCH` waits until web search is needed: it's a tool capability, not a model tier.
 
 Provider code lives in its own lib beside the generic one, as `google_auth` sits beside
-`auth`. `libs/llm/` defines the contract, an abstract `LlmProviderService`, and each
-provider lib implements it. `LlmService` never imports a provider. It receives a
-dispatch map `{LlmProviderType: LlmProviderService}` through `__init__`, built by the
+`auth`. `libs/llm/` defines the contract, an abstract `LlmProviderBaseService`, and each
+provider implements it. `LlmService` never imports a provider. It receives a
+dispatch map `{LlmProviderType: LlmProviderBaseService}` through `__init__`, built by the
 dependency factory, so the imports run one way and tests can hand it a stub provider.
 Only OpenAI is built in this step. The `openai` and `anthropic` SDKs are both installed.
 `libs/anthropic_llm/` lands as a follow-up once OpenAI works end to end.
@@ -540,7 +540,7 @@ Build:
     `NOT_FINISHED`) says why a call produced nothing. The reason is null on a call
     that succeeded. Both are normalized across providers, so OpenAI's `stop` and
     Anthropic's `end_turn` both read as `SUCCEEDED` with no reason
-  - `constants.py` — `STATUS_BY_REASON` and `EXCEPTION_BY_REASON`. A reason the
+  - `constants.py` — `LLM_STATUS_BY_REASON` and `LLM_EXCEPTION_BY_REASON`. A reason the
     provider answered on (`MAX_TOKENS`, `CONTENT_FILTER`, `REFUSAL`) is `INCOMPLETE`;
     everything else is `FAILED`. Both maps must cover every member, and a missing
     entry raises `NotImplementedError`
@@ -569,34 +569,40 @@ Build:
     or use the provider — timeout, connection, bad or missing key — while
     `LlmFailedException` means it answered with an error of its own. Messages never
     carry provider error text
-  - `services/` — two services, so a package:
-    - `llm_provider_service.py` — `LlmProviderService(ABC)` with `complete()` and
-      `complete_structured(provider_input, output_type)`
-    - `llm_service.py` — `LlmService(llm_provider_services, db_session_factory,
+  - `utils/` — stateless `@staticmethod` classes: `LlmUtils` (status from reason, the
+    reason's exception, cost from the pricing map) and `OpenAiLlmUtils` (building and
+    mapping the Responses API payloads). `DateTimeUtils` lands in `libs/core/utils/`,
+    since elapsed time isn't an LLM concern
+  - `services/` — a package:
+    - `llm_provider_base_service.py` — `LlmProviderBaseService(ABC)` with `complete()`
+      and `complete_structured(provider_input, output_type)`
+    - `openai_llm_service.py` — `OpenAiLlmService(LlmProviderBaseService)`, taking an
+      `AsyncOpenAI`. It has no HTTP surface of its own, so it lives here rather than in
+      a provider lib. Uses the Responses API, with `responses.parse()` for structured
+      output, and maps each response status to a reason rather than raising:
+      `completed` → none, `incomplete` → `MAX_TOKENS` or `CONTENT_FILTER`, a refusal
+      item → `REFUSAL`, `failed` → `PROVIDER_ERROR`, `cancelled` → `CANCELLED`, and
+      `queued`, `in_progress` or an `incomplete` reason we don't map → `NOT_FINISHED`.
+      Returning the reason rather than raising is what lets the row record the tokens a
+      truncated or refused call still cost
+    - `llm_call_service.py` — `LlmCallService(db_session_factory)` owns every
+      `pb_llm_call` write and nothing else: the pending row, the completed row, the
+      failed row, each in its own short committed transaction
+    - `llm_service.py` — `LlmService(llm_provider_services, llm_call_service,
       llm_settings)` with `complete(llm_completion_input, auth_user)` and
       `complete_structured(llm_completion_input, output_type, auth_user)`. Resolves
-      the tier, inserts the `PENDING` row, times the call, then writes the outcome
-      with tokens, cost and latency: the status and reason come from the provider's
-      reason through `STATUS_BY_REASON`. The row is written before the matching
-      exception from `EXCEPTION_BY_REASON` is raised, so a call that produced nothing
-      is still on record with what it cost. A raised exception records `error_code`
-      (the exception class name) and `error_message`, and its own `reason` when it is
-      an `LlmException`. Logs `llm_call_completed` at
-      info with tier, model, purpose, all four token counts, cost and latency
-- `libs/openai_llm/` — `services.py` with `OpenAiLlmService(LlmProviderService)`,
-  taking `AsyncOpenAI | None`. `None` means no key, and every call raises
-  `LlmUnavailableException`. Uses the Responses API, with `responses.parse()` for
-  structured output. Reads cached and reasoning tokens from the usage details, and
-  turns every `openai` exception into an `Llm*Exception` at the boundary. It maps each
-  response status to a reason rather than raising: `completed` → none, `incomplete` →
-  `MAX_TOKENS` or `CONTENT_FILTER`, a refusal item → `REFUSAL`, `failed` →
-  `PROVIDER_ERROR`, `cancelled` → `CANCELLED`, and `queued`, `in_progress` or an
-  `incomplete` reason we don't map → `NOT_FINISHED`. Returning the reason rather than
-  raising is what lets `LlmService` record the tokens a truncated or refused call
-  still cost
+      the tier, asks `LlmCallService` for the pending row, times the call, then records
+      the outcome: the status and reason come from the provider's reason through
+      `LLM_STATUS_BY_REASON`. The row is written before the matching exception from
+      `LLM_EXCEPTION_BY_REASON` is raised, so a call that produced nothing is still on
+      record with what it cost. A raised exception records `error_code` (the exception
+      class name), `error_message`, its `provider_error_message` and its own `reason`
+      when it is an `LlmException`. Logs `llm_call_completed` at info with tier, model,
+      purpose, all four token counts, cost and duration
 - `libs/database/orm/llm_call.py` — `LlmCallOrm`, plus the migration below
-- `apps/api/core/config.py` — `openai_api_key: str | None = None`, `llm: LlmSettings`.
-  `OPENAI_API_KEY=` added to `.env.example`
+- `apps/api/core/config.py` — `openai_api_key: str` (required, `min_length=1`) and
+  `llm: LlmSettings`. `OPENAI_API_KEY=` added to `.env.example`. A missing or blank key
+  fails at startup with a settings error, rather than every LLM call finding out later
 - `apps/api/app_factory.py` — `create_app()` builds `AppSettings()` and puts it on
   `app.state.settings`; `lifespan` reads it from there instead of building its own.
   That's what lets `create_app()` include `dev_llm_router` only when `environment`
@@ -640,14 +646,15 @@ Standard shared columns, plus:
 | `response_json` | `JSONB` | Parsed structured output. Set means the call was structured |
 | `reason` | `pb_llm_call_reason_type` | Why the call produced nothing. Null while pending and on a call that succeeded |
 | `status` | `pb_llm_call_status_type NOT NULL DEFAULT 'PENDING'` | The coarse outcome |
-| `input_tokens` | `INTEGER NOT NULL DEFAULT 0` | |
-| `output_tokens` | `INTEGER NOT NULL DEFAULT 0` | Includes reasoning tokens, as OpenAI reports it |
-| `cached_input_tokens` | `INTEGER NOT NULL DEFAULT 0` | |
-| `reasoning_tokens` | `INTEGER NOT NULL DEFAULT 0` | Informational; already counted in `output_tokens` |
-| `cost_usd` | `NUMERIC(12,6) NOT NULL DEFAULT 0` | Computed at write time from `model_pricing` |
-| `latency_ms` | `INTEGER` | |
+| `input_tokens` | `INTEGER` | Null until the call returns: `0` would read as "this cost nothing" |
+| `output_tokens` | `INTEGER` | Includes reasoning tokens, as OpenAI reports it |
+| `cached_input_tokens` | `INTEGER` | |
+| `reasoning_tokens` | `INTEGER` | Informational; already counted in `output_tokens` |
+| `cost_usd` | `NUMERIC(12,6)` | Computed at write time from `model_pricing` |
+| `duration_ms` | `INTEGER` | Elapsed request to response. Not "latency", which usually means time to first token |
 | `error_code` | `TEXT` | Exception class name |
-| `error_message` | `TEXT` | Our message, never the provider's |
+| `error_message` | `TEXT` | Our message, the one the API returns |
+| `provider_error_message` | `TEXT` | The provider's own error text, for debugging. Never returned to a client |
 | `provider_request_reference` | `TEXT` | The provider's request id, for support tickets |
 
 - Index `pb_llm_call_created_by_id_idx` for per-user spend.
@@ -678,9 +685,10 @@ building: prices change, and `gpt-5.6-sol` is on promotional pricing through at 
 2026-11-21.
 
 **Verify:** call `/dev/llm/complete` once per tier, get real text back, and confirm
-one `SUCCEEDED` row per call with tokens and a non-zero cost. Remove the API key and
-confirm a 503 with a readable message and a `FAILED` row. Set `ENVIRONMENT=PRODUCTION`
-and confirm `/dev/llm/complete` 404s. `uv run pytest` passes with no network, and
+one `SUCCEEDED` row per call with tokens and a non-zero cost. Blank the API key and
+confirm the app refuses to start with a settings error naming `openai_api_key`, rather
+than booting and failing on the first call. Set `ENVIRONMENT=PRODUCTION` and confirm
+`/dev/llm/complete` 404s. `uv run pytest` passes with no network, and
 `uv run pytest -m live_llm` passes with a key.
 
 ---

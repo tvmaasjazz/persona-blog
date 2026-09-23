@@ -36,7 +36,6 @@ Don't add other test dependencies without asking. That includes `pytest-mock`,
 in-house pattern below.
 
 ## Layout
-
 ```
 backend/tests/
 ├── conftest.py              # shared by every app and lib: environment, settings, db, redis
@@ -342,114 +341,14 @@ asyncio_default_test_loop_scope = "session"
 ## Root fixtures
 
 Each fixture arrives with the plan step that adds its resource (the app in step 5,
-the database and Redis in step 6, `signed_in_user` in step 9). The code below is the
-target shape.
+the database and Redis in step 6, `signed_in_user` in step 9).
 
-`tests/conftest.py` holds infrastructure every app and lib uses:
-
-```python
-# tests/conftest.py
-TEST_ENVIRONMENT_VARIABLES = {
-    "ENVIRONMENT": "TEST",
-    "DATABASE_URL": "postgresql+asyncpg://pb:pb@localhost:5437/pb_test",
-    "REDIS_URL": "redis://localhost:6387/15",
-    "OPENAI_API_KEY": "test-openai-api-key",
-}
-TEST_DATABASE_NAME_SUFFIX = "_test"
-TEST_REDIS_DB_INDEX = 15
-
-
-@pytest.fixture(scope="session", autouse=True)
-def environment_variables() -> Iterator[None]:
-    with pytest.MonkeyPatch.context() as session_monkeypatch:
-        for variable_name, variable_value in TEST_ENVIRONMENT_VARIABLES.items():
-            session_monkeypatch.setenv(variable_name, variable_value)
-        yield
-
-
-@pytest.fixture(scope="session")
-def app_settings() -> AppSettings:
-    return AppSettings()
-
-
-@pytest.fixture(scope="session")
-async def db_engine(
-    app_settings: AppSettings, pytestconfig: pytest.Config
-) -> AsyncIterator[AsyncEngine]:
-    database_url = make_url(app_settings.database_url)
-    if database_url.database is None or not database_url.database.endswith(
-        TEST_DATABASE_NAME_SUFFIX
-    ):
-        raise RuntimeError(f"Refusing to reset non-test database {database_url.database!r}")
-
-    db_engine = create_async_engine(database_url)
-    async with db_engine.begin() as db_connection:
-        await db_connection.execute(text("DROP SCHEMA public CASCADE"))
-        await db_connection.execute(text("CREATE SCHEMA public"))
-    alembic_process = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "alembic", "upgrade", "head", cwd=pytestconfig.rootpath
-    )
-    if await alembic_process.wait() != 0:
-        raise RuntimeError("alembic upgrade head failed against the test database")
-    yield db_engine
-    await db_engine.dispose()
-
-
-@pytest.fixture
-async def db_connection(db_engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
-    async with db_engine.connect() as db_connection:
-        outer_transaction = await db_connection.begin()
-        yield db_connection
-        await outer_transaction.rollback()
-
-
-@pytest.fixture
-def db_session_factory(db_connection: AsyncConnection) -> async_sessionmaker[AsyncSession]:
-    db_session_factory = create_db_session_factory(db_connection)
-    db_session_factory.configure(join_transaction_mode="create_savepoint")
-    return db_session_factory
-
-
-@pytest.fixture
-async def db_session(
-    db_session_factory: async_sessionmaker[AsyncSession],
-) -> AsyncIterator[AsyncSession]:
-    async with db_session_factory() as db_session:
-        yield db_session
-
-
-@pytest.fixture
-async def redis_client(app_settings: AppSettings) -> AsyncIterator[Redis]:
-    redis_client = Redis.from_url(app_settings.redis_url)
-    if redis_client.connection_pool.connection_kwargs.get("db") != TEST_REDIS_DB_INDEX:
-        raise RuntimeError("Refusing to flush a non-test Redis database")
-    await redis_client.flushdb()
-    yield redis_client
-    await redis_client.flushdb()
-    await redis_client.aclose()
-```
-
-`tests/api/conftest.py` holds the app fixtures. Only tests under `tests/api/` can see
-them. `signed_in_user` (§6) lives here too.
-
-```python
-# tests/api/conftest.py
-@pytest.fixture
-async def fastapi_app(
-    db_session_factory: async_sessionmaker[AsyncSession], redis_client: Redis
-) -> AsyncIterator[FastAPI]:
-    fastapi_app = create_app()
-    async with fastapi_app.router.lifespan_context(fastapi_app):
-        fastapi_app.state.db_session_factory = db_session_factory
-        yield fastapi_app
-
-
-@pytest.fixture
-async def api_client(fastapi_app: FastAPI) -> AsyncIterator[AsyncClient]:
-    api_transport = ASGITransport(app=fastapi_app)
-    async with AsyncClient(transport=api_transport, base_url="https://test") as api_client:
-        yield api_client
-```
+`tests/conftest.py` holds infrastructure every app and lib uses: the
+`environment_variables` fixture that points the suite at `pb_test` and Redis index 15,
+`app_settings`, `db_engine`, `db_connection`, `db_session_factory`, `db_session` and
+`redis_client`. `tests/api/conftest.py` holds the app fixtures — `fastapi_app`,
+`api_client` and `signed_in_user` — so only tests under `tests/api/` can see them, and
+lib tests can't reach the app. Read those two files rather than copying them from here.
 
 What these fixtures guarantee:
 
@@ -504,25 +403,6 @@ def test_build_user_prompt_includes_station_name() -> None:
     assert "pier-17" in user_prompt
 ```
 
-```python
-# tests/libs/users/test_inputs.py
-@pytest.mark.parametrize(
-    "display_name",
-    [pytest.param("", id="empty"), pytest.param("   ", id="whitespace_only")],
-)
-def test_create_user_input_blank_display_name_raises_validation_error(display_name: str) -> None:
-    with pytest.raises(ValidationError):
-        build_create_user_input(display_name=display_name)
-```
-
-```python
-@pytest.mark.parametrize("command_type", list(CommandType))
-def test_execution_engine_has_handler_for_every_command_type(command_type: CommandType) -> None:
-    execution_engine = ExecutionEngine()
-
-    assert command_type in execution_engine._dispatch_map
-```
-
 ## §2 Service tests
 
 Build the service directly with stubs and an explicit settings object. No app, no
@@ -553,16 +433,6 @@ async def test_build_digest_returns_content_and_character_count() -> None:
         content="Rain all day",
         character_count=12,
     )
-
-
-async def test_build_digest_weather_unavailable_raises_weather_unavailable_exception() -> None:
-    weather_service_stub = WeatherServiceStub()
-    weather_service_stub.fetch_forecast_error = WeatherUnavailableException()
-    forecast_digest_service = ForecastDigestService(weather_service=weather_service_stub)
-    build_digest_input = build_build_digest_input()
-
-    with pytest.raises(WeatherUnavailableException):
-        await forecast_digest_service.build_digest(build_digest_input)
 ```
 
 ## §3 Database tests
@@ -598,27 +468,6 @@ async def test_create_user_persists_row(db_session: AsyncSession) -> None:
     user_record = await db_session.scalar(user_query)
     assert user_record is not None
     assert user_record.email == "ada@example.com"
-
-
-async def test_create_user_email_taken_raises_user_email_taken_exception(
-    db_session: AsyncSession,
-) -> None:
-    await insert_user_row(db_session, email="ada@example.com")
-    user_service = UserService(db_session=db_session)
-    create_user_input = build_create_user_input(email="ada@example.com")
-
-    with pytest.raises(UserEmailTakenException):
-        await user_service.create_user(create_user_input)
-
-
-async def test_find_user_by_email_includes_personas(db_session: AsyncSession) -> None:
-    user_record = await insert_user_row(db_session, email="ada@example.com")
-    await insert_persona_row(db_session, user_id=user_record.id, name="Baker Bea")
-    user_service = UserService(db_session=db_session)
-
-    find_user_by_email_result = await user_service.find_user_by_email("ada@example.com")
-
-    assert [persona.name for persona in find_user_by_email_result.personas] == ["Baker Bea"]
 ```
 
 Link child rows by foreign key (`user_id=`), never with `parent.children.append()`.
@@ -645,20 +494,8 @@ parse the reply.
 - Payload builders copy a real captured response, with keyword parameters for the
   fields tests vary.
 
-```python
-# tests/stubs/http.py
-class HttpHandlerStub:
-    def __init__(self) -> None:
-        self.handle_requests: list[httpx.Request] = []
-        self.handle_responses: list[httpx.Response] = []
-        self.handle_error: Exception | None = None
-
-    def handle(self, http_request: httpx.Request) -> httpx.Response:
-        self.handle_requests.append(http_request)
-        if self.handle_error is not None:
-            raise self.handle_error
-        return self.handle_responses.pop(0)
-```
+`tests/stubs/http.py` holds `HttpHandlerStub`, which records every request, raises
+`handle_error` when set, and pops the next queued response.
 
 ```python
 # tests/libs/weather/conftest.py
@@ -699,22 +536,6 @@ async def test_fetch_forecast_sends_station_from_settings_and_returns_summary(
     assert fetch_forecast_result == FetchForecastResult(
         summary="Rain all day", high_celsius=14
     )
-
-
-@pytest.mark.parametrize("status_code", [401, 429, 500])
-async def test_fetch_forecast_error_status_raises_weather_unavailable_exception(
-    weather_service: WeatherService, weather_api_handler_stub: HttpHandlerStub, status_code: int
-) -> None:
-    weather_api_error_payload = build_weather_api_error_payload()
-    weather_api_handler_stub.handle_responses.append(
-        httpx.Response(status_code, json=weather_api_error_payload)
-    )
-    fetch_forecast_input = build_fetch_forecast_input()
-
-    with pytest.raises(WeatherUnavailableException):
-        await weather_service.fetch_forecast(fetch_forecast_input)
-
-    assert len(weather_api_handler_stub.handle_requests) == 1
 ```
 
 ## §5 Redis
@@ -885,43 +706,6 @@ async def test_build_digest_signed_out_returns_401(api_client: AsyncClient) -> N
     assert build_digest_response.status_code == 401
 ```
 
-```python
-# tests/api/blog_posts/test_router.py
-@pytest.mark.usefixtures("signed_in_user")
-async def test_create_blog_post_persists_row_and_returns_identity(
-    api_client: AsyncClient, db_session: AsyncSession
-) -> None:
-    create_blog_post_response = await api_client.post(
-        "/blog-posts/", json={"title": "Starter care", "body": "Feed it daily."}
-    )
-
-    response_body = create_blog_post_response.json()
-    blog_post_identity = UUID(response_body["identity"])
-    blog_post_query = select(BlogPostOrm).where(BlogPostOrm.identity == blog_post_identity)
-    blog_post_record = await db_session.scalar(blog_post_query)
-    assert create_blog_post_response.status_code == 200
-    assert blog_post_record is not None
-    assert blog_post_record.title == "Starter care"
-
-
-@pytest.mark.usefixtures("signed_in_user")
-async def test_update_blog_post_persists_changes(
-    api_client: AsyncClient, db_session: AsyncSession
-) -> None:
-    blog_post_record = await insert_blog_post_row(db_session, title="Draft title")
-
-    update_blog_post_response = await api_client.put(
-        f"/blog-posts/{blog_post_record.identity}",
-        json={"title": "Final title", "body": "Feed it daily."},
-    )
-
-    title_query = select(BlogPostOrm.title).where(BlogPostOrm.id == blog_post_record.id)
-    persisted_title = await db_session.scalar(title_query)
-    assert update_blog_post_response.status_code == 200
-    assert update_blog_post_response.json() == {}
-    assert persisted_title == "Final title"
-```
-
 ## §7 App factory, lifespan, core dependencies
 
 To test app-wide behaviour without a real domain route, add a throwaway route to the
@@ -964,42 +748,6 @@ async def test_exception_handler_maps_standard_exception_to_status_code(
 
     assert raise_standard_exception_response.status_code == expected_status_code
     assert raise_standard_exception_response.json() == {"detail": str(standard_exception)}
-
-
-async def test_exception_handler_gives_lib_exception_its_parent_status_code(
-    fastapi_app: FastAPI, api_client: AsyncClient
-) -> None:
-    @fastapi_app.get("/raise-lib-exception")
-    async def raise_lib_exception() -> None:
-        raise UserEmailTakenException("Email already taken")
-
-    raise_lib_exception_response = await api_client.get("/raise-lib-exception")
-
-    assert raise_lib_exception_response.status_code == 409
-
-
-async def test_unhandled_error_returns_500_without_internals(fastapi_app: FastAPI) -> None:
-    @fastapi_app.get("/raise-unhandled-error")
-    async def raise_unhandled_error() -> None:
-        raise RuntimeError("secret-internal-detail")
-
-    api_transport = ASGITransport(app=fastapi_app, raise_app_exceptions=False)
-    async with AsyncClient(transport=api_transport, base_url="https://test") as api_client:
-        raise_unhandled_error_response = await api_client.get("/raise-unhandled-error")
-
-    assert raise_unhandled_error_response.status_code == 500
-    assert "secret-internal-detail" not in raise_unhandled_error_response.text
-```
-
-```python
-# tests/api/test_lifespan.py
-async def test_lifespan_closes_http_client_on_shutdown() -> None:
-    fastapi_app = create_app()
-
-    async with fastapi_app.router.lifespan_context(fastapi_app):
-        http_client: AsyncClient = fastapi_app.state.http_client
-
-    assert http_client.is_closed
 ```
 
 ```python
@@ -1098,58 +846,8 @@ migrations job beside the drift check.
 | Downgrade reverses upgrade   | Stairway: starting from empty, for each revision run upgrade, downgrade `-1`, upgrade. A down file that forgets `DROP TYPE` fails on the second upgrade |
 | Orm matches the schema       | Not pytest. CI's `alembic check` drift job covers it |
 
-```python
-# tests/migrations/conftest.py
-@pytest.fixture
-async def empty_test_database(db_engine: AsyncEngine) -> None:
-    async with db_engine.begin() as db_connection:
-        await db_connection.execute(text("DROP SCHEMA public CASCADE"))
-        await db_connection.execute(text("CREATE SCHEMA public"))
-```
-
-```python
-# tests/migrations/test_revisions.py
-def test_revision_chain_has_single_head(pytestconfig: pytest.Config) -> None:
-    alembic_config = Config(pytestconfig.rootpath / "alembic.ini")
-    script_directory = ScriptDirectory.from_config(alembic_config)
-
-    revision_heads = script_directory.get_heads()
-
-    assert len(revision_heads) == 1
-
-
-def test_every_up_sql_file_has_down_sql_file(pytestconfig: pytest.Config) -> None:
-    sql_root_path = pytestconfig.rootpath / "migrations" / "sql"
-
-    up_sql_paths = sorted(sql_root_path.glob("*/*.up.sql"))
-
-    missing_down_sql_paths: list[Path] = []
-    for up_sql_path in up_sql_paths:
-        down_sql_name = up_sql_path.name.replace(".up.sql", ".down.sql")
-        if not up_sql_path.with_name(down_sql_name).exists():
-            missing_down_sql_paths.append(up_sql_path)
-    assert missing_down_sql_paths == []
-
-
-@pytest.mark.migration
-@pytest.mark.usefixtures("empty_test_database")
-def test_every_revision_downgrades_and_upgrades_again(pytestconfig: pytest.Config) -> None:
-    alembic_config = Config(pytestconfig.rootpath / "alembic.ini")
-    script_directory = ScriptDirectory.from_config(alembic_config)
-    revisions_head_first = list(script_directory.walk_revisions())
-
-    for revision in reversed(revisions_head_first):
-        for alembic_arguments in (
-            ["upgrade", revision.revision],
-            ["downgrade", "-1"],
-            ["upgrade", revision.revision],
-        ):
-            subprocess.run(
-                [sys.executable, "-m", "alembic", *alembic_arguments],
-                cwd=pytestconfig.rootpath,
-                check=True,
-            )
-```
+`tests/migrations/test_revisions.py` holds all three, with the `empty_test_database`
+fixture in its `conftest.py`.
 
 The stairway test has no `assert`: `check=True` raises on the first failing command.
 

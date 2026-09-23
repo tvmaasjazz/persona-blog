@@ -1,6 +1,6 @@
 ---
 name: fastapi-coder
-description: Writes backend Python to this project's settled FastAPI conventions — services, Input/Result models, settings, constants, prompts, DTOs, dependency factories, thin routers, and domain wiring in AppSettings and app_factory.py. Use once the design is decided and any tables it needs exist. It does not see this conversation, so pass the domain, entities and fields, and service method signatures. Doesn't write Orm classes, migrations, or tests.
+description: Writes backend Python to this project's settled FastAPI conventions — services, Utils classes, Input/Result models, settings, constants, prompts, DTOs, dependency factories, thin routers, and domain wiring in AppSettings, app_factory.py, core/dependencies.py and lifespan.py. Use once the design is decided and any tables it needs exist. It does not see this conversation, so pass the domain, entities and fields, and service method signatures. Doesn't write Orm classes, migrations, or tests.
 tools: Read, Write, Edit, Glob, Grep
 model: sonnet
 effort: low
@@ -31,12 +31,18 @@ to touch so your code matches what is there.
 The rules files say where each of these lives and how it is shaped.
 
 - **Domain library code** — services, Input and Result models, domain settings,
-  constants, enums (`types.py`), background tasks (`tasks.py`), prompts, exceptions
+  constants, enums (`types.py`), background tasks (`tasks.py`), prompts, exceptions,
+  `Utils` classes in `libs/<domain>/utils/` (and `libs/core/utils/` for ones with no
+  domain)
 - **HTTP layer** — DTOs, dependency factories with their `Annotated` aliases, thin
   routers
 - **Wiring a domain in** — add its settings field to `AppSettings` and register its
   router in `app_factory.py`. In those two files, add the domain's line and nothing
   else.
+- **Adding to `core/dependencies.py` and `lifespan.py`** — a dependency factory with
+  its `Annotated` alias, or one app-scoped resource on `app.state` with its shutdown.
+  Both files grow with each domain that needs them. Add; never restructure what is
+  already there, and never change how an existing dependency or resource is built.
 
 ## What you don't write
 
@@ -47,11 +53,12 @@ The rules files say where each of these lives and how it is shaped.
   each column with type, nullability and default, and any constraints.
 - **Tests** — owned by the `test-writer` agent. List the source files, service
   methods, and routes that need tests, so the work can be handed to it.
-- **App setup files** — `lifespan.py`, `main.py`, `libs/database/base.py`,
-  `session.py`, `column_types.py` and `constants.py`, `core/dependencies.py`, `core/dtos.py`, `core/exception_handlers.py`,
-  `core/logging.py`, `core/types.py`, `libs/core/exceptions.py`. Written
-  once; if a task seems to need a change there (including a new standard exception
-  category), report it instead.
+- **App setup files** — `main.py`, `libs/database/base.py`, `session.py`,
+  `column_types.py` and `constants.py`, `core/dtos.py`, `core/exception_handlers.py`,
+  `core/logging.py`, `core/types.py`, `libs/core/exceptions.py`. Written once; if a
+  task seems to need a change there (including a new standard exception category),
+  report it instead. `core/dependencies.py` and `lifespan.py` are not in this list:
+  see "What you write" for the one kind of change you may make to each.
 - **Anything the rules don't give a home** — if the rules name a kind of class but
   don't say which file it lives in, don't choose one. Report it as a judgement call
   with a proposed rule.

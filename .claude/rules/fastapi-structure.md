@@ -46,6 +46,7 @@ backend/
 │   │       └── oauth_state_service.py
 │   └── users/
 │       ├── services.py        # UserService
+│       ├── utils/             # UserUtils: static builders and mappers, if any
 │       ├── inputs.py          # CreateUserInput, ...
 │       ├── results.py         # CreateUserResult, ...
 │       ├── settings.py        # UserSettings (BaseModel)
@@ -92,9 +93,22 @@ A lib with one service keeps it in `services.py`. A lib with more than one has a
 snake_case, with `__init__.py` re-exporting every class so callers import from
 `libs.<domain>.services`. Never both.
 
-Split a lib by what it is about, not by how big it gets: provider-specific code lives
-in its own lib (`libs/google_auth/`) next to the generic one (`libs/auth/`), and each
-gets its own domain under `apps/api/domains/` so every domain keeps one `router.py`.
+Split a lib by what it is about, not by how big it gets.
+
+A provider gets its own lib when it has its own HTTP surface: `libs/google_auth/` sits
+beside `libs/auth/` because signing in with Google has routes, a domain and a callback
+of its own. A provider that is only an implementation of another lib's contract has no
+surface of its own and stays inside that lib, as one more module in its `services/`
+package: `libs/llm/services/openai_llm_service.py` implements
+`LlmProviderBaseService`, and the next provider lands beside it.
+
+### Utils
+
+Functions that build or map values — no db session, no client, no state — live in a
+`Utils` class in `libs/<domain>/utils/`, one module per class, with `__init__.py`
+re-exporting each one (`python-naming.md` › Class suffixes). A service keeps
+orchestration; the shaping of what it passes and returns moves out. Utilities with no
+domain at all, like `DateTimeUtils`, live in `libs/core/utils/`.
 
 ### Background tasks
 
@@ -111,12 +125,10 @@ passes the time, so the task doesn't read the clock.
 
 ### Records that must survive a rollback
 
-A service that writes a record which must survive the caller's rollback — the LLM
-call log in `pb_llm_call` — takes the session factory and commits each write in its
-own short transaction. A failed call raises, the request's transaction rolls back,
-and a row written through it would disappear, when failures are the rows most worth
-keeping. Never hold one of these sessions open across a slow call like an LLM
-request: open, write, commit, close.
+A service that writes a record which must survive the caller's rollback — the LLM call
+log in `pb_llm_call` — takes the session factory and commits each write in its own
+short transaction, so the record outlives a rolled-back request. Never hold one of
+those sessions open across a slow call: open, write, commit, close.
 
 ## Filenames inside a domain package
 

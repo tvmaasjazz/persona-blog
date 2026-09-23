@@ -8,7 +8,8 @@ paths:
 Every name is explicit and self-describing. A reader should know the domain and the
 kind of thing from the name alone, with no surrounding context: `AccountRouter`,
 `HumanizerSettings`, `PersonaOrm`. No bare `Config`, `Manager`, `Helper`, `Utils`,
-`data`, `obj`, `tmp`.
+`data`, `obj`, `tmp`. A `Utils` class is allowed only with a domain in front of it
+(`LlmUtils`, `DateTimeUtils`); bare `Utils` is still a dumping ground.
 
 ## Class suffixes
 
@@ -23,6 +24,8 @@ Every class ends in the suffix for what it is:
 | `Result`     | A function's return shape                    | `FindUserByEmailResult`          |
 | `Router`     | FastAPI `APIRouter` modules                  | `account_router` (an `APIRouter` instance) |
 | `Service`    | Business logic, framework-free               | `AccountService`                 |
+| `BaseService`| An abstract service that other services implement | `LlmProviderBaseService`    |
+| `Utils`      | Stateless static builders and mappers for one domain | `LlmUtils`, `DateTimeUtils` |
 | `Middleware` | ASGI / FastAPI middleware                    | `RequestLogMiddleware`           |
 | `Dto`        | Inbound HTTP body (`apps/` only)             | `BlogPostDto`, `GenerateTextDto` |
 | `QueryDto`   | A list route's query model (`apps/` only)    | `BlogPostFetchAllQueryDto`       |
@@ -33,6 +36,11 @@ Every class ends in the suffix for what it is:
 | `Stub`       | A hand-written test double (`tests/` only)   | `LlmServiceStub`, `HttpHandlerStub` |
 | `Mixin`      | SQLAlchemy column mixins (`libs/database/` only) | `SoftDeleteMixin`            |
 | `Model`      | Only when the purpose is genuinely unclear   | —                                |
+
+A `Utils` class holds `@staticmethod`s and nothing else: no state, no `__init__`, no
+db session, no HTTP client, no settings held as attributes. Values it needs are
+arguments, and a log line is fine. The moment something needs a collaborator it is a
+service, not a util — otherwise every awkward function ends up there.
 
 Two classes take no suffix. SQLAlchemy column types are named for the value they
 hold (`UtcDateTime`). `AuthUser`, the signed-in user in request scope, is named for
