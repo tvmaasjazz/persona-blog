@@ -22,6 +22,7 @@ TEST_ENVIRONMENT_VARIABLES = {
     "REDIS_URL": "redis://localhost:6387/15",
     "GOOGLE_CLIENT_ID": "test-google-client-id",
     "GOOGLE_CLIENT_SECRET": "test-google-client-secret",
+    "OPENAI_API_KEY": "test-openai-api-key",
 }
 TEST_DATABASE_NAME_SUFFIX = "_test"
 TEST_REDIS_DB_INDEX = 15
