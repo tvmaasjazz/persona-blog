@@ -101,12 +101,22 @@ gets its own domain under `apps/api/domains/` so every domain keeps one `router.
 Work that runs after the response is sent is a function in `libs/<domain>/tasks.py`,
 scheduled with FastAPI's `BackgroundTasks` from the dependency or route that knows it's
 needed. A task takes a session factory and opens its own session and transaction: a
-request's session is closed by the time the task runs. That is the one place a lib
-creates a session, and the reason a task is a function rather than a service.
+request's session is closed by the time the task runs. That, and a record that must
+survive the caller's rollback (below), are the only places a lib creates a session.
+It's also why a task is a function rather than a service.
 
 Everything else a task needs — the Redis client, the domain's settings, the values it
 acts on — is passed in, so `libs/` still never imports `AppSettings`. The caller also
 passes the time, so the task doesn't read the clock.
+
+### Records that must survive a rollback
+
+A service that writes a record which must survive the caller's rollback — the LLM
+call log in `pb_llm_call` — takes the session factory and commits each write in its
+own short transaction. A failed call raises, the request's transaction rolls back,
+and a row written through it would disappear, when failures are the rows most worth
+keeping. Never hold one of these sessions open across a slow call like an LLM
+request: open, write, commit, close.
 
 ## Filenames inside a domain package
 
@@ -361,7 +371,8 @@ DbTransactionDep = Annotated[AsyncSession, Depends(get_db_transaction)]
   violation surfaces as a 500. An endpoint that must turn a duplicate key into a 409
   commits explicitly in the service and uses `DbSessionDep`.
 - A service receives a db session; it never creates one, and never commits unless it
-  owns the transaction boundary explicitly.
+  owns the transaction boundary explicitly. The one exception is a record that must
+  survive a rollback (Services › Records that must survive a rollback).
 - Async sessions do not lazy-load. Request relationships up front with
   `selectinload()` / `joinedload()`.
 

@@ -38,6 +38,11 @@ Two classes take no suffix. SQLAlchemy column types are named for the value they
 hold (`UtcDateTime`). `AuthUser`, the signed-in user in request scope, is named for
 what it is everywhere it's passed.
 
+An acronym or brand name inside a class name is capitalised as one word:
+`LlmService`, `OpenAiLlmService`, `HttpHandlerStub`. A name that is itself a compound
+of two words keeps both capitals, which is why `GoogleOAuthService` is `OAuth` and not
+`Oauth`.
+
 A `Result` is named for **the function that returns it**, not the entity it carries:
 `FindUserByEmailResult`, `CreateUserResult`, `HumanizeDraftResult`. `UserResult` says
 nothing about what the shape is for. If two functions genuinely return an identical
