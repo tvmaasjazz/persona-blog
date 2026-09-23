@@ -33,13 +33,28 @@ uv run python -m scripts.check_schema_drift  # Orm metadata vs the migrated sche
 uv run granian --interface asgi apps.api.main:app --reload   # dev server
 ```
 
-Run `ruff check` and `pytest` before proposing a commit.
+Run from `frontend/`:
+
+```bash
+npm install                  # install from package-lock.json
+npm run dev                  # dev server at http://localhost:5173
+npm run fmt                  # format with oxfmt
+npm run fmt:check            # check formatting without writing
+npm run lint                 # oxlint
+npm run build                # type-check and build to dist/
+npx shadcn@latest add <name> # add a shadcn/ui component to src/components/ui/
+```
+
+Before proposing a commit, run `ruff check` and `pytest` for backend changes, and
+`npm run fmt:check`, `npm run lint` and `npm run build` for frontend changes.
 
 ## Non-obvious stack choices
 
 granian (not uvicorn) · structlog → Logfire (not stdlib logging) · uv (not pip or
 poetry) · async SQLAlchemy throughout · LangGraph for agent workflows · Pydantic
-Settings from TOML, overridden by env vars.
+Settings from TOML, overridden by env vars. On the frontend: npm (not pnpm or
+yarn) · oxlint and oxfmt (not ESLint or Prettier), with oxfmt pinned to an exact
+version because it's pre-1.0.
 
 Ask before adding a dependency.
 

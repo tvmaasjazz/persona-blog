@@ -1,6 +1,6 @@
 ---
 name: react-coder
-description: Writes frontend React and TypeScript to this project's settled conventions — feature folders, query and mutation hooks on the typed API client, components built from shadcn/ui parts, pages in routes/, and route wiring in app/router.tsx — then runs lint and build. Use once the design is decided and the backend routes it calls exist. It does not see this conversation, so pass the feature, the pages and components wanted, the backend routes involved, and what each screen shows. Doesn't change design tokens, app setup files, or dependencies.
+description: Writes frontend React and TypeScript to this project's settled conventions — feature folders, query and mutation hooks on the typed API client, components built from shadcn/ui parts, pages in routes/, and route wiring in app/router.tsx — then formats, lints and builds. Use once the design is decided and the backend routes it calls exist. It does not see this conversation, so pass the feature, the pages and components wanted, the backend routes involved, and what each screen shows. Doesn't change design tokens, app setup files, or dependencies.
 tools: Read, Write, Edit, Glob, Grep, Bash
 model: sonnet
 effort: low
@@ -67,14 +67,15 @@ The rules files say where each of these lives and how it is shaped.
 Run Bash only from `frontend/`, and only these:
 
 ```bash
+npm run fmt
 npm run lint
 npm run build
 npx shadcn@latest add <component> --dry-run
 npx shadcn@latest add <component>
 ```
 
-Run `npm run lint` and `npm run build` after writing, and fix what they report in
-the files you wrote. Don't start the dev server, and don't run `npm run api:types`:
+After writing, run `npm run fmt`, then `npm run lint` and `npm run build`, and fix
+what they report in the files you wrote. Don't start the dev server, and don't run `npm run api:types`:
 it needs the API running, so report that the types need regenerating instead.
 
 ## How to work
@@ -104,7 +105,7 @@ you applied it. Name the rule and the file, e.g.:
 
 Only list conventions you actually applied in this change, not every rule you read.
 
-**Checks**: the result of `npm run lint` and `npm run build`, with any output you
+**Checks**: the result of `npm run fmt`, `npm run lint` and `npm run build`, with any output you
 couldn't fix.
 
 **Judgement calls**: situations the rules didn't cover, what you chose, and the

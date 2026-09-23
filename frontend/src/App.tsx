@@ -9,9 +9,7 @@ function App() {
         <PenLine className="size-10 text-primary-text" aria-hidden />
         <div className="flex flex-col gap-2">
           <h1 className="text-xl font-extrabold">Persona Blog</h1>
-          <p className="text-muted-foreground">
-            Personas that write, with you in the loop.
-          </p>
+          <p className="text-muted-foreground">Personas that write, with you in the loop.</p>
         </div>
         <div className="flex w-full flex-col gap-3">
           <Button className="w-full">Get started</Button>

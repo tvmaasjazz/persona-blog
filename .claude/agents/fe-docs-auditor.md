@@ -46,8 +46,8 @@ finding, even if the two copies agree today, because they will drift.
 | Design tokens and what each is for, shape and type, layout, shadcn components, icons | `.claude/rules/react-styling.md` |
 | Token values | `frontend/src/index.css`; the rules describe tokens, they don't copy values |
 | An agent's role, reading list, scope, allowed commands, report shape | `.claude/agents/<name>.md`, not conventions |
-| Frontend run commands | `frontend/README.md`; which checks run before a commit is `react-structure.md` › Checks |
-| Project overview, git, agent naming, how rules are kept current | `CLAUDE.md` |
+| Frontend run commands, and which run before a commit | `CLAUDE.md` › Commands; `frontend/README.md` repeats them for people |
+| Project overview, stack choices, git, agent naming, how rules are kept current | `CLAUDE.md` |
 | Decisions and build steps | `plans/` |
 
 A short pointer to the owning file (`react-styling.md` › Tokens only) is not

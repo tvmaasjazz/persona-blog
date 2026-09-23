@@ -171,15 +171,11 @@ a loading state while the current user loads. Pages don't check auth themselves.
 
 ## Formatting
 
-No formatter is set up yet. Hand-written files use single quotes, no semicolons, and
-2-space indent. Files in `components/ui/` keep the double quotes shadcn generates;
-don't reformat them.
+oxfmt formats every file, `components/ui/` included, with the settings in
+`.oxfmtrc.json`: single quotes, no semicolons, 100-character lines. It also sorts
+imports and Tailwind classes, including inside `cn()` and `cva()`. Don't hand-order
+either, and don't fight the formatter with `// oxfmt-ignore` to keep a layout.
 
-## Checks
-
-Run from `frontend/` before proposing a commit:
-
-```bash
-npm run lint      # oxlint
-npm run build     # tsc -b and vite build
-```
+Run `npm run fmt` after writing and after every `npx shadcn@latest add`, since shadcn
+generates double quotes. The commands, and which ones run before a commit, are in
+`CLAUDE.md` › Commands.
