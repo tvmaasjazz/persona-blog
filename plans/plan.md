@@ -498,11 +498,24 @@ Build:
   components
 - `app/` with the `QueryClient`, providers and router, replacing `App.tsx`
 - `features/auth/`: `currentUserQueryOptions` and `useCurrentUser` (a 401 returns
-  `null`), `useSignOut` posting to `/auth/logout`, `SignInButton` linking to
-  `/api/auth/google/login`, and `RequireAuth`
+  `null`), `useSignOut` posting to `/auth/logout`, and `SignInCard` linking to
+  `/api/auth/google/login`
 - `AppLayout` with Substack's three columns: nav rail, main column, right sidebar
   with the sign-in card when signed out
-- A signed-in view showing `display_name` from `/users/me`, with a sign-out button
+- A signed-in view showing `display_name` from `/users/me`, and sign-out in a
+  dropdown from the avatar at the bottom of the nav rail
+- A `frontend` CI job: `npm ci`, `fmt:check`, `lint`, `build`
+
+`openapi-typescript` still declares a TypeScript `^5` peer and this project is on 6,
+so `package.json` carries an `overrides` entry pinning its TypeScript to the
+project's. It runs fine; only npm's peer check objected.
+
+**Deferred:** `RequireAuth` waits for step 13, the first route that needs signing in;
+building it now would be a guard with nothing to guard. A refused sign-in (403
+inactive, 409 email taken) still renders the API's JSON error on port 8000, since the
+callback only redirects on success — neither case can happen with one provider and one
+account, so the fix (redirect with an `?error=` code and render a message) waits until
+there is a second user.
 
 **Verify:** sign in and see your `display_name`. Hard refresh mid-session and confirm
 you stay signed in. Sign out, confirm the app returns to the signed-out view and a
