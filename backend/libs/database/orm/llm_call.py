@@ -30,12 +30,13 @@ class LlmCallOrm(BaseOrm):
         Enum(LlmCallStatusType, name="pb_llm_call_status_type"),
         server_default=text("'PENDING'"),
     )
-    input_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    output_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    cached_input_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    reasoning_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), server_default=text("0"))
-    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    cached_input_tokens: Mapped[int | None] = mapped_column(Integer)
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
     error_code: Mapped[str | None]
     error_message: Mapped[str | None]
+    provider_error_message: Mapped[str | None]
     provider_request_reference: Mapped[str | None]
