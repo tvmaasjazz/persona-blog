@@ -82,11 +82,16 @@ Add shadcn components with the CLI from `frontend/`:
 npx shadcn@latest add dialog
 ```
 
-Read the generated file before using it. Everything in `components/ui/` is ours to
-edit: `button.tsx` already has Substack's sizes and a `link` variant that uses
-`primary-text`. Change a variant there rather than overriding it with `className` at
-every call site. A `className` passed at the call site is for layout (`w-full`,
-margins), not for restyling.
+Read the generated file before using it. Files in `components/ui/` are generated and
+treated as vendored: don't reorganize, split, or trim them, and don't rewrite their
+class strings for readability. A long string there is upstream's, not ours, and the
+file stays regenerable by the CLI. `dropdown-menu.tsx` is the example: its density is
+Radix's runtime behaviour expressed as data-attribute classes.
+
+Edit only a variant you're deliberately changing. `button.tsx` is the example there:
+Substack's sizes and a `link` variant that uses `primary-text`. Change the variant in
+the file rather than overriding it with `className` at every call site. A `className`
+passed at the call site is for layout (`w-full`, margins), not for restyling.
 
 Build app components from `components/ui/` parts. Don't use a raw `<button>` or
 `<input>` where a shadcn one exists.

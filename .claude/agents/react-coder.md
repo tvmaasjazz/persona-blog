@@ -36,8 +36,8 @@ The rules files say where each of these lives and how it is shaped.
   than one feature needs them
 - **Shared helpers** in `src/lib/`, when more than one feature needs them, other than
   the setup files listed below
-- **shadcn components**, added with the CLI, then adjusted to the tokens. Edit a
-  variant inside `components/ui/` rather than restyling at every call site.
+- **shadcn components**, added with the CLI. Variant edits only, per
+  `react-styling.md` › Components.
 
 ## What you don't write
 
