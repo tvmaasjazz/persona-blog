@@ -12,4 +12,15 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      // The API has no /api prefix of its own, so the prefix is stripped here.
+      // Same origin in the browser means the session cookie needs no CORS.
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/api/, ''),
+      },
+    },
+  },
 })
