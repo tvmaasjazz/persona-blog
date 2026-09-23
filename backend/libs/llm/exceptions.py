@@ -12,8 +12,9 @@ class LlmException(Exception):
     reason: LlmCallReasonType
     message: str
 
-    def __init__(self, message: str | None = None) -> None:
+    def __init__(self, message: str | None = None, provider_message: str | None = None) -> None:
         super().__init__(message or self.message)
+        self.provider_message = provider_message
 
 
 class LlmTruncatedException(LlmException, UnprocessableException):

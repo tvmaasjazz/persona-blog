@@ -19,6 +19,16 @@ class LlmStructuredCompletionResult[T: BaseModel](BaseModel):
     output_tokens: int
 
 
+class CreatePendingLlmCallResult(BaseModel):
+    llm_call_id: int
+    llm_call_identity: UUID
+
+
+class CompleteLlmCallResult(BaseModel):
+    llm_call_identity: UUID
+    provider_completion_result: LlmProviderCompletionResult
+
+
 class LlmProviderCompletionResult(BaseModel):
     content: str
     parsed_output: BaseModel | None

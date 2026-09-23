@@ -10,9 +10,8 @@ from libs.auth.constants import SESSION_COOKIE_NAME
 from libs.auth.results import AuthUser
 from libs.auth.services import AuthSessionService
 from libs.core.exceptions import UnauthorizedException
-from libs.llm.services import LlmService
+from libs.llm.services import LlmCallService, LlmService, OpenAiLlmService
 from libs.llm.types import LlmProviderType
-from libs.openai_llm.services import OpenAiLlmService
 from libs.users.tasks import record_user_activity
 
 
@@ -63,9 +62,10 @@ async def get_auth_user(request: Request, background_tasks: BackgroundTasks) -> 
 def get_llm_service(request: Request) -> LlmService:
     app_settings: AppSettings = request.app.state.settings
     openai_llm_service = OpenAiLlmService(openai_client=request.app.state.openai_client)
+    llm_call_service = LlmCallService(db_session_factory=request.app.state.db_session_factory)
     return LlmService(
         llm_provider_services={LlmProviderType.OPENAI: openai_llm_service},
-        db_session_factory=request.app.state.db_session_factory,
+        llm_call_service=llm_call_service,
         llm_settings=app_settings.llm,
     )
 

@@ -26,7 +26,7 @@ class AppSettings(BaseSettings):
     redis_url: str
     google_client_id: str
     google_client_secret: str
-    openai_api_key: str | None = None
+    openai_api_key: str = Field(min_length=1)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     google_auth: GoogleAuthSettings = Field(default_factory=GoogleAuthSettings)
     llm: LlmSettings = Field(default_factory=LlmSettings)

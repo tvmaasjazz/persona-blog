@@ -21,12 +21,8 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     db_engine = create_async_engine(app_settings.database_url)
     redis_client = Redis.from_url(app_settings.redis_url)
     http_client = AsyncClient()
-    # A blank OPENAI_API_KEY means no key, not a broken one: the LLM routes answer 503
-    # rather than the app refusing to start.
-    openai_client = (
-        AsyncOpenAI(api_key=app_settings.openai_api_key, max_retries=app_settings.llm.max_retries)
-        if app_settings.openai_api_key
-        else None
+    openai_client = AsyncOpenAI(
+        api_key=app_settings.openai_api_key, max_retries=app_settings.llm.max_retries
     )
     fastapi_app.state.db_engine = db_engine
     fastapi_app.state.db_session_factory = create_db_session_factory(db_engine)
@@ -45,6 +41,5 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
         await http_client.aclose()
         await redis_client.aclose()
         await db_engine.dispose()
-        if openai_client is not None:
-            await openai_client.close()
+        await openai_client.close()
         logger.info("api_stopped", app_name=app_settings.app_name)

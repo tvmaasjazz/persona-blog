@@ -13,7 +13,7 @@ from libs.llm.types import LlmCallReasonType, LlmCallStatusType
 
 # A call that produced no usable output is INCOMPLETE when the provider answered and FAILED
 # when it didn't. Both maps must cover every LlmCallReasonType member.
-STATUS_BY_REASON: dict[LlmCallReasonType, LlmCallStatusType] = {
+LLM_STATUS_BY_REASON: dict[LlmCallReasonType, LlmCallStatusType] = {
     LlmCallReasonType.MAX_TOKENS: LlmCallStatusType.INCOMPLETE,
     LlmCallReasonType.CONTENT_FILTER: LlmCallStatusType.INCOMPLETE,
     LlmCallReasonType.REFUSAL: LlmCallStatusType.INCOMPLETE,
@@ -24,7 +24,7 @@ STATUS_BY_REASON: dict[LlmCallReasonType, LlmCallStatusType] = {
     LlmCallReasonType.NOT_FINISHED: LlmCallStatusType.FAILED,
 }
 
-EXCEPTION_BY_REASON: dict[LlmCallReasonType, type[LlmException]] = {
+LLM_EXCEPTION_BY_REASON: dict[LlmCallReasonType, type[LlmException]] = {
     LlmCallReasonType.MAX_TOKENS: LlmTruncatedException,
     LlmCallReasonType.CONTENT_FILTER: LlmContentFilteredException,
     LlmCallReasonType.REFUSAL: LlmRefusedException,
