@@ -9,12 +9,12 @@ from libs.llm.results import (
     LlmProviderCompletionResult,
     LlmStructuredCompletionResult,
 )
-from libs.llm.services.llm_provider_service import LlmProviderService
+from libs.llm.services.llm_provider_base_service import LlmProviderBaseService
 from libs.llm.services.llm_service import LlmService
 from tests.factories.llm import build_llm_completion_result, build_llm_provider_completion_result
 
 
-class LlmProviderServiceStub(LlmProviderService):
+class LlmProviderServiceStub(LlmProviderBaseService):
     def __init__(self) -> None:
         self.complete_inputs: list[LlmProviderCompletionInput] = []
         self.complete_result = build_llm_provider_completion_result()

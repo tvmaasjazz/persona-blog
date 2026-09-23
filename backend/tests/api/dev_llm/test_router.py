@@ -63,6 +63,22 @@ async def test_complete_llm_provider_unavailable_returns_503(
     assert complete_llm_response.status_code == 503
 
 
+async def test_complete_llm_provider_unavailable_response_hides_provider_message(
+    api_client: AsyncClient, signed_in_user: UserOrm, llm_service_stub: LlmServiceStub
+) -> None:
+    llm_service_stub.complete_error = LlmUnavailableException(
+        "The LLM provider is unavailable", provider_message="upstream said no capacity"
+    )
+
+    complete_llm_response = await api_client.post(
+        "/dev/llm/complete",
+        json={"llm_type": "FAST", "system_prompt": None, "user_prompt": "Say hi."},
+    )
+
+    assert complete_llm_response.status_code == 503
+    assert complete_llm_response.json() == {"detail": "The LLM provider is unavailable"}
+
+
 async def test_complete_llm_refused_returns_422(
     api_client: AsyncClient, signed_in_user: UserOrm, llm_service_stub: LlmServiceStub
 ) -> None:

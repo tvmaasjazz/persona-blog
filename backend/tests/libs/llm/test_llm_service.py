@@ -15,6 +15,7 @@ from libs.llm.exceptions import (
     LlmUnavailableException,
 )
 from libs.llm.results import LlmCompletionResult, LlmStructuredCompletionResult
+from libs.llm.services.llm_call_service import LlmCallService
 from libs.llm.services.llm_service import LlmService
 from libs.llm.settings import LlmModelPricingSettings, LlmSettings, LlmTierSettings
 from libs.llm.types import (
@@ -80,10 +81,11 @@ async def test_complete_succeeded_persists_row_and_returns_result(
         reasoning_tokens=0,
         provider_request_reference="req_stub_1",
     )
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_settings = _build_llm_settings()
     llm_service = LlmService(
         llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
-        db_session_factory=db_session_factory,
+        llm_call_service=llm_call_service,
         llm_settings=llm_settings,
     )
     llm_completion_input = build_llm_completion_input(
@@ -116,7 +118,7 @@ async def test_complete_succeeded_persists_row_and_returns_result(
     assert llm_call_record.cached_input_tokens == 20
     assert llm_call_record.reasoning_tokens == 0
     assert llm_call_record.reason is None
-    assert llm_call_record.latency_ms is not None
+    assert llm_call_record.duration_ms is not None
     assert llm_call_record.provider_request_reference == "req_stub_1"
     assert llm_call_record.created_by_id == auth_user.id
     assert llm_call_record.updated_by_id == auth_user.id
@@ -132,6 +134,7 @@ async def test_complete_computes_cost_from_pricing_map_billing_cached_tokens_at_
         output_tokens=500,
         cached_input_tokens=200,
     )
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_settings = _build_llm_settings(
         input_usd_per_million_tokens=Decimal("2.00"),
         cached_input_usd_per_million_tokens=Decimal("0.50"),
@@ -139,7 +142,7 @@ async def test_complete_computes_cost_from_pricing_map_billing_cached_tokens_at_
     )
     llm_service = LlmService(
         llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
-        db_session_factory=db_session_factory,
+        llm_call_service=llm_call_service,
         llm_settings=llm_settings,
     )
     llm_completion_input = build_llm_completion_input(purpose="cost-purpose")
@@ -154,11 +157,12 @@ async def test_complete_computes_cost_from_pricing_map_billing_cached_tokens_at_
     assert llm_call_record.cost_usd == Decimal("0.005700")
 
 
-async def test_complete_unpriced_model_records_zero_cost_and_logs_warning(
+async def test_complete_unpriced_model_records_null_cost_and_logs_warning(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     llm_provider_service_stub = LlmProviderServiceStub()
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_settings = LlmSettings(
         tiers={
             LlmType.FAST: LlmTierSettings(
@@ -172,7 +176,7 @@ async def test_complete_unpriced_model_records_zero_cost_and_logs_warning(
     )
     llm_service = LlmService(
         llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
-        db_session_factory=db_session_factory,
+        llm_call_service=llm_call_service,
         llm_settings=llm_settings,
     )
     llm_completion_input = build_llm_completion_input(purpose="unpriced-purpose")
@@ -192,21 +196,22 @@ async def test_complete_unpriced_model_records_zero_cost_and_logs_warning(
     )
     llm_call_record = await db_session.scalar(llm_call_query)
     assert llm_call_record is not None
-    assert llm_call_record.cost_usd == Decimal("0.000000")
+    assert llm_call_record.cost_usd is None
 
 
-async def test_complete_provider_error_leaves_failed_row_and_reraises(
+async def test_complete_provider_error_leaves_failed_row_with_provider_message_and_reraises(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     llm_provider_service_stub = LlmProviderServiceStub()
     llm_provider_service_stub.complete_error = LlmUnavailableException(
-        "The LLM provider is unavailable"
+        "The LLM provider is unavailable", provider_message="upstream said no capacity"
     )
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_settings = _build_llm_settings()
     llm_service = LlmService(
         llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
-        db_session_factory=db_session_factory,
+        llm_call_service=llm_call_service,
         llm_settings=llm_settings,
     )
     llm_completion_input = build_llm_completion_input(purpose="failed-purpose")
@@ -221,6 +226,7 @@ async def test_complete_provider_error_leaves_failed_row_and_reraises(
     assert llm_call_record.error_code == "LlmUnavailableException"
     assert llm_call_record.reason == LlmCallReasonType.PROVIDER_UNAVAILABLE
     assert llm_call_record.error_message == "The LLM provider is unavailable"
+    assert llm_call_record.provider_error_message == "upstream said no capacity"
 
 
 @pytest.mark.parametrize(
@@ -252,9 +258,10 @@ async def test_complete_reason_writes_its_status_and_raises_its_exception(
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
     llm_provider_service_stub = LlmProviderServiceStub()
     llm_provider_service_stub.complete_result = build_llm_provider_completion_result(reason=reason)
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_service = LlmService(
         llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
-        db_session_factory=db_session_factory,
+        llm_call_service=llm_call_service,
         llm_settings=LlmSettings(),
     )
     llm_completion_input = build_llm_completion_input()
@@ -277,10 +284,11 @@ async def test_complete_refusal_writes_incomplete_row_and_raises(
     llm_provider_service_stub.complete_result = build_llm_provider_completion_result(
         content="I can't help with that.", reason=LlmCallReasonType.REFUSAL
     )
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_settings = _build_llm_settings()
     llm_service = LlmService(
         llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
-        db_session_factory=db_session_factory,
+        llm_call_service=llm_call_service,
         llm_settings=llm_settings,
     )
     llm_completion_input = build_llm_completion_input(purpose="refused-purpose")
@@ -304,10 +312,11 @@ async def test_complete_structured_parses_into_output_type(
     llm_provider_service_stub.complete_structured_result = build_llm_provider_completion_result(
         parsed_output=_SampleOutput(answer="42"), input_tokens=80, output_tokens=20
     )
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_settings = _build_llm_settings()
     llm_service = LlmService(
         llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
-        db_session_factory=db_session_factory,
+        llm_call_service=llm_call_service,
         llm_settings=llm_settings,
     )
     llm_completion_input = build_llm_completion_input(purpose="structured-purpose")
@@ -338,10 +347,11 @@ async def test_complete_logs_llm_call_completed_with_token_counts(
     llm_provider_service_stub.complete_result = build_llm_provider_completion_result(
         input_tokens=100, output_tokens=50, cached_input_tokens=20, reasoning_tokens=5
     )
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_settings = _build_llm_settings()
     llm_service = LlmService(
         llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
-        db_session_factory=db_session_factory,
+        llm_call_service=llm_call_service,
         llm_settings=llm_settings,
     )
     llm_completion_input = build_llm_completion_input(purpose="logging-purpose")
@@ -362,10 +372,11 @@ async def test_complete_logs_llm_call_completed_with_token_counts(
 async def test_complete_unconfigured_tier_raises_not_implemented_error(
     db_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_settings = LlmSettings(tiers={}, model_pricing={})
     llm_service = LlmService(
         llm_provider_services={},
-        db_session_factory=db_session_factory,
+        llm_call_service=llm_call_service,
         llm_settings=llm_settings,
     )
     llm_completion_input = build_llm_completion_input(llm_type=LlmType.FAST)
@@ -377,6 +388,7 @@ async def test_complete_unconfigured_tier_raises_not_implemented_error(
 async def test_complete_tier_provider_not_registered_raises_not_implemented_error(
     db_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_settings = LlmSettings(
         tiers={
             LlmType.FAST: LlmTierSettings(
@@ -390,7 +402,7 @@ async def test_complete_tier_provider_not_registered_raises_not_implemented_erro
     )
     llm_service = LlmService(
         llm_provider_services={},
-        db_session_factory=db_session_factory,
+        llm_call_service=llm_call_service,
         llm_settings=llm_settings,
     )
     llm_completion_input = build_llm_completion_input(llm_type=LlmType.FAST)
