@@ -26,18 +26,17 @@ searches instead of reading:
 
 Only report findings that involve a changed file, on one side or both.
 
-The frontend side is `fe-docs-auditor`'s: `.claude/rules/react-*.md`, the `react-`
-and `fe-` agents, `frontend/README.md`, and the frontend parts of `CLAUDE.md` and
-`plans/plan.md`. The shared parts of `CLAUDE.md` (Agents, Git, Keeping the rules
-current) are yours. If a changed file is one of those, leave
-it out and say so in the report.
+You cover the backend. The frontend — `.claude/rules/react-*.md`, the `react-` and
+`fe-` agents, and `frontend/README.md` — is `fe-docs-auditor`'s, so skip those files.
+In `CLAUDE.md` and `plans/`, audit the backend and shared parts.
 
 If the task explicitly asks for a full audit, the scope is the backend rules
 (`fastapi-structure.md`, `database.md`, `python-naming.md`, `pytest-testing.md`), every
-agent that isn't prefixed `react-` or `fe-`, every file under `.claude/commands/`,
-`.claude/skills/` and `plans/`, plus `README.md` and `CLAUDE.md`, all read in full;
-skip the frontend parts of `CLAUDE.md` and `plans/plan.md`. If the task names no
-changed files and doesn't ask for a full audit, stop and ask which files changed.
+agent that isn't prefixed `react-` or `fe-`, every file under `.claude/commands/` and
+`.claude/skills/`, and `README.md`, all read in full, plus the backend and shared
+parts of `CLAUDE.md` and `plans/`.
+If the task names no changed files and doesn't ask for a full audit, stop and ask
+which files changed.
 
 ## Who owns what
 
@@ -50,7 +49,7 @@ finding, even if the two copies agree today, because they will drift.
 | Tables, Orm classes, migrations, drift check | `.claude/rules/database.md` |
 | Names of classes, variables, enums, identifiers | `.claude/rules/python-naming.md` |
 | Tests, fixtures, factories, stubs | `.claude/rules/pytest-testing.md` |
-| Anything frontend: structure, styling, tokens, frontend commands | `.claude/rules/react-*.md` and `frontend/README.md`; `fe-docs-auditor` has the breakdown |
+| Anything frontend | `.claude/rules/react-*.md` |
 | A procedure (steps, commands, what to hand off) | `.claude/skills/<name>/SKILL.md`, pointing at the rules |
 | An agent's role, reading list, scope, allowed commands, report shape | `.claude/agents/<name>.md`, not conventions |
 | A reusable prompt | `.claude/commands/<name>.md` |

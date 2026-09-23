@@ -77,8 +77,9 @@ written. They are expected to grow.
 - Before proposing a commit that changes `.claude/rules/`, `.claude/agents/`, or
   `.claude/commands/`, run the auditor for each side the change touches on the
   changed files: `be-docs-auditor` for the backend, `fe-docs-auditor` for the
-  frontend. Fix what it finds in those files, and report the rest. Plan edits and
-  small wording changes skip it.
+  frontend. Pass each one only its own side's files; they skip the other side's
+  silently, so a file in neither list goes unaudited. Fix what each finds in those
+  files, and report the rest. Plan edits and small wording changes skip it.
 
 ## Agents
 

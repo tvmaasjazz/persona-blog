@@ -26,9 +26,7 @@ searches instead of reading:
 
 Only report findings that involve a changed file, on one side or both.
 
-The backend side is `be-docs-auditor`'s: `fastapi-structure.md`, `database.md`,
-`python-naming.md`, `pytest-testing.md`, and the other agents, commands and skills. If
-a changed file is one of those, leave it out and say so in the report.
+You cover the frontend. Backend files are `be-docs-auditor`'s, so skip them.
 
 If the task explicitly asks for a full audit, the scope is `.claude/rules/react-*.md`,
 every agent prefixed `react-` or `fe-`, and `frontend/README.md`, all read in full,
