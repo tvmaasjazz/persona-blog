@@ -14,10 +14,12 @@ with one `pyproject.toml`. Separate apps and libs are kept apart by folders and
 `conftest.py` scope, not separate suites. If an app or lib ever becomes its own
 package with its own `pyproject.toml`, its tests move into that package.
 
-Examples leave out imports. Names that `plan.md` settles (`GenerateTextService`,
-`GenerateTextResult`, `LlmService`, `LlmCompletionResult`, `UserService`,
-`UserOrm`) are real. Others, like `LlmCompletionInput`, `LlmUnavailableException` and
-`AuthSessionService`, are placeholders until their step lands.
+Examples leave out imports, and the domains in them are invented, so a pattern here
+never goes stale when the app changes: a `weather` lib whose `WeatherService` calls a
+third-party forecast API, and a `forecast_digest` lib whose `ForecastDigestService`
+composes it. They stand in for whatever the real domains are. Only infrastructure
+names are real — the fixtures, the folder layout, `AuthUserDep`, `BaseOrm`, and the
+markers in `pyproject.toml`.
 
 ## Stack
 
@@ -34,7 +36,6 @@ Don't add other test dependencies without asking. That includes `pytest-mock`,
 in-house pattern below.
 
 ## Layout
-
 ```
 backend/tests/
 ├── conftest.py              # shared by every app and lib: environment, settings, db, redis
@@ -42,9 +43,9 @@ backend/tests/
 │   └── users.py             # build_* and insert_*_row for one lib domain
 ├── stubs/
 │   ├── http.py              # HttpHandlerStub
-│   └── llm.py               # LlmServiceStub
+│   └── weather.py           # WeatherServiceStub
 ├── payloads/
-│   └── openai.py            # third-party response bodies, as builder functions
+│   └── weather_api.py       # third-party response bodies, as builder functions
 ├── libs/
 │   └── users/
 │       ├── conftest.py      # only if the domain's lib tests share fixtures
@@ -79,9 +80,9 @@ backend/tests/
 - No `__init__.py` anywhere under `tests/`.
 - A test module never imports from another test module or from a `conftest.py`.
   Shared code lives in `factories/`, `stubs/`, or `payloads/`, imported as
-  `from tests.stubs.llm import LlmServiceStub`.
+  `from tests.stubs.weather import WeatherServiceStub`.
 - `factories/` and `stubs/` have one module per lib domain, named after the lib
-  package. `tests/stubs/llm.py` stubs `libs/llm/`. `payloads/` has one module per
+  package. `tests/stubs/weather.py` stubs `libs/weather/`. `payloads/` has one module per
   third-party provider.
 
 ## What to write for each source file
@@ -90,6 +91,7 @@ backend/tests/
 | ------------------------------------ | -------------------------------------- | -------------- |
 | `libs/<d>/services.py`, or each module in `libs/<d>/services/` | `tests/libs/<d>/test_services.py`, or `test_<service>.py` | For each public method: happy path, each branch, each exception it raises, each collaborator failure it handles. With a database, also persisted state, not found, constraint violations, related rows loaded (§2, §3) |
 | `libs/<d>/prompts.py`                | `tests/libs/<d>/test_prompts.py`       | Each builder: the arguments appear in the output (§1) |
+| `libs/<d>/utils/*.py`, `libs/core/utils/*.py` | `tests/libs/<d>/test_<utils>.py` | Every branch of every static method (§1, §2). A `Utils` class whose only output is a wall-clock measurement, like `DateTimeUtils`, gets no file: its effect is asserted through the service |
 | `libs/<d>/inputs.py`, `results.py`   | `tests/libs/<d>/test_inputs.py`, `test_results.py` | Only models with a validator or declared constraint: accepted and rejected values (§1) |
 | Class with an enum dispatch map      | That class's test file                 | Every enum member has a handler (§1) |
 | `apps/api/domains/<d>/router.py`     | `tests/api/<d>/test_router.py`         | For each route: happy path, 422 per declared constraint, each exception the service raises, 401 if protected, persisted state for writes (§6) |
@@ -115,14 +117,14 @@ backend/tests/
   name.
   - `test_create_user_returns_created_user`
   - `test_create_user_email_taken_raises_user_email_taken_exception`
-  - `test_generate_text_unknown_text_type_returns_422`
+  - `test_build_digest_unknown_region_type_returns_422`
 - No test classes. Group tests by file and by the `<unit>` prefix.
 - A fixture is a noun, named exactly like the production object it stands for:
   `db_session`, `redis_client`, `app_settings`, `fastapi_app`, `api_client`. Never a
   `test_`, `get_`, or `mock_` prefix.
 - `python-naming.md` applies in full, so write `create_user_response`, not
   `response`, and `user_query_result`, not `result`.
-- A stub class is named `<Class>Stub`, e.g. `LlmServiceStub`.
+- A stub class is named `<Class>Stub`, e.g. `WeatherServiceStub`.
 - A named expected value is `expected_<thing>`.
 
 ### Shape of a test
@@ -218,7 +220,14 @@ Use stubs, never mocks.
 | One of our services                 | Hand-written `<Class>Stub` in `tests/stubs/<domain>.py`       |
 | Third-party HTTP API                | The real SDK client over `httpx.MockTransport` (§4)           |
 | Postgres, Redis                     | The real thing                                                |
+| A `Utils` class                     | Nothing. It is pure, so call the real one                     |
 | Anything reachable only by patching | Nothing. Report it: the code has a hidden dependency to fix   |
+
+A `Utils` class is never stubbed. Its methods are static and pure — same inputs, same
+outputs, no I/O and no clock — so the reason to stub a collaborator doesn't apply, and
+faking one would mean patching. Its own test module covers every branch; a service
+test calls the real one and asserts the wiring, not the arithmetic, keeping its
+expected values simple enough to read at a glance.
 
 - `unittest.mock.patch`, `MagicMock`, `AsyncMock`, and `monkeypatch.setattr` are
   banned. Needing one means the code should take that dependency through `__init__`
@@ -239,18 +248,18 @@ How to write a stub:
   - `<method>_error`: an exception to raise instead
 
 ```python
-# tests/stubs/llm.py
-class LlmServiceStub(LlmService):
+# tests/stubs/weather.py
+class WeatherServiceStub(WeatherService):
     def __init__(self) -> None:
-        self.complete_inputs: list[LlmCompletionInput] = []
-        self.complete_result = build_llm_completion_result()
-        self.complete_error: Exception | None = None
+        self.fetch_forecast_inputs: list[FetchForecastInput] = []
+        self.fetch_forecast_result = build_fetch_forecast_result()
+        self.fetch_forecast_error: Exception | None = None
 
-    async def complete(self, llm_completion_input: LlmCompletionInput) -> LlmCompletionResult:
-        self.complete_inputs.append(llm_completion_input)
-        if self.complete_error is not None:
-            raise self.complete_error
-        return self.complete_result
+    async def fetch_forecast(self, fetch_forecast_input: FetchForecastInput) -> FetchForecastResult:
+        self.fetch_forecast_inputs.append(fetch_forecast_input)
+        if self.fetch_forecast_error is not None:
+            raise self.fetch_forecast_error
+        return self.fetch_forecast_result
 ```
 
 ### Test data
@@ -340,114 +349,14 @@ asyncio_default_test_loop_scope = "session"
 ## Root fixtures
 
 Each fixture arrives with the plan step that adds its resource (the app in step 5,
-the database and Redis in step 6, `signed_in_user` in step 9). The code below is the
-target shape.
+the database and Redis in step 6, `signed_in_user` in step 9).
 
-`tests/conftest.py` holds infrastructure every app and lib uses:
-
-```python
-# tests/conftest.py
-TEST_ENVIRONMENT_VARIABLES = {
-    "ENVIRONMENT": "TEST",
-    "DATABASE_URL": "postgresql+asyncpg://pb:pb@localhost:5437/pb_test",
-    "REDIS_URL": "redis://localhost:6387/15",
-    "OPENAI_API_KEY": "test-openai-api-key",
-}
-TEST_DATABASE_NAME_SUFFIX = "_test"
-TEST_REDIS_DB_INDEX = 15
-
-
-@pytest.fixture(scope="session", autouse=True)
-def environment_variables() -> Iterator[None]:
-    with pytest.MonkeyPatch.context() as session_monkeypatch:
-        for variable_name, variable_value in TEST_ENVIRONMENT_VARIABLES.items():
-            session_monkeypatch.setenv(variable_name, variable_value)
-        yield
-
-
-@pytest.fixture(scope="session")
-def app_settings() -> AppSettings:
-    return AppSettings()
-
-
-@pytest.fixture(scope="session")
-async def db_engine(
-    app_settings: AppSettings, pytestconfig: pytest.Config
-) -> AsyncIterator[AsyncEngine]:
-    database_url = make_url(app_settings.database_url)
-    if database_url.database is None or not database_url.database.endswith(
-        TEST_DATABASE_NAME_SUFFIX
-    ):
-        raise RuntimeError(f"Refusing to reset non-test database {database_url.database!r}")
-
-    db_engine = create_async_engine(database_url)
-    async with db_engine.begin() as db_connection:
-        await db_connection.execute(text("DROP SCHEMA public CASCADE"))
-        await db_connection.execute(text("CREATE SCHEMA public"))
-    alembic_process = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "alembic", "upgrade", "head", cwd=pytestconfig.rootpath
-    )
-    if await alembic_process.wait() != 0:
-        raise RuntimeError("alembic upgrade head failed against the test database")
-    yield db_engine
-    await db_engine.dispose()
-
-
-@pytest.fixture
-async def db_connection(db_engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
-    async with db_engine.connect() as db_connection:
-        outer_transaction = await db_connection.begin()
-        yield db_connection
-        await outer_transaction.rollback()
-
-
-@pytest.fixture
-def db_session_factory(db_connection: AsyncConnection) -> async_sessionmaker[AsyncSession]:
-    db_session_factory = create_db_session_factory(db_connection)
-    db_session_factory.configure(join_transaction_mode="create_savepoint")
-    return db_session_factory
-
-
-@pytest.fixture
-async def db_session(
-    db_session_factory: async_sessionmaker[AsyncSession],
-) -> AsyncIterator[AsyncSession]:
-    async with db_session_factory() as db_session:
-        yield db_session
-
-
-@pytest.fixture
-async def redis_client(app_settings: AppSettings) -> AsyncIterator[Redis]:
-    redis_client = Redis.from_url(app_settings.redis_url)
-    if redis_client.connection_pool.connection_kwargs.get("db") != TEST_REDIS_DB_INDEX:
-        raise RuntimeError("Refusing to flush a non-test Redis database")
-    await redis_client.flushdb()
-    yield redis_client
-    await redis_client.flushdb()
-    await redis_client.aclose()
-```
-
-`tests/api/conftest.py` holds the app fixtures. Only tests under `tests/api/` can see
-them. `signed_in_user` (§6) lives here too.
-
-```python
-# tests/api/conftest.py
-@pytest.fixture
-async def fastapi_app(
-    db_session_factory: async_sessionmaker[AsyncSession], redis_client: Redis
-) -> AsyncIterator[FastAPI]:
-    fastapi_app = create_app()
-    async with fastapi_app.router.lifespan_context(fastapi_app):
-        fastapi_app.state.db_session_factory = db_session_factory
-        yield fastapi_app
-
-
-@pytest.fixture
-async def api_client(fastapi_app: FastAPI) -> AsyncIterator[AsyncClient]:
-    api_transport = ASGITransport(app=fastapi_app)
-    async with AsyncClient(transport=api_transport, base_url="https://test") as api_client:
-        yield api_client
-```
+`tests/conftest.py` holds infrastructure every app and lib uses: the
+`environment_variables` fixture that points the suite at `pb_test` and Redis index 15,
+`app_settings`, `db_engine`, `db_connection`, `db_session_factory`, `db_session` and
+`redis_client`. `tests/api/conftest.py` holds the app fixtures — `fastapi_app`,
+`api_client` and `signed_in_user` — so only tests under `tests/api/` can see them, and
+lib tests can't reach the app. Read those two files rather than copying them from here.
 
 What these fixtures guarantee:
 
@@ -492,33 +401,14 @@ dispatch maps, and DTO mappers that contain logic.
 | DTO mapper with logic              | Build the DTO, call the mapper, compare the whole returned model |
 
 ```python
-# tests/libs/generate_text/test_prompts.py
-def test_build_user_prompt_includes_prompt_text() -> None:
-    user_prompt = GenerateTextPrompt.build_user_prompt(
-        prompt_text="a post about sourdough starters",
-        text_type=TextType.BLOG_POST,
+# tests/libs/forecast_digest/test_prompts.py
+def test_build_user_prompt_includes_station_name() -> None:
+    user_prompt = ForecastDigestPrompt.build_user_prompt(
+        station_name="pier-17",
+        region_type=RegionType.COASTAL,
     )
 
-    assert "a post about sourdough starters" in user_prompt
-```
-
-```python
-# tests/libs/users/test_inputs.py
-@pytest.mark.parametrize(
-    "display_name",
-    [pytest.param("", id="empty"), pytest.param("   ", id="whitespace_only")],
-)
-def test_create_user_input_blank_display_name_raises_validation_error(display_name: str) -> None:
-    with pytest.raises(ValidationError):
-        build_create_user_input(display_name=display_name)
-```
-
-```python
-@pytest.mark.parametrize("command_type", list(CommandType))
-def test_execution_engine_has_handler_for_every_command_type(command_type: CommandType) -> None:
-    execution_engine = ExecutionEngine()
-
-    assert command_type in execution_engine._dispatch_map
+    assert "pier-17" in user_prompt
 ```
 
 ## §2 Service tests
@@ -538,29 +428,19 @@ HTTP. If construction takes a client stack, move it into a fixture in the domain
 | Needs the database                | Same file, see §3 |
 
 ```python
-# tests/libs/generate_text/test_services.py
-async def test_generate_text_returns_content_and_character_count() -> None:
-    llm_service_stub = LlmServiceStub()
-    llm_service_stub.complete_result = build_llm_completion_result(content="Sourdough is alive.")
-    generate_text_service = GenerateTextService(llm_service=llm_service_stub)
-    generate_text_input = build_generate_text_input()
+# tests/libs/forecast_digest/test_services.py
+async def test_build_digest_returns_content_and_character_count() -> None:
+    weather_service_stub = WeatherServiceStub()
+    weather_service_stub.fetch_forecast_result = build_fetch_forecast_result(summary="Rain all day")
+    forecast_digest_service = ForecastDigestService(weather_service=weather_service_stub)
+    build_digest_input = build_build_digest_input()
 
-    generate_text_result = await generate_text_service.generate_text(generate_text_input)
+    build_digest_result = await forecast_digest_service.build_digest(build_digest_input)
 
-    assert generate_text_result == GenerateTextResult(
-        content="Sourdough is alive.",
-        character_count=19,
+    assert build_digest_result == BuildDigestResult(
+        content="Rain all day",
+        character_count=12,
     )
-
-
-async def test_generate_text_llm_unavailable_raises_llm_unavailable_exception() -> None:
-    llm_service_stub = LlmServiceStub()
-    llm_service_stub.complete_error = LlmUnavailableException()
-    generate_text_service = GenerateTextService(llm_service=llm_service_stub)
-    generate_text_input = build_generate_text_input()
-
-    with pytest.raises(LlmUnavailableException):
-        await generate_text_service.generate_text(generate_text_input)
 ```
 
 ## §3 Database tests
@@ -596,27 +476,6 @@ async def test_create_user_persists_row(db_session: AsyncSession) -> None:
     user_record = await db_session.scalar(user_query)
     assert user_record is not None
     assert user_record.email == "ada@example.com"
-
-
-async def test_create_user_email_taken_raises_user_email_taken_exception(
-    db_session: AsyncSession,
-) -> None:
-    await insert_user_row(db_session, email="ada@example.com")
-    user_service = UserService(db_session=db_session)
-    create_user_input = build_create_user_input(email="ada@example.com")
-
-    with pytest.raises(UserEmailTakenException):
-        await user_service.create_user(create_user_input)
-
-
-async def test_find_user_by_email_includes_personas(db_session: AsyncSession) -> None:
-    user_record = await insert_user_row(db_session, email="ada@example.com")
-    await insert_persona_row(db_session, user_id=user_record.id, name="Baker Bea")
-    user_service = UserService(db_session=db_session)
-
-    find_user_by_email_result = await user_service.find_user_by_email("ada@example.com")
-
-    assert [persona.name for persona in find_user_by_email_result.personas] == ["Baker Bea"]
 ```
 
 Link child rows by foreign key (`user_id=`), never with `parent.children.append()`.
@@ -643,75 +502,48 @@ parse the reply.
 - Payload builders copy a real captured response, with keyword parameters for the
   fields tests vary.
 
-```python
-# tests/stubs/http.py
-class HttpHandlerStub:
-    def __init__(self) -> None:
-        self.handle_requests: list[httpx.Request] = []
-        self.handle_responses: list[httpx.Response] = []
-        self.handle_error: Exception | None = None
-
-    def handle(self, http_request: httpx.Request) -> httpx.Response:
-        self.handle_requests.append(http_request)
-        if self.handle_error is not None:
-            raise self.handle_error
-        return self.handle_responses.pop(0)
-```
+`tests/stubs/http.py` holds `HttpHandlerStub`, which records every request, raises
+`handle_error` when set, and pops the next queued response.
 
 ```python
-# tests/libs/llm/conftest.py
+# tests/libs/weather/conftest.py
 @pytest.fixture
-def openai_handler_stub() -> HttpHandlerStub:
+def weather_api_handler_stub() -> HttpHandlerStub:
     return HttpHandlerStub()
 
 
 @pytest.fixture
-async def llm_service(openai_handler_stub: HttpHandlerStub) -> AsyncIterator[LlmService]:
-    openai_transport = httpx.MockTransport(openai_handler_stub.handle)
-    async with httpx.AsyncClient(transport=openai_transport) as openai_http_client:
-        llm_client = AsyncOpenAI(
-            api_key="test-openai-api-key",
-            http_client=openai_http_client,
-            max_retries=0,
+async def weather_service(
+    weather_api_handler_stub: HttpHandlerStub,
+) -> AsyncIterator[WeatherService]:
+    weather_api_transport = httpx.MockTransport(weather_api_handler_stub.handle)
+    async with httpx.AsyncClient(transport=weather_api_transport) as weather_http_client:
+        weather_settings = WeatherSettings(station_name="test-station")
+        yield WeatherService(
+            http_client=weather_http_client, weather_settings=weather_settings
         )
-        llm_settings = LlmSettings(model_name="test-model")
-        yield LlmService(llm_client=llm_client, llm_settings=llm_settings)
 ```
 
 ```python
-# tests/libs/llm/test_services.py
-async def test_complete_sends_model_from_settings_and_returns_token_counts(
-    llm_service: LlmService, openai_handler_stub: HttpHandlerStub
+# tests/libs/weather/test_services.py
+async def test_fetch_forecast_sends_station_from_settings_and_returns_summary(
+    weather_service: WeatherService, weather_api_handler_stub: HttpHandlerStub
 ) -> None:
-    openai_payload = build_openai_chat_completion_payload(
-        content="Sourdough is alive.", prompt_tokens=12, completion_tokens=5
+    weather_api_payload = build_weather_api_forecast_payload(
+        summary="Rain all day", high_celsius=14
     )
-    openai_handler_stub.handle_responses.append(httpx.Response(200, json=openai_payload))
-    llm_completion_input = build_llm_completion_input()
-
-    llm_completion_result = await llm_service.complete(llm_completion_input)
-
-    sent_request_body = json.loads(openai_handler_stub.handle_requests[0].content)
-    assert sent_request_body["model"] == "test-model"
-    assert llm_completion_result == LlmCompletionResult(
-        content="Sourdough is alive.", input_tokens=12, output_tokens=5
+    weather_api_handler_stub.handle_responses.append(
+        httpx.Response(200, json=weather_api_payload)
     )
+    fetch_forecast_input = build_fetch_forecast_input()
 
+    fetch_forecast_result = await weather_service.fetch_forecast(fetch_forecast_input)
 
-@pytest.mark.parametrize("status_code", [401, 429, 500])
-async def test_complete_error_status_raises_llm_unavailable_exception(
-    llm_service: LlmService, openai_handler_stub: HttpHandlerStub, status_code: int
-) -> None:
-    openai_error_payload = build_openai_error_payload()
-    openai_handler_stub.handle_responses.append(
-        httpx.Response(status_code, json=openai_error_payload)
+    sent_request_url = weather_api_handler_stub.handle_requests[0].url
+    assert sent_request_url.params["station"] == "test-station"
+    assert fetch_forecast_result == FetchForecastResult(
+        summary="Rain all day", high_celsius=14
     )
-    llm_completion_input = build_llm_completion_input()
-
-    with pytest.raises(LlmUnavailableException):
-        await llm_service.complete(llm_completion_input)
-
-    assert len(openai_handler_stub.handle_requests) == 1
 ```
 
 ## §5 Redis
@@ -751,7 +583,7 @@ These use `api_client` against the real app, with real dependency factories and 
 real session factory.
 
 **Override only the lowest dependency that reaches a third party** (such as
-`get_llm_service` or the Google token verifier's factory), never the service the
+`get_weather_service` or the Google token verifier's factory), never the service the
 route calls. That way the domain's `dependencies.py` still runs for real. If no such
 dependency exists because the domain factory builds a third-party client inline,
 report it and propose splitting it out.
@@ -759,12 +591,12 @@ report it and propose splitting it out.
 Put the override in the domain's `conftest.py` as an `autouse` fixture:
 
 ```python
-# tests/api/generate_text/conftest.py
+# tests/api/forecast_digest/conftest.py
 @pytest.fixture(autouse=True)
-def llm_service_stub(fastapi_app: FastAPI) -> LlmServiceStub:
-    llm_service_stub = LlmServiceStub()
-    fastapi_app.dependency_overrides[get_llm_service] = lambda: llm_service_stub
-    return llm_service_stub
+def weather_service_stub(fastapi_app: FastAPI) -> WeatherServiceStub:
+    weather_service_stub = WeatherServiceStub()
+    fastapi_app.dependency_overrides[get_weather_service] = lambda: weather_service_stub
+    return weather_service_stub
 ```
 
 **Signed-in requests go through the real guard.** Never override `get_current_user`.
@@ -810,22 +642,24 @@ async def signed_in_user(
 | Unhandled exception → 500     | Covered once in `tests/api/core/test_exception_handlers.py`, not per route |
 
 ```python
-# tests/api/generate_text/test_router.py
+# tests/api/forecast_digest/test_router.py
 @pytest.mark.usefixtures("signed_in_user")
-async def test_generate_text_returns_generated_text_response(
-    api_client: AsyncClient, llm_service_stub: LlmServiceStub
+async def test_build_digest_returns_forecast_digest_response(
+    api_client: AsyncClient, weather_service_stub: WeatherServiceStub
 ) -> None:
-    llm_service_stub.complete_result = build_llm_completion_result(content="Sourdough is alive.")
-
-    generate_text_response = await api_client.post(
-        "/generate-text",
-        json={"text_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
+    weather_service_stub.fetch_forecast_result = build_fetch_forecast_result(
+        summary="Rain all day"
     )
 
-    assert generate_text_response.status_code == 200
-    assert generate_text_response.json() == {
-        "content": "Sourdough is alive.",
-        "character_count": 19,
+    build_digest_response = await api_client.post(
+        "/forecast-digest",
+        json={"region_type": "COASTAL", "station_name": "pier-17"},
+    )
+
+    assert build_digest_response.status_code == 200
+    assert build_digest_response.json() == {
+        "content": "Rain all day",
+        "character_count": 12,
     }
 
 
@@ -834,87 +668,50 @@ async def test_generate_text_returns_generated_text_response(
     ("request_body", "expected_error_location"),
     [
         pytest.param(
-            {"prompt_text": "sourdough"},
-            ["body", "text_type"],
-            id="missing_text_type",
+            {"station_name": "pier-17"},
+            ["body", "region_type"],
+            id="missing_region_type",
         ),
         pytest.param(
-            {"text_type": "HAIKU", "prompt_text": "sourdough"},
-            ["body", "text_type"],
-            id="unknown_text_type",
+            {"region_type": "LUNAR", "station_name": "pier-17"},
+            ["body", "region_type"],
+            id="unknown_region_type",
         ),
     ],
 )
-async def test_generate_text_invalid_body_returns_422(
+async def test_build_digest_invalid_body_returns_422(
     api_client: AsyncClient,
     request_body: dict[str, str],
     expected_error_location: list[str],
 ) -> None:
-    generate_text_response = await api_client.post("/generate-text", json=request_body)
+    build_digest_response = await api_client.post("/forecast-digest", json=request_body)
 
-    response_body = generate_text_response.json()
-    assert generate_text_response.status_code == 422
+    response_body = build_digest_response.json()
+    assert build_digest_response.status_code == 422
     assert response_body["detail"][0]["loc"] == expected_error_location
 
 
 @pytest.mark.usefixtures("signed_in_user")
-async def test_generate_text_llm_unavailable_returns_503(
-    api_client: AsyncClient, llm_service_stub: LlmServiceStub
+async def test_build_digest_weather_unavailable_returns_503(
+    api_client: AsyncClient, weather_service_stub: WeatherServiceStub
 ) -> None:
-    llm_service_stub.complete_error = LlmUnavailableException()
+    weather_service_stub.fetch_forecast_error = WeatherUnavailableException()
 
-    generate_text_response = await api_client.post(
-        "/generate-text",
-        json={"text_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
+    build_digest_response = await api_client.post(
+        "/forecast-digest",
+        json={"region_type": "COASTAL", "station_name": "pier-17"},
     )
 
-    assert generate_text_response.status_code == 503
+    assert build_digest_response.status_code == 503
 
 
-async def test_generate_text_signed_out_returns_401(api_client: AsyncClient) -> None:
-    generate_text_response = await api_client.post(
-        "/generate-text",
-        json={"text_type": "BLOG_POST", "prompt_text": "a post about sourdough"},
+async def test_build_digest_signed_out_returns_401(api_client: AsyncClient) -> None:
+    build_digest_response = await api_client.post(
+        "/forecast-digest",
+        json={"region_type": "COASTAL", "station_name": "pier-17"},
     )
 
-    assert generate_text_response.status_code == 401
-```
-
-```python
-# tests/api/blog_posts/test_router.py
-@pytest.mark.usefixtures("signed_in_user")
-async def test_create_blog_post_persists_row_and_returns_identity(
-    api_client: AsyncClient, db_session: AsyncSession
-) -> None:
-    create_blog_post_response = await api_client.post(
-        "/blog-posts/", json={"title": "Starter care", "body": "Feed it daily."}
-    )
-
-    response_body = create_blog_post_response.json()
-    blog_post_identity = UUID(response_body["identity"])
-    blog_post_query = select(BlogPostOrm).where(BlogPostOrm.identity == blog_post_identity)
-    blog_post_record = await db_session.scalar(blog_post_query)
-    assert create_blog_post_response.status_code == 200
-    assert blog_post_record is not None
-    assert blog_post_record.title == "Starter care"
-
-
-@pytest.mark.usefixtures("signed_in_user")
-async def test_update_blog_post_persists_changes(
-    api_client: AsyncClient, db_session: AsyncSession
-) -> None:
-    blog_post_record = await insert_blog_post_row(db_session, title="Draft title")
-
-    update_blog_post_response = await api_client.put(
-        f"/blog-posts/{blog_post_record.identity}",
-        json={"title": "Final title", "body": "Feed it daily."},
-    )
-
-    title_query = select(BlogPostOrm.title).where(BlogPostOrm.id == blog_post_record.id)
-    persisted_title = await db_session.scalar(title_query)
-    assert update_blog_post_response.status_code == 200
-    assert update_blog_post_response.json() == {}
-    assert persisted_title == "Final title"
+    assert build_digest_response.status_code == 401
 ```
 
 ## §7 App factory, lifespan, core dependencies
@@ -959,42 +756,6 @@ async def test_exception_handler_maps_standard_exception_to_status_code(
 
     assert raise_standard_exception_response.status_code == expected_status_code
     assert raise_standard_exception_response.json() == {"detail": str(standard_exception)}
-
-
-async def test_exception_handler_gives_lib_exception_its_parent_status_code(
-    fastapi_app: FastAPI, api_client: AsyncClient
-) -> None:
-    @fastapi_app.get("/raise-lib-exception")
-    async def raise_lib_exception() -> None:
-        raise UserEmailTakenException("Email already taken")
-
-    raise_lib_exception_response = await api_client.get("/raise-lib-exception")
-
-    assert raise_lib_exception_response.status_code == 409
-
-
-async def test_unhandled_error_returns_500_without_internals(fastapi_app: FastAPI) -> None:
-    @fastapi_app.get("/raise-unhandled-error")
-    async def raise_unhandled_error() -> None:
-        raise RuntimeError("secret-internal-detail")
-
-    api_transport = ASGITransport(app=fastapi_app, raise_app_exceptions=False)
-    async with AsyncClient(transport=api_transport, base_url="https://test") as api_client:
-        raise_unhandled_error_response = await api_client.get("/raise-unhandled-error")
-
-    assert raise_unhandled_error_response.status_code == 500
-    assert "secret-internal-detail" not in raise_unhandled_error_response.text
-```
-
-```python
-# tests/api/test_lifespan.py
-async def test_lifespan_closes_http_client_on_shutdown() -> None:
-    fastapi_app = create_app()
-
-    async with fastapi_app.router.lifespan_context(fastapi_app):
-        http_client: AsyncClient = fastapi_app.state.http_client
-
-    assert http_client.is_closed
 ```
 
 ```python
@@ -1048,7 +809,7 @@ def test_app_settings_env_var_overrides_toml(
 
 | Situation                         | Pattern |
 | --------------------------------- | ------- |
-| A log event is a requirement (token counts per LLM call) | Wrap the act in `structlog.testing.capture_logs()`; find the event by name and assert its keys |
+| A log event is a requirement (token counts per LLM call, see §12) | Wrap the act in `structlog.testing.capture_logs()`; find the event by name and assert its keys |
 | Request-id middleware             | A route test on any route: the response carries the header, and a header sent in is echoed back |
 | Not tested                        | Log formatting, renderer output, Logfire export |
 
@@ -1056,24 +817,26 @@ def test_app_settings_env_var_overrides_toml(
 `cache_logger_on_first_use` when `ENVIRONMENT` is `TEST`.
 
 ```python
-async def test_complete_logs_token_counts(
-    llm_service: LlmService, openai_handler_stub: HttpHandlerStub
+async def test_fetch_forecast_logs_station_and_high(
+    weather_service: WeatherService, weather_api_handler_stub: HttpHandlerStub
 ) -> None:
-    openai_payload = build_openai_chat_completion_payload(prompt_tokens=12, completion_tokens=5)
-    openai_handler_stub.handle_responses.append(httpx.Response(200, json=openai_payload))
-    llm_completion_input = build_llm_completion_input()
+    weather_api_payload = build_weather_api_forecast_payload(high_celsius=14)
+    weather_api_handler_stub.handle_responses.append(
+        httpx.Response(200, json=weather_api_payload)
+    )
+    fetch_forecast_input = build_fetch_forecast_input()
 
     with structlog.testing.capture_logs() as captured_log_events:
-        await llm_service.complete(llm_completion_input)
+        await weather_service.fetch_forecast(fetch_forecast_input)
 
-    completion_log_events = [
+    forecast_log_events = [
         log_event
         for log_event in captured_log_events
-        if log_event["event"] == "llm_completion_finished"
+        if log_event["event"] == "forecast_fetched"
     ]
-    assert len(completion_log_events) == 1
-    assert completion_log_events[0]["input_tokens"] == 12
-    assert completion_log_events[0]["output_tokens"] == 5
+    assert len(forecast_log_events) == 1
+    assert forecast_log_events[0]["station_name"] == "test-station"
+    assert forecast_log_events[0]["high_celsius"] == 14
 ```
 
 ## §10 Migrations
@@ -1091,58 +854,8 @@ migrations job beside the drift check.
 | Downgrade reverses upgrade   | Stairway: starting from empty, for each revision run upgrade, downgrade `-1`, upgrade. A down file that forgets `DROP TYPE` fails on the second upgrade |
 | Orm matches the schema       | Not pytest. CI's `alembic check` drift job covers it |
 
-```python
-# tests/migrations/conftest.py
-@pytest.fixture
-async def empty_test_database(db_engine: AsyncEngine) -> None:
-    async with db_engine.begin() as db_connection:
-        await db_connection.execute(text("DROP SCHEMA public CASCADE"))
-        await db_connection.execute(text("CREATE SCHEMA public"))
-```
-
-```python
-# tests/migrations/test_revisions.py
-def test_revision_chain_has_single_head(pytestconfig: pytest.Config) -> None:
-    alembic_config = Config(pytestconfig.rootpath / "alembic.ini")
-    script_directory = ScriptDirectory.from_config(alembic_config)
-
-    revision_heads = script_directory.get_heads()
-
-    assert len(revision_heads) == 1
-
-
-def test_every_up_sql_file_has_down_sql_file(pytestconfig: pytest.Config) -> None:
-    sql_root_path = pytestconfig.rootpath / "migrations" / "sql"
-
-    up_sql_paths = sorted(sql_root_path.glob("*/*.up.sql"))
-
-    missing_down_sql_paths: list[Path] = []
-    for up_sql_path in up_sql_paths:
-        down_sql_name = up_sql_path.name.replace(".up.sql", ".down.sql")
-        if not up_sql_path.with_name(down_sql_name).exists():
-            missing_down_sql_paths.append(up_sql_path)
-    assert missing_down_sql_paths == []
-
-
-@pytest.mark.migration
-@pytest.mark.usefixtures("empty_test_database")
-def test_every_revision_downgrades_and_upgrades_again(pytestconfig: pytest.Config) -> None:
-    alembic_config = Config(pytestconfig.rootpath / "alembic.ini")
-    script_directory = ScriptDirectory.from_config(alembic_config)
-    revisions_head_first = list(script_directory.walk_revisions())
-
-    for revision in reversed(revisions_head_first):
-        for alembic_arguments in (
-            ["upgrade", revision.revision],
-            ["downgrade", "-1"],
-            ["upgrade", revision.revision],
-        ):
-            subprocess.run(
-                [sys.executable, "-m", "alembic", *alembic_arguments],
-                cwd=pytestconfig.rootpath,
-                check=True,
-            )
-```
+`tests/migrations/test_revisions.py` holds all three, with the `empty_test_database`
+fixture in its `conftest.py`.
 
 The stairway test has no `assert`: `check=True` raises on the first failing command.
 
@@ -1161,17 +874,17 @@ first graph lands.
 | Resume after review         | From the interrupt, `ainvoke(Command(resume=...))` and assert where the graph went: publish on approval, back to rewrite on rejection |
 
 ```python
-async def test_post_review_graph_publishes_after_approval() -> None:
-    llm_service_stub = LlmServiceStub()
-    post_review_graph = build_post_review_graph(
-        llm_service=llm_service_stub, checkpointer=InMemorySaver()
+async def test_forecast_digest_graph_publishes_after_approval() -> None:
+    weather_service_stub = WeatherServiceStub()
+    forecast_digest_graph = build_forecast_digest_graph(
+        weather_service=weather_service_stub, checkpointer=InMemorySaver()
     )
     graph_run_config = {"configurable": {"thread_id": "test-thread"}}
-    await post_review_graph.ainvoke({"draft_text": "Sourdough is alive."}, graph_run_config)
+    await forecast_digest_graph.ainvoke({"draft_text": "Rain all day"}, graph_run_config)
 
-    await post_review_graph.ainvoke(Command(resume={"approved": True}), graph_run_config)
+    await forecast_digest_graph.ainvoke(Command(resume={"approved": True}), graph_run_config)
 
-    graph_state_snapshot = await post_review_graph.aget_state(graph_run_config)
+    graph_state_snapshot = await forecast_digest_graph.aget_state(graph_run_config)
     assert graph_state_snapshot.values["review_status"] == ReviewStatusType.PUBLISHED
 ```
 

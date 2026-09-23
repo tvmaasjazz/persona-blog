@@ -47,3 +47,23 @@ def test_app_settings_missing_connection_url_raises_validation_error(
 
     with pytest.raises(ValidationError):
         AppSettings()
+
+
+def test_app_settings_missing_openai_api_key_raises_validation_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OPENAI_API_KEY")
+
+    with pytest.raises(ValidationError):
+        AppSettings()
+
+
+def test_app_settings_blank_openai_api_key_raises_validation_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+
+    with pytest.raises(ValidationError):
+        AppSettings()

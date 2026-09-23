@@ -512,31 +512,201 @@ direct call to `/users/me` 401s.
 
 ## Step 12 — LLM lib + dev LLM router
 
-Outline only — detailed when this step starts.
+Callers ask for a tier, never a model. `LlmType` names what a call needs (`FAST`,
+`STRONG`, `THINKING`), and `LlmSettings` maps each tier to a provider and model, so
+moving a tier from OpenAI to Anthropic is a TOML change with no caller touched.
+Anything provider-specific, like reasoning effort, lives on the tier's settings rather
+than on the call. A caller that needs a particular model is asking for a new tier.
+`RESEARCH` waits until web search is needed: it's a tool capability, not a model tier.
+
+Provider code lives in its own lib beside the generic one, as `google_auth` sits beside
+`auth`. `libs/llm/` defines the contract, an abstract `LlmProviderBaseService`, and each
+provider implements it. `LlmService` never imports a provider. It receives a
+dispatch map `{LlmProviderType: LlmProviderBaseService}` through `__init__`, built by the
+dependency factory, so the imports run one way and tests can hand it a stub provider.
+Only OpenAI is built in this step. The `openai` and `anthropic` SDKs are both installed.
+`libs/anthropic_llm/` lands as a follow-up once OpenAI works end to end.
+
+One `AsyncOpenAI` client is created in `lifespan` and shared. It pools connections
+(1000 by default), so concurrent requests and concurrent calls in one request never
+queue behind each other. The provider's rate limit is the real ceiling, and it
+surfaces as a 429.
+
+Every call is logged to `pb_llm_call`. `LlmService` inserts a `PENDING` row before the
+call and updates it afterwards, each in its own short committed transaction opened
+from the session factory, never the request's session:
+
+- a failed call raises, the request's transaction rolls back, and a row written
+  through it would vanish, when failures are the rows most worth keeping
+- LangGraph runs nodes in parallel, and one session can't be used concurrently
+- the update is a ~1 ms write by primary key after a multi-second call, so moving it
+  to the background saves nothing, and `BackgroundTasks` can't be reached from a lib
+  or a graph anyway
+
+No session is held open while the model runs, so the connection pool never waits on
+an LLM call. This follows `fastapi-structure.md` › Services › Records that must survive a rollback.
 
 Build:
 
-- `libs/llm/` — `services.py` with `LlmService.complete()`, `settings.py` with
-  `LlmSettings { model_name, request_timeout_seconds, max_output_tokens }`,
-  `inputs.py`, `results.py` with
-  `LlmCompletionResult { content, input_tokens, output_tokens }`
-- API key from env via `AppSettings`, never TOML; add `OPENAI_API_KEY` to
-  `.env.example`
-- Every LLM call recorded in a tracking table. Columns and migration are planned
-  when this step is detailed
-- A dev-only router for making basic calls against different LLMs and checking each
-  call is tracked. Registered only when `environment` is `DEVELOPMENT`
-- Log token counts per call at info level
-- Tests use a stub `LlmService`, never the real API
+- `libs/llm/`
+  - `types.py` — `LlmType` (`FAST`, `STRONG`, `THINKING`), `LlmProviderType`
+    (`OPENAI`, `ANTHROPIC`), and the two that describe an outcome:
+    `LlmCallStatusType` (`PENDING`, `SUCCEEDED`, `INCOMPLETE`, `FAILED`) is the coarse
+    result, and `LlmCallReasonType` (`MAX_TOKENS`, `CONTENT_FILTER`, `REFUSAL`,
+    `PROVIDER_ERROR`, `PROVIDER_UNAVAILABLE`, `RATE_LIMITED`, `CANCELLED`,
+    `NOT_FINISHED`) says why a call produced nothing. The reason is null on a call
+    that succeeded. Both are normalized across providers, so OpenAI's `stop` and
+    Anthropic's `end_turn` both read as `SUCCEEDED` with no reason
+  - `constants.py` — `LLM_STATUS_BY_REASON` and `LLM_EXCEPTION_BY_REASON`. A reason the
+    provider answered on (`MAX_TOKENS`, `CONTENT_FILTER`, `REFUSAL`) is `INCOMPLETE`;
+    everything else is `FAILED`. Both maps must cover every member, and a missing
+    entry raises `NotImplementedError`
+  - `settings.py` — `LlmSettings { tiers: dict[LlmType, LlmTierSettings],
+    model_pricing: dict[str, LlmModelPricingSettings], max_retries }`.
+    `LlmTierSettings { provider, model_name, max_output_tokens,
+    request_timeout_seconds }`. `LlmModelPricingSettings
+    { input_usd_per_million_tokens, cached_input_usd_per_million_tokens,
+    output_usd_per_million_tokens }`. Defaults below
+  - `inputs.py` — `LlmCompletionInput { llm_type, purpose, system_prompt | None,
+    user_prompt }`, single-turn until chat needs a message list.
+    `LlmProviderCompletionInput { model_name, system_prompt, user_prompt,
+    max_output_tokens, request_timeout_seconds }`
+  - `results.py` — `LlmCompletionResult { llm_call_identity, content, input_tokens,
+    output_tokens }`, `LlmStructuredCompletionResult[T] { llm_call_identity, output,
+    input_tokens, output_tokens }`, and `LlmProviderCompletionResult { content,
+    parsed_output | None, reason, input_tokens, output_tokens,
+    cached_input_tokens, reasoning_tokens, provider_request_reference }`
+  - `exceptions.py` — one exception per reason, each carrying its `reason` and a
+    default `message`, so a raised exception and the row it writes can't disagree:
+    `LlmTruncatedException`, `LlmContentFilteredException` and `LlmRefusedException`
+    (→ `UnprocessableException`, 422); `LlmFailedException`, `LlmUnavailableException`
+    and `LlmCancelledException`, `LlmNotFinishedException`
+    (→ `ServiceUnavailableException`, 503); `LlmRateLimitedException`
+    (→ `RateLimitedException`, 429). `LlmUnavailableException` means we couldn't reach
+    or use the provider — timeout, connection, bad or missing key — while
+    `LlmFailedException` means it answered with an error of its own. Messages never
+    carry provider error text
+  - `utils/` — stateless `@staticmethod` classes: `LlmUtils` (status from reason, the
+    reason's exception, cost from the pricing map) and `OpenAiLlmUtils` (building and
+    mapping the Responses API payloads). `DateTimeUtils` lands in `libs/core/utils/`,
+    since elapsed time isn't an LLM concern
+  - `services/` — a package:
+    - `llm_provider_base_service.py` — `LlmProviderBaseService(ABC)` with `complete()`
+      and `complete_structured(provider_input, output_type)`
+    - `openai_llm_service.py` — `OpenAiLlmService(LlmProviderBaseService)`, taking an
+      `AsyncOpenAI`. It has no HTTP surface of its own, so it lives here rather than in
+      a provider lib. Uses the Responses API, with `responses.parse()` for structured
+      output, and maps each response status to a reason rather than raising:
+      `completed` → none, `incomplete` → `MAX_TOKENS` or `CONTENT_FILTER`, a refusal
+      item → `REFUSAL`, `failed` → `PROVIDER_ERROR`, `cancelled` → `CANCELLED`, and
+      `queued`, `in_progress` or an `incomplete` reason we don't map → `NOT_FINISHED`.
+      Returning the reason rather than raising is what lets the row record the tokens a
+      truncated or refused call still cost
+    - `llm_call_service.py` — `LlmCallService(db_session_factory)` owns every
+      `pb_llm_call` write and nothing else: the pending row, the completed row, the
+      failed row, each in its own short committed transaction
+    - `llm_service.py` — `LlmService(llm_provider_services, llm_call_service,
+      llm_settings)` with `complete(llm_completion_input, auth_user)` and
+      `complete_structured(llm_completion_input, output_type, auth_user)`. Resolves
+      the tier, asks `LlmCallService` for the pending row, times the call, then records
+      the outcome: the status and reason come from the provider's reason through
+      `LLM_STATUS_BY_REASON`. The row is written before the matching exception from
+      `LLM_EXCEPTION_BY_REASON` is raised, so a call that produced nothing is still on
+      record with what it cost. A raised exception records `error_code` (the exception
+      class name), `error_message`, its `provider_error_message` and its own `reason`
+      when it is an `LlmException`. Logs `llm_call_completed` at info with tier, model,
+      purpose, all four token counts, cost and duration
+- `libs/database/orm/llm_call.py` — `LlmCallOrm`, plus the migration below
+- `apps/api/core/config.py` — `openai_api_key: str` (required, `min_length=1`) and
+  `llm: LlmSettings`. `OPENAI_API_KEY=` added to `.env.example`. A missing or blank key
+  fails at startup with a settings error, rather than every LLM call finding out later
+- `apps/api/app_factory.py` — `create_app()` builds `AppSettings()` and puts it on
+  `app.state.settings`; `lifespan` reads it from there instead of building its own.
+  That's what lets `create_app()` include `dev_llm_router` only when `environment`
+  is `DEVELOPMENT`
+- `apps/api/lifespan.py` — `openai_client` on `app.state` when the key is set, with
+  `max_retries` from `LlmSettings`, closed at shutdown
+- `apps/api/core/dependencies.py` — `get_llm_service` / `LlmServiceDep`. LLM access
+  is app-wide infrastructure like the db session, and both `dev_llm` and
+  `generate_text` need it, but domains can't import each other
+- `apps/api/domains/dev_llm/` — `POST /dev/llm/complete`, guarded by `AuthUserDep`
+  (it spends money, and `created_by_id` needs a user). `CompleteLlmDto
+  { llm_type, system_prompt, user_prompt }` → `LlmCompletionResponseDto
+  { llm_call_identity, content, input_tokens, output_tokens }`. The `purpose` is a
+  constant, `dev_llm_complete`. Text only; structured output is verified by a
+  `live_llm` test
+- Tests, all with no network:
+  - `LlmService` against an `LlmProviderServiceStub`: a row per call in each status,
+    cost from the pricing map, a zero cost plus a warning for an unpriced model, the
+    `FAILED` row surviving a raised error, structured output parsed into its type
+  - `OpenAiLlmService` against canned Responses API payloads in
+    `tests/payloads/openai.py`: usage mapping, finish reasons, refusal, each error
+    mapped, no client
+  - The dev route through the test client with `LlmServiceStub`, which is also
+    what step 13 uses. Tests run with `ENVIRONMENT=TEST`, so the route test builds
+    the app with `DEVELOPMENT`
+  - One `-m live_llm` test per method against the real API, run by hand
 
-**Open when detailing:** which providers are in scope and whether that means a
-provider abstraction now; the tracking table's columns; whether the dev router
-requires sign-in.
+### `pb_llm_call`
 
-**Verify:** call the dev router against more than one model, get real text back,
-and confirm a tracking row per call with token counts. Remove the API key and confirm
-a clean error response rather than a stack trace. `uv run pytest` passes with no
-network.
+Standard shared columns, plus:
+
+| Column | Type | Notes |
+| ------ | ---- | ----- |
+| `llm_type` | `pb_llm_type NOT NULL` | The tier asked for |
+| `provider` | `pb_llm_provider_type NOT NULL` | |
+| `model_name` | `TEXT NOT NULL` | Resolved model, not the tier. Text, since models change too often for an enum |
+| `purpose` | `TEXT NOT NULL` | The caller's constant, e.g. `generate_outline` |
+| `system_prompt` | `TEXT` | |
+| `user_prompt` | `TEXT NOT NULL` | |
+| `response_text` | `TEXT` | |
+| `response_json` | `JSONB` | Parsed structured output. Set means the call was structured |
+| `reason` | `pb_llm_call_reason_type` | Why the call produced nothing. Null while pending and on a call that succeeded |
+| `status` | `pb_llm_call_status_type NOT NULL DEFAULT 'PENDING'` | The coarse outcome |
+| `input_tokens` | `INTEGER` | Null until the call returns: `0` would read as "this cost nothing" |
+| `output_tokens` | `INTEGER` | Includes reasoning tokens, as OpenAI reports it |
+| `cached_input_tokens` | `INTEGER` | |
+| `reasoning_tokens` | `INTEGER` | Informational; already counted in `output_tokens` |
+| `cost_usd` | `NUMERIC(16,10)` | Computed at write time from `model_pricing`. Ten decimals holds a single token exactly at the cheapest rates — a batch-discounted cached nano tier — and six integer digits leave room for any one call |
+| `duration_ms` | `INTEGER` | Elapsed request to response. Not "latency", which usually means time to first token |
+| `error_code` | `TEXT` | Exception class name |
+| `error_message` | `TEXT` | Our message, the one the API returns |
+| `provider_error_message` | `TEXT` | The provider's own error text, for debugging. Never returned to a client |
+| `provider_request_reference` | `TEXT` | The provider's request id, for support tickets |
+
+- Index `pb_llm_call_created_by_id_idx` for per-user spend.
+- `created_by_id` is the acting user. Calls with no user in scope will use the system
+  user, which is designed when the first one appears.
+- Changed from the first sketch: `user_id` is covered by the audit columns;
+  `output_schema` dropped, since `purpose` identifies the output type and
+  `response_json` shows the call was structured; `attempt` dropped until we own a
+  retry loop, because the SDK retries invisibly and it would always read 1.
+- `run_id` and `step_id` arrive with the generation-runs step, as nullable FK columns
+  here, since a call belongs to at most one step. Decide `ON DELETE` then: a cost row
+  probably shouldn't disappear with its run, which argues for `SET NULL` over
+  `CASCADE`.
+- One revision: the four enum types, then the table. `status` and `reason` are cut so
+  they don't overlap: an earlier draft had `REFUSED` in the status and `REFUSAL` in the
+  reason, and a `STOP` reason that only restated `SUCCEEDED`.
+
+### Defaults
+
+| Tier | Provider | Model |
+| ---- | -------- | ----- |
+| `FAST` | `OPENAI` | `gpt-4o-mini` |
+| `STRONG` | `OPENAI` | `gpt-5.6-sol` |
+| `THINKING` | `OPENAI` | `o3` |
+
+Pricing defaults for those three come from OpenAI's pricing page. Confirm them when
+building: prices change, and `gpt-5.6-sol` is on promotional pricing through at least
+2026-11-21.
+
+**Verify:** call `/dev/llm/complete` once per tier, get real text back, and confirm
+one `SUCCEEDED` row per call with tokens and a non-zero cost. Blank the API key and
+confirm the app refuses to start with a settings error naming `openai_api_key`, rather
+than booting and failing on the first call. Set `ENVIRONMENT=PRODUCTION` and confirm
+`/dev/llm/complete` 404s. `uv run pytest` passes with no network, and
+`uv run pytest -m live_llm` passes with a key.
 
 ---
 
@@ -560,7 +730,7 @@ Build:
   factory wires it
 - `apps/api/domains/generate_text/` — `dtos.py` with `GenerateTextDto` + `to_input()`
   and `GeneratedTextResponseDto` + `from_result()`, `dependencies.py`, `router.py` at
-  `/generate-text`, guarded by `CurrentUserDep`
+  `/generate-text`, guarded by `AuthUserDep`
 - Frontend write screen: a form posting to `/generate-text` through the typed API
   client and rendering the result
 - Tests both sides: service called directly, route via the test client
@@ -590,3 +760,13 @@ Personas, saved posts and the blog feed, the human-in-the-loop review flow, the
 un-AI-ify module, Anthropic as a second provider, scheduled publishing, RSS context.
 Step 14 ends with a working single-user writing tool, which is the point at which
 the persona model can be designed against something real.
+
+Noted for when load demands it:
+
+- **A worker app for long LLM work.** A multi-step graph can run for minutes, which
+  shouldn't be tied to an HTTP request. `apps/worker/` pulls jobs from a Redis queue;
+  the API returns a run identity the frontend polls. `libs/llm/` moves over unchanged.
+- **A shared rate limiter.** Provider rate limits are per account, so several API or
+  worker instances need one limiter in Redis rather than a count per process.
+- **Owned retries.** Turn off the SDK's hidden retries and retry in `LlmService`, one
+  `pb_llm_call` row per attempt with an `attempt` column.
