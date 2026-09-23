@@ -45,7 +45,7 @@ The rules files say where each of these lives and how it is shaped.
   If the task needs a table, column, index, or enum column that doesn't exist, don't
   write code that uses it. List the schema change under "Follow-up needed": the table,
   each column with type, nullability and default, and any constraints.
-- **Tests** — owned by the `test-writer` agent. List the source files, service
+- **Tests** — owned by the `be-test-writer` agent. List the source files, service
   methods, and routes that need tests, so the work can be handed to it.
 - **App setup files** — `lifespan.py`, `main.py`, `libs/database/base.py`,
   `session.py`, `column_types.py` and `constants.py`, `core/dependencies.py`, `core/dtos.py`, `core/exception_handlers.py`,

@@ -33,13 +33,28 @@ uv run python -m scripts.check_schema_drift  # Orm metadata vs the migrated sche
 uv run granian --interface asgi apps.api.main:app --reload   # dev server
 ```
 
-Run `ruff check` and `pytest` before proposing a commit.
+Run from `frontend/`:
+
+```bash
+npm install                  # install from package-lock.json
+npm run dev                  # dev server at http://localhost:5173
+npm run fmt                  # format with oxfmt
+npm run fmt:check            # check formatting without writing
+npm run lint                 # oxlint
+npm run build                # type-check and build to dist/
+npx shadcn@latest add <name> # add a shadcn/ui component to src/components/ui/
+```
+
+Before proposing a commit, run `ruff check` and `pytest` for backend changes, and
+`npm run fmt:check`, `npm run lint` and `npm run build` for frontend changes.
 
 ## Non-obvious stack choices
 
 granian (not uvicorn) · structlog → Logfire (not stdlib logging) · uv (not pip or
 poetry) · async SQLAlchemy throughout · LangGraph for agent workflows · Pydantic
-Settings from TOML, overridden by env vars.
+Settings from TOML, overridden by env vars. On the frontend: npm (not pnpm or
+yarn) · oxlint and oxfmt (not ESLint or Prettier), with oxfmt pinned to an exact
+version because it's pre-1.0.
 
 Ask before adding a dependency.
 
@@ -60,9 +75,20 @@ written. They are expected to grow.
   matching edits to their descriptions and scope lists.
 - Propose the edit; don't apply it unless asked.
 - Before proposing a commit that changes `.claude/rules/`, `.claude/agents/`, or
-  `.claude/commands/`, run the `docs-auditor` agent on the changed files. Fix what it
-  finds in those files, and report the rest. Plan edits and small wording changes
-  skip it.
+  `.claude/commands/`, run the auditor for each side the change touches on the
+  changed files: `be-docs-auditor` for the backend, `fe-docs-auditor` for the
+  frontend. Pass each one only its own side's files; they skip the other side's
+  silently, so a file in neither list goes unaudited. Fix what each finds in those
+  files, and report the rest. Plan edits and small wording changes skip it.
+
+## Agents
+
+An agent in `.claude/agents/` is named for the side of the stack it works on:
+
+- `react-` for frontend agents that write or review React code: `react-coder`
+- `fe-` for other frontend work, such as styling or the frontend docs: `fe-docs-auditor`
+- `be-` for backend agents: `be-test-writer`, `be-docs-auditor`. Agents named for a
+  backend tool, `fastapi-coder` and `schema-coder`, keep the tool name instead
 
 ## Git
 

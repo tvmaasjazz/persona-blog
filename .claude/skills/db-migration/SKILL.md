@@ -49,7 +49,7 @@ same steps.
    The stairway test rebuilds `pb_test` from empty and leaves it at head, so the drift
    check runs against the new schema. A failure in the full suite after a schema change
    usually means a factory or test needs the new column. That work belongs to
-   `test-writer`.
+   `be-test-writer`.
 8. **Stop.** Never run `alembic upgrade` or `downgrade` against the database in `.env`.
    Report what changed and let Tyler apply it to `pb_local` with
    `uv run alembic upgrade head`.

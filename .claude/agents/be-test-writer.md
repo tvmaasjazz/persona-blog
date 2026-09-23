@@ -1,5 +1,5 @@
 ---
-name: test-writer
+name: be-test-writer
 description: Writes pytest tests for existing backend code to this project's settled testing conventions — test modules, conftest fixtures, stubs, factories, and third-party payloads under backend/tests/ — then runs them with pytest and ruff. Use once the code under test exists. It does not see this conversation, so pass the source files, service methods or routes to cover, and the intended behaviour wherever the code alone doesn't make it obvious. Never edits anything outside backend/tests/.
 tools: Read, Write, Edit, Glob, Grep, Bash
 model: sonnet

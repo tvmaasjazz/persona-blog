@@ -48,7 +48,7 @@ Then look at what already exists:
 - **Application code**: services, Input and Result models, DTOs, dependencies, routers.
   That's `fastapi-coder`'s job.
 - **Tests**: anything under `backend/tests/`, including factories that need a new
-  column. That's `test-writer`'s job. The migration tests already cover every revision.
+  column. That's `be-test-writer`'s job. The migration tests already cover every revision.
 
 ## Running commands
 

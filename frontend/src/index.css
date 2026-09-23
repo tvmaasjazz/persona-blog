@@ -1,1 +1,109 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design tokens. Components use the Tailwind names on the left (bg-card,
+ * text-muted-foreground, rounded-lg), never raw colors or sizes.
+ *
+ * Dark only for now: the values live under .dark and index.html sets
+ * class="dark" on <html>. Adding light mode means a :root block with the same
+ * variable names and a script that toggles the class; no component changes.
+ *
+ * Values are measured from substack.com, with purple in place of its orange.
+ */
+@theme inline {
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji';
+  /* Post body text. Spectral isn't loaded yet; it falls back to Georgia. */
+  --font-serif: Spectral, Georgia, 'Times New Roman', serif;
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* 8px: buttons. rounded-xl (12px): inputs, nav items. rounded-2xl (16px): cards, dialogs. */
+  --radius: 0.5rem;
+
+  --background: #161718;
+  --foreground: #ececed;
+  --card: #1b1c1d;
+  --card-foreground: #ececed;
+  --popover: #1b1c1d;
+  --popover-foreground: #ececed;
+
+  /* Filled purple with white text: 4.5:1, passes WCAG AA. */
+  --primary: #7a5af8;
+  --primary-foreground: #ffffff;
+  /* Purple text on the page background: 6.6:1. #7a5af8 as text is only 4:1. */
+  --primary-text: #a78bfa;
+
+  /* The grey "Sign in" button beside the purple one. */
+  --secondary: #2a2b2d;
+  --secondary-foreground: #ececed;
+  --muted: #1f2022;
+  --muted-foreground: #9b9b9e;
+  /* Hover background for nav items and ghost buttons. */
+  --accent: #222325;
+  --accent-foreground: #ececed;
+  --destructive: #f2555a;
+
+  --border: #2c2d2f;
+  --input: #2c2d2f;
+  --ring: #a78bfa;
+
+  --sidebar: #161718;
+  --sidebar-foreground: #ececed;
+  --sidebar-primary: #7a5af8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #222325;
+  --sidebar-accent-foreground: #ececed;
+  --sidebar-border: #2c2d2f;
+  --sidebar-ring: #a78bfa;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+}
