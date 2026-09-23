@@ -91,6 +91,7 @@ backend/tests/
 | ------------------------------------ | -------------------------------------- | -------------- |
 | `libs/<d>/services.py`, or each module in `libs/<d>/services/` | `tests/libs/<d>/test_services.py`, or `test_<service>.py` | For each public method: happy path, each branch, each exception it raises, each collaborator failure it handles. With a database, also persisted state, not found, constraint violations, related rows loaded (§2, §3) |
 | `libs/<d>/prompts.py`                | `tests/libs/<d>/test_prompts.py`       | Each builder: the arguments appear in the output (§1) |
+| `libs/<d>/utils/*.py`, `libs/core/utils/*.py` | `tests/libs/<d>/test_<utils>.py` | Every branch of every static method (§1, §2). A `Utils` class whose only output is a wall-clock measurement, like `DateTimeUtils`, gets no file: its effect is asserted through the service |
 | `libs/<d>/inputs.py`, `results.py`   | `tests/libs/<d>/test_inputs.py`, `test_results.py` | Only models with a validator or declared constraint: accepted and rejected values (§1) |
 | Class with an enum dispatch map      | That class's test file                 | Every enum member has a handler (§1) |
 | `apps/api/domains/<d>/router.py`     | `tests/api/<d>/test_router.py`         | For each route: happy path, 422 per declared constraint, each exception the service raises, 401 if protected, persisted state for writes (§6) |
@@ -219,7 +220,14 @@ Use stubs, never mocks.
 | One of our services                 | Hand-written `<Class>Stub` in `tests/stubs/<domain>.py`       |
 | Third-party HTTP API                | The real SDK client over `httpx.MockTransport` (§4)           |
 | Postgres, Redis                     | The real thing                                                |
+| A `Utils` class                     | Nothing. It is pure, so call the real one                     |
 | Anything reachable only by patching | Nothing. Report it: the code has a hidden dependency to fix   |
+
+A `Utils` class is never stubbed. Its methods are static and pure — same inputs, same
+outputs, no I/O and no clock — so the reason to stub a collaborator doesn't apply, and
+faking one would mean patching. Its own test module covers every branch; a service
+test calls the real one and asserts the wiring, not the arithmetic, keeping its
+expected values simple enough to read at a glance.
 
 - `unittest.mock.patch`, `MagicMock`, `AsyncMock`, and `monkeypatch.setattr` are
   banned. Needing one means the code should take that dependency through `__init__`

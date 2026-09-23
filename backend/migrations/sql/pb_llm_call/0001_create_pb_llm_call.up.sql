@@ -29,7 +29,7 @@ CREATE TABLE pb_llm_call (
     output_tokens INTEGER,
     cached_input_tokens INTEGER,
     reasoning_tokens INTEGER,
-    cost_usd NUMERIC(12, 6),
+    cost_usd NUMERIC(16, 10),
     duration_ms INTEGER,
     error_code TEXT,
     error_message TEXT,

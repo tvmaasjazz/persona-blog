@@ -34,7 +34,7 @@ class LlmCallOrm(BaseOrm):
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     cached_input_tokens: Mapped[int | None] = mapped_column(Integer)
     reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
-    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(16, 10))
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     error_code: Mapped[str | None]
     error_message: Mapped[str | None]

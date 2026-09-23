@@ -650,7 +650,7 @@ Standard shared columns, plus:
 | `output_tokens` | `INTEGER` | Includes reasoning tokens, as OpenAI reports it |
 | `cached_input_tokens` | `INTEGER` | |
 | `reasoning_tokens` | `INTEGER` | Informational; already counted in `output_tokens` |
-| `cost_usd` | `NUMERIC(12,6)` | Computed at write time from `model_pricing` |
+| `cost_usd` | `NUMERIC(16,10)` | Computed at write time from `model_pricing`. Ten decimals holds a single token exactly at the cheapest rates — a batch-discounted cached nano tier — and six integer digits leave room for any one call |
 | `duration_ms` | `INTEGER` | Elapsed request to response. Not "latency", which usually means time to first token |
 | `error_code` | `TEXT` | Exception class name |
 | `error_message` | `TEXT` | Our message, the one the API returns |
