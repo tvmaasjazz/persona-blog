@@ -4,10 +4,10 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from libs.generate_text.nodes import review_blog_post, rewrite_blog_post, write_blog_post
+from libs.generate_text.services import GenerateTextNodeService
 from libs.generate_text.settings import GenerateTextSettings
 from libs.generate_text.states import GenerateTextState
-from libs.llm.services import LlmService
+from libs.generate_text.types import GenerateTextNodeType
 
 
 def _route_after_review(
@@ -15,32 +15,38 @@ def _route_after_review(
 ) -> str:
     if state.is_approved or state.rewrite_count >= generate_text_settings.max_rewrite_passes:
         return END
-    return "rewrite_blog_post"
+    return GenerateTextNodeType.REWRITE_BLOG_POST
 
 
 def build_generate_text_graph(
-    llm_service: LlmService,
+    generate_text_node_service: GenerateTextNodeService,
     generate_text_settings: GenerateTextSettings,
     checkpointer: BaseCheckpointSaver,
 ) -> CompiledStateGraph:
-    write_blog_post_node = functools.partial(write_blog_post, llm_service=llm_service)
-    rewrite_blog_post_node = functools.partial(rewrite_blog_post, llm_service=llm_service)
     route_after_review = functools.partial(
         _route_after_review, generate_text_settings=generate_text_settings
     )
 
     state_graph = StateGraph(GenerateTextState)
-    state_graph.add_node("write_blog_post", write_blog_post_node)
-    state_graph.add_node("review_blog_post", review_blog_post)
-    state_graph.add_node("rewrite_blog_post", rewrite_blog_post_node)
+    # Every member is added, so a node type without a node fails here rather than at the
+    # first run that reaches it.
+    for node_type in GenerateTextNodeType:
+        state_graph.add_node(node_type, generate_text_node_service.get_node(node_type))
 
-    state_graph.add_edge(START, "write_blog_post")
-    state_graph.add_edge("write_blog_post", "review_blog_post")
-    state_graph.add_conditional_edges(
-        "review_blog_post",
-        route_after_review,
-        {END: END, "rewrite_blog_post": "rewrite_blog_post"},
+    state_graph.add_edge(START, GenerateTextNodeType.WRITE_BLOG_POST)
+    state_graph.add_edge(
+        GenerateTextNodeType.WRITE_BLOG_POST, GenerateTextNodeType.REVIEW_BLOG_POST
     )
-    state_graph.add_edge("rewrite_blog_post", "review_blog_post")
+    state_graph.add_conditional_edges(
+        GenerateTextNodeType.REVIEW_BLOG_POST,
+        route_after_review,
+        {
+            END: END,
+            GenerateTextNodeType.REWRITE_BLOG_POST: GenerateTextNodeType.REWRITE_BLOG_POST,
+        },
+    )
+    state_graph.add_edge(
+        GenerateTextNodeType.REWRITE_BLOG_POST, GenerateTextNodeType.REVIEW_BLOG_POST
+    )
 
     return state_graph.compile(checkpointer=checkpointer)
