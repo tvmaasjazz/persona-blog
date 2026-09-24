@@ -11,12 +11,30 @@ set -euo pipefail
 API_URL="${API_URL:-http://localhost:8000}"
 PROMPT_TEXT="${PROMPT_TEXT:-Why sourdough starter needs a feeding schedule}"
 FEEDBACK_TEXT="${FEEDBACK_TEXT:-Too general. Give concrete timings and temperatures.}"
+# Exported so the json_body python below can read them from os.environ.
+export PROMPT_TEXT FEEDBACK_TEXT
 
 step() { printf '\n\033[1m── %s\033[0m\n' "$1"; }
 fail() { printf '\033[31mFAIL\033[0m %s\n' "$1"; exit 1; }
 pass() { printf '\033[32m  ok\033[0m %s\n' "$1"; }
 
 read_json_field() { python3 -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
+# Builds a JSON object from key=value pairs: @NAME reads environment variable NAME as
+# a string, anything else is parsed as a JSON literal. The python is single-quoted and
+# the pairs arrive as argv because bash 3.2, still Apple's /bin/bash, mis-parses a
+# double-quoted $( ) that contains double quotes: the braces end up unquoted and the
+# payload is brace-expanded into two arguments.
+json_body() {
+  python3 -c '
+import json, os, sys
+
+body = {}
+for pair in sys.argv[1:]:
+    key, _, source = pair.partition("=")
+    body[key] = os.environ[source[1:]] if source.startswith("@") else json.loads(source)
+print(json.dumps(body))
+' "$@"
+}
 print_json() { python3 -m json.tool; }
 
 step "Checking the dev server"
@@ -68,7 +86,7 @@ pass "session ready"
 step "1. Generate — expect AWAITING_REVIEW with a draft"
 GENERATE_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
-  -d "$(python3 -c "import json,os; print(json.dumps({'text_type': 'BLOG_POST', 'prompt_text': os.environ['PROMPT_TEXT']}))")")"
+  -d "$(json_body text_type='"BLOG_POST"' prompt_text=@PROMPT_TEXT)")"
 echo "$GENERATE_RESPONSE" | print_json
 THREAD_IDENTITY="$(echo "$GENERATE_RESPONSE" | read_json_field thread_identity)"
 [ "$(echo "$GENERATE_RESPONSE" | read_json_field status)" = "AWAITING_REVIEW" ] || fail "expected AWAITING_REVIEW"
@@ -77,7 +95,7 @@ pass "thread $THREAD_IDENTITY is awaiting review"
 step "2. Reject with direction — expect a new draft, still AWAITING_REVIEW"
 REJECT_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/$THREAD_IDENTITY/resume" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
-  -d "$(python3 -c "import json,os; print(json.dumps({'is_approved': False, 'feedback_text': os.environ['FEEDBACK_TEXT']}))")")"
+  -d "$(json_body is_approved=false feedback_text=@FEEDBACK_TEXT)")"
 echo "$REJECT_RESPONSE" | print_json
 [ "$(echo "$REJECT_RESPONSE" | read_json_field status)" = "AWAITING_REVIEW" ] || fail "expected AWAITING_REVIEW"
 [ "$(echo "$REJECT_RESPONSE" | read_json_field content)" != "$(echo "$GENERATE_RESPONSE" | read_json_field content)" ] \
