@@ -869,7 +869,9 @@ way.
 
 | Situation                   | Pattern |
 | --------------------------- | ------- |
-| Node                        | A node is a function of state. Test it like a service: stubs in, assert the returned state update |
+| Node                        | Take it from `get_node(<Domain>NodeType.X)` and call it with a state: stubs in, assert the returned state update |
+| Every node type has a node  | Parametrize over `list(<Domain>NodeType)` and assert `get_node` returns one for each |
+| A node that interrupts      | Can't run outside a graph. Cover it through the whole-run tests |
 | Whole run                   | Compile with `InMemorySaver` and stubs whose `<method>_results` are scripted per pass. `ainvoke`, then assert the final state and the stub's call count |
 | Loop bound                  | The stub never meets the exit condition. Assert the graph stops at the settings limit, not at a recursion error |
 | Human review interrupt      | `ainvoke` to the interrupt, then assert `aget_state(...).interrupts[0].value` carries the paused payload |

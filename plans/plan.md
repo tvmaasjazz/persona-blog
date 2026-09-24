@@ -769,14 +769,13 @@ Build:
 
 - `libs/generate_text/`
   - `types.py` — `TextType` (`BLOG_POST`), `GenerateTextStatusType`
-    (`AWAITING_REVIEW`, `COMPLETED`)
+    (`AWAITING_REVIEW`, `COMPLETED`), and `GenerateTextNodeType`, whose members are the
+    graph's node names
   - `states.py` — `GenerateTextState`, the graph's state model: the acting user, the
     text type, the prompt, the draft, the reviewer's feedback, the rewrite count
-  - `nodes.py` — `write_blog_post`, `review_blog_post`, `rewrite_blog_post`. Each is a
-    function of state; the `LlmService` and settings they need are closed over by the
-    builder, so a node never reaches for a collaborator
-  - `graphs.py` — `build_generate_text_graph(llm_service, generate_text_settings)`,
-    compiled with the checkpointer the caller passes
+  - `graphs.py` — `build_generate_text_graph(generate_text_node_service,
+    generate_text_settings, checkpointer)`, which adds a node per enum member and
+    compiles with the checkpointer it is given
   - `prompts.py` — `GenerateTextPrompt.build_system_prompt()`,
     `.build_user_prompt(prompt_text, text_type)` and `.build_rewrite_user_prompt(...)`,
     templates as `UPPER_SNAKE` constants
@@ -785,7 +784,9 @@ Build:
     `ResumeGenerateTextInput { is_approved, feedback_text | None }`
   - `results.py` — `GenerateTextResult { thread_identity, status, content,
     character_count }`, returned by both service methods
-  - `services.py` — `GenerateTextService.generate_text(input, auth_user)` mints the
+  - `services/` — `GenerateTextNodeService`, holding each node as a private method
+    behind `get_node(node_type)`, and `GenerateTextService`.
+    `GenerateTextService.generate_text(input, auth_user)` mints the
     thread identity and runs the graph to its first pause;
     `.resume_generate_text(thread_identity, input, auth_user)` checks the thread exists,
     belongs to the caller and is actually paused, then resumes it
@@ -795,9 +796,12 @@ Build:
 - `apps/api/domains/generate_text/` — `dtos.py`, `dependencies.py`, and `router.py`
   with `POST /generate-text` and `POST /generate-text/{thread_identity}/resume`, both
   guarded by `AuthUserDep`
-- Tests: the nodes as functions of state, the graph through an interrupt and a resume
-  with `InMemorySaver`, the service with a stub `LlmService`, and both routes through
-  the test client
+- Tests: each node taken from `get_node`, every node type resolving to a node, the
+  graph through an interrupt and a resume with `InMemorySaver`, the service with a stub
+  `LlmService`, and both routes through the test client
+
+The file-by-file shape is owned by `fastapi-structure.md` › LangGraph workflows; this
+list says what this step builds, not how a graph is laid out in general.
 
 **Verify:** generate a blog post, confirm the response is `AWAITING_REVIEW` with a
 draft and a thread identity. Resume with a rejection and direction, confirm the draft

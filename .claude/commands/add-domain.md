@@ -43,8 +43,8 @@ for the files the domain needs from this list:
   - `tasks.py` — only if the domain has work that runs after a response
   - `prompts.py` — only if the domain calls an LLM
   - `exceptions.py` — only if the domain needs exceptions callers must tell apart
-  - `states.py`, `nodes.py`, `graphs.py` — only if the domain's work is a graph
-    (`fastapi-structure.md` › LangGraph workflows)
+  - `states.py`, `graphs.py` and a `<Domain>NodeService` in `services/` — only if the
+    domain's work is a graph (`fastapi-structure.md` › LangGraph workflows)
 - `apps/api/domains/$1/`
   - `dtos.py`, `dependencies.py`, and `router.py`
 - Wiring: the router in `apps/api/app_factory.py`, and the settings model on
