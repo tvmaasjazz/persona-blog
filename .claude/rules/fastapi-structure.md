@@ -47,6 +47,9 @@ backend/
 │   └── users/
 │       ├── services.py        # UserService
 │       ├── utils/             # UserUtils: static builders and mappers, if any
+│       ├── states.py          # UserState, if the domain has a graph
+│       ├── nodes.py           # the graph's node functions
+│       ├── graphs.py          # build_user_graph(), and its routing functions
 │       ├── inputs.py          # CreateUserInput, ...
 │       ├── results.py         # CreateUserResult, ...
 │       ├── settings.py        # UserSettings (BaseModel)
@@ -109,6 +112,27 @@ Functions that build or map values — no db session, no client, no state — li
 re-exporting each one (`python-naming.md` › Class suffixes). A service keeps
 orchestration; the shaping of what it passes and returns moves out. Utilities with no
 domain at all, like `DateTimeUtils`, live in `libs/core/utils/`.
+
+### LangGraph workflows
+
+A domain whose work is a graph keeps it in three modules beside its service:
+
+- `states.py` — one `<Domain>State`, the graph's state model.
+- `nodes.py` — the node functions, each `async`, each a function of state returning a
+  dict of state updates. A node never reaches for a collaborator: the builder closes
+  over the services it needs, so a node's signature says everything it touches.
+- `graphs.py` — `build_<domain>_graph(...)`, which wires the nodes and compiles with
+  the checkpointer it is given, plus the routing functions its conditional edges use.
+
+**A graph state holds primitives only** — `str`, `int`, `bool`, `UUID`, and containers
+of them. The state is a persisted wire format, not an in-memory object: a domain class
+in there ties every stored checkpoint to that class's import path, and LangGraph will
+refuse to deserialize unregistered types in a future version. Rebuild the domain type
+at the node boundary instead.
+
+The service owns the graph's lifecycle, not its shape: it mints the thread identity,
+runs the graph, reads the snapshot, and maps it to a `Result`. The compiled graph is
+built by the dependency factory and handed to the service through `__init__`.
 
 ### Background tasks
 

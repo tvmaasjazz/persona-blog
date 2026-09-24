@@ -26,6 +26,7 @@ Every class ends in the suffix for what it is:
 | `Service`    | Business logic, framework-free               | `AccountService`                 |
 | `BaseService`| An abstract service that other services implement | `LlmProviderBaseService`    |
 | `Utils`      | Stateless static builders and mappers for one domain | `LlmUtils`, `DateTimeUtils` |
+| `State`      | A LangGraph graph's state model              | `GenerateTextState`              |
 | `Middleware` | ASGI / FastAPI middleware                    | `RequestLogMiddleware`           |
 | `Dto`        | Inbound HTTP body (`apps/` only)             | `BlogPostDto`, `GenerateTextDto` |
 | `QueryDto`   | A list route's query model (`apps/` only)    | `BlogPostFetchAllQueryDto`       |
