@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI
 from httpx import AsyncClient
+from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 from openai import AsyncOpenAI
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -29,6 +30,23 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     fastapi_app.state.redis_client = redis_client
     fastapi_app.state.http_client = http_client
     fastapi_app.state.openai_client = openai_client
+
+    # RediSearch can only index database 0, so the checkpointer is built only there. The
+    # test suite runs on database 15 and puts an InMemorySaver on app.state instead.
+    redis_database_index = redis_client.connection_pool.connection_kwargs.get("db")
+    fastapi_app.state.graph_checkpointer = None
+    if redis_database_index == 0:
+        graph_checkpointer = AsyncRedisSaver(
+            redis_client=redis_client,
+            ttl={
+                "default_ttl": app_settings.generate_text.checkpoint_ttl_minutes,
+                "refresh_on_read": True,
+            },
+        )
+        await graph_checkpointer.asetup()
+        fastapi_app.state.graph_checkpointer = graph_checkpointer
+    else:
+        logger.warning("graph_checkpointer_unavailable", redis_database_index=redis_database_index)
 
     logger.info(
         "api_started",
