@@ -725,31 +725,88 @@ than booting and failing on the first call. Set `ENVIRONMENT=PRODUCTION` and con
 
 ## Step 13 — `generate_text` lib + domain
 
-Outline only — detailed once step 12 has settled the LLM lib. This is the app's core
-logic, built as a LangGraph workflow on top of `LlmService`.
+The app's core logic: a LangGraph workflow on top of `LlmService`, with a human review
+pause in the middle. This step proves the workflow and the code structure. How nodes
+and graphs are organized per text type comes after, once there is more than one type.
+
+The graph writes a draft, pauses for review, and either finishes or rewrites with the
+reviewer's direction:
+
+```
+START → write_blog_post → review_blog_post ─ approved ──────────→ END
+                               ↑                  │
+                               └─ rewrite_blog_post ← rejected
+```
+
+`review_blog_post` calls `interrupt()`, so the pause lives in the node and the route
+only passes the reviewer's decision back as a `Command(resume=...)` payload. The
+rewrite edge is bounded by `max_rewrite_passes`, so a reviewer who keeps rejecting
+ends at `END` with the last draft rather than looping forever.
+
+**Each HTTP request covers one LLM call**, because the interrupt splits the workflow
+across requests: generate, then resume per review round. That is what makes plain
+JSON over HTTP sufficient here, with no SSE. A single response has to survive one
+generation, not a whole workflow. SSE earns its place when a request would otherwise
+sit idle long enough for a proxy to cut it, or when the draft should appear
+progressively; neither is true yet, and the durable answer for long runs is the worker
+in "Deliberately deferred", not a longer-lived request.
+
+**Checkpoints live in Redis**, through `langgraph-checkpoint-redis`, so a resume that
+lands on another instance finds the thread. `redis:8` already ships the RediSearch and
+RedisJSON modules it needs; Redis 7 and below would need Redis Stack, which is a
+deploy-time check for step 14. The alternative, checkpointing into Postgres, would add
+psycopg 3 beside asyncpg, create its own tables outside Alembic, and show up in the
+drift check — three costs for one datastore.
+
+**No run table yet.** The acting user goes into the graph state, and resume compares it
+with the caller, answering `NotFoundException` when they differ so a stranger's thread
+is indistinguishable from one that never existed. A `pb_generate_text_run` row is what
+makes that a real lookup, along with status, cost rollups and the step history the UI
+will want; it lands with the step that reads it, and `pb_llm_call` gains its `run_id`
+and `step_id` then.
 
 Build:
 
-- `libs/generate_text/` — `services.py` with `GenerateTextService.generate_text()`,
-  `inputs.py` with `GenerateTextInput { text_type, prompt_text }`, `results.py` with
-  `GenerateTextResult { content, character_count }`
-- `TextType(StrEnum)` with the single member `BLOG_POST = "BLOG_POST"` in
-  `libs/generate_text/types.py`
-- `libs/generate_text/prompts.py` — `GenerateTextPrompt.build_system_prompt()` and
-  `.build_user_prompt(prompt_text, text_type)`, templates as `UPPER_SNAKE` constants
-- The LangGraph workflow. `langgraph` is a new dependency, confirmed when this step
-  is detailed
-- `GenerateTextService` takes an `LlmService` through `__init__`; the dependency
-  factory wires it
-- `apps/api/domains/generate_text/` — `dtos.py` with `GenerateTextDto` + `to_input()`
-  and `GeneratedTextResponseDto` + `from_result()`, `dependencies.py`, `router.py` at
-  `/generate-text`, guarded by `AuthUserDep`
-- Frontend write screen: a form posting to `/generate-text` through the typed API
-  client and rendering the result
-- Tests both sides: service called directly, route via the test client
+- `libs/generate_text/`
+  - `types.py` — `TextType` (`BLOG_POST`), `GenerateTextStatusType`
+    (`AWAITING_REVIEW`, `COMPLETED`), and `GenerateTextNodeType`, whose members are the
+    graph's node names
+  - `states.py` — `GenerateTextState`, the graph's state model: the acting user, the
+    text type, the prompt, the draft, the reviewer's feedback, the rewrite count
+  - `graphs.py` — `build_generate_text_graph(generate_text_node_service,
+    generate_text_settings, checkpointer)`, which adds a node per enum member and
+    compiles with the checkpointer it is given
+  - `prompts.py` — `GenerateTextPrompt.build_system_prompt()`,
+    `.build_user_prompt(prompt_text, text_type)` and `.build_rewrite_user_prompt(...)`,
+    templates as `UPPER_SNAKE` constants
+  - `settings.py` — `GenerateTextSettings { max_rewrite_passes, checkpoint_ttl_minutes }`
+  - `inputs.py` — `GenerateTextInput { text_type, prompt_text }`,
+    `ResumeGenerateTextInput { is_approved, feedback_text | None }`
+  - `results.py` — `GenerateTextResult { thread_identity, status, content,
+    character_count }`, returned by both service methods
+  - `services/` — `GenerateTextNodeService`, holding each node as a private method
+    behind `get_node(node_type)`, and `GenerateTextService`.
+    `GenerateTextService.generate_text(input, auth_user)` mints the
+    thread identity and runs the graph to its first pause;
+    `.resume_generate_text(thread_identity, input, auth_user)` checks the thread exists,
+    belongs to the caller and is actually paused, then resumes it
+- `apps/api/lifespan.py` — the `AsyncRedisSaver` on `app.state`, built on the existing
+  Redis client with the TTL from settings, and `asetup()` once at startup to create its
+  indices
+- `apps/api/domains/generate_text/` — `dtos.py`, `dependencies.py`, and `router.py`
+  with `POST /generate-text` and `POST /generate-text/{thread_identity}/resume`, both
+  guarded by `AuthUserDep`
+- Tests: each node taken from `get_node`, every node type resolving to a node, the
+  graph through an interrupt and a resume with `InMemorySaver`, the service with a stub
+  `LlmService`, and both routes through the test client
 
-**Verify:** sign in, generate text from the write screen, sign out, confirm the form
-401s. Post an invalid `text_type` and confirm a readable 422. Confirm
+The file-by-file shape is owned by `fastapi-structure.md` › LangGraph workflows; this
+list says what this step builds, not how a graph is laid out in general.
+
+**Verify:** generate a blog post, confirm the response is `AWAITING_REVIEW` with a
+draft and a thread identity. Resume with a rejection and direction, confirm the draft
+changes. Resume with an approval, confirm `COMPLETED`. Resume the same thread again and
+confirm a 409. Resume someone else's thread and confirm a 404. Confirm
 `grep -r "from apps" libs/` returns nothing.
 
 ---

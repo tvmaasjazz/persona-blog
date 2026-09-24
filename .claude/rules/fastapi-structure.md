@@ -47,6 +47,8 @@ backend/
 │   └── users/
 │       ├── services.py        # UserService
 │       ├── utils/             # UserUtils: static builders and mappers, if any
+│       ├── states.py          # UserState, if the domain has a graph
+│       ├── graphs.py          # build_user_graph(), and its routing functions
 │       ├── inputs.py          # CreateUserInput, ...
 │       ├── results.py         # CreateUserResult, ...
 │       ├── settings.py        # UserSettings (BaseModel)
@@ -109,6 +111,40 @@ Functions that build or map values — no db session, no client, no state — li
 re-exporting each one (`python-naming.md` › Class suffixes). A service keeps
 orchestration; the shaping of what it passes and returns moves out. Utilities with no
 domain at all, like `DateTimeUtils`, live in `libs/core/utils/`.
+
+### LangGraph workflows
+
+A domain whose work is a graph spreads across four places beside its service:
+
+- `types.py` — `<Domain>NodeType`, one member per node. LangGraph takes a `StrEnum`
+  member as the node name, so nothing refers to a node by a loose string.
+- `states.py` — one `<Domain>State`, the graph's state model.
+- `services/<domain>_node_service.py` — `<Domain>NodeService`, holding every node as a
+  private `async` method and a public `get_node(node_type)` that looks it up in a
+  dispatch map built in `__init__` (`python-naming.md` › Enum dispatch). Collaborators
+  arrive through `__init__` like any other service.
+- `graphs.py` — `build_<domain>_graph(...)`, which adds a node for every member of the
+  node type enum, wires the edges, and compiles with the checkpointer it is given. Its
+  routing functions live here too.
+
+Iterating the enum to add nodes is what makes a member without a node fail when the
+graph is built, rather than on the first run that reaches it.
+
+**A graph state holds primitives only** — `str`, `int`, `bool`, `UUID`, and containers
+of them. The state is a persisted wire format, not an in-memory object. A domain class
+in there does not survive the round trip: the Redis checkpointer returns it as a
+`{"lc": 2, "type": "constructor", ...}` envelope that no longer validates, and an
+in-memory checkpointer hides that in tests because it never really serializes.
+
+**Group primitives back into a shape with a method on the state**, rather than storing
+the shape: `GenerateTextState.build_auth_user()` returns the `AuthUser` its
+`auth_user_id` and `auth_user_identity` describe. The method reads like an attribute at
+the call site, and the stored checkpoint stays plain.
+
+The service owns the graph's lifecycle, not its shape: it mints the thread identity,
+runs the graph, reads the snapshot, and maps it to a `Result`. The dependency factory
+builds the node service, then the compiled graph, and hands the graph to the service
+through `__init__`.
 
 ### Background tasks
 

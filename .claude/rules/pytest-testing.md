@@ -266,7 +266,8 @@ class WeatherServiceStub(WeatherService):
 
 Test data comes from `tests/factories/<domain>.py`, one module per lib domain:
 
-- `build_<model>(...)` returns an `Input`, a `Result`, or an unsaved `Orm`. Sync.
+- `build_<model>(...)` returns an `Input`, a `Result`, an unsaved `Orm`, or a graph
+  state model. Sync.
 - `insert_<entity>_row(db_session, ...)` adds and flushes an `Orm` and returns it.
   Async. It bypasses services, so a test of one service never depends on another
   service working.
@@ -859,18 +860,21 @@ fixture in its `conftest.py`.
 
 The stairway test has no `assert`: `check=True` raises on the first failing command.
 
-## §11 LangGraph workflows (provisional)
+## §11 LangGraph workflows
 
-`fastapi-structure.md` has no graph conventions yet. Revisit this section when the
-first graph lands.
+`fastapi-structure.md` › LangGraph workflows says where nodes, states and graphs live.
+A routing function is private and covered by whole-run tests, never called directly.
+A node that calls `interrupt()` can't run outside a graph, so it is covered the same
+way.
 
 | Situation                   | Pattern |
 | --------------------------- | ------- |
-| Node                        | A node is a function of state. Test it like a service: stubs in, assert the returned state update |
-| Conditional edge            | Call the routing function with a hand-built state and assert the next node's name |
+| Node                        | Take it from `get_node(<Domain>NodeType.X)` and call it with a state: stubs in, assert the returned state update |
+| Every node type has a node  | Parametrize over `list(<Domain>NodeType)` and assert `get_node` returns one for each |
+| A node that interrupts      | Can't run outside a graph. Cover it through the whole-run tests |
 | Whole run                   | Compile with `InMemorySaver` and stubs whose `<method>_results` are scripted per pass. `ainvoke`, then assert the final state and the stub's call count |
 | Loop bound                  | The stub never meets the exit condition. Assert the graph stops at the settings limit, not at a recursion error |
-| Human review interrupt      | `ainvoke` to the interrupt, then assert `aget_state(...).next` names the review node |
+| Human review interrupt      | `ainvoke` to the interrupt, then assert `aget_state(...).interrupts[0].value` carries the paused payload |
 | Resume after review         | From the interrupt, `ainvoke(Command(resume=...))` and assert where the graph went: publish on approval, back to rewrite on rejection |
 
 ```python

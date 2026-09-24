@@ -338,4 +338,6 @@ a column, type, nullability, index, or constraint that doesn't match. Autogenera
 detector that fails the build, never a generator that writes files.
 
 Scripts in `backend/scripts/` may import `libs/` and run as modules from `backend/`
-(`python -m scripts.<name>`). Nothing imports from `scripts/`.
+(`python -m scripts.<name>`). Nothing imports from `scripts/`. The folder also holds
+shell scripts, which are run directly rather than as modules: see `CLAUDE.md` ›
+Commands for Tyler to run.

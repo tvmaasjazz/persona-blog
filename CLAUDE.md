@@ -48,6 +48,18 @@ npx shadcn@latest add <name> # add a shadcn/ui component to src/components/ui/
 Before proposing a commit, run `ruff check` and `pytest` for backend changes, and
 `npm run fmt:check`, `npm run lint` and `npm run build` for frontend changes.
 
+### Commands for Tyler to run
+
+When something takes more than one command to check — curl calls that chain, a
+sequence that carries a value from one step to the next, setup followed by a query —
+it ships as one script in `backend/scripts/`, run with a single command. Never a list
+of commands to paste in order.
+
+The script prints each step and what came back, checks what it can and says which
+expectation failed, and fails early with the fix when a prerequisite is missing, such
+as a dev server that isn't running. `backend/scripts/verify_generate_text.sh` is the
+pattern.
+
 ## Non-obvious stack choices
 
 granian (not uvicorn) · structlog → Logfire (not stdlib logging) · uv (not pip or

@@ -8,6 +8,7 @@ from pydantic_settings import (
 
 from apps.api.core.types import EnvironmentType
 from libs.auth.settings import AuthSettings
+from libs.generate_text.settings import GenerateTextSettings
 from libs.google_auth.settings import GoogleAuthSettings
 from libs.llm.settings import LlmSettings
 from libs.users.settings import UserSettings
@@ -28,6 +29,7 @@ class AppSettings(BaseSettings):
     google_client_secret: str
     openai_api_key: str = Field(min_length=1)
     auth: AuthSettings = Field(default_factory=AuthSettings)
+    generate_text: GenerateTextSettings = Field(default_factory=GenerateTextSettings)
     google_auth: GoogleAuthSettings = Field(default_factory=GoogleAuthSettings)
     llm: LlmSettings = Field(default_factory=LlmSettings)
     users: UserSettings = Field(default_factory=UserSettings)

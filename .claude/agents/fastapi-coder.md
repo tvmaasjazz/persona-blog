@@ -1,6 +1,6 @@
 ---
 name: fastapi-coder
-description: Writes backend Python to this project's settled FastAPI conventions — services, Utils classes, Input/Result models, settings, constants, prompts, DTOs, dependency factories, thin routers, and domain wiring in AppSettings, app_factory.py, core/dependencies.py and lifespan.py. Use once the design is decided and any tables it needs exist. It does not see this conversation, so pass the domain, entities and fields, and service method signatures. Doesn't write Orm classes, migrations, or tests.
+description: Writes backend Python to this project's settled FastAPI conventions — services, Utils classes, LangGraph states, node services and graphs, Input/Result models, settings, constants, prompts, DTOs, dependency factories, thin routers, and domain wiring in AppSettings, app_factory.py, core/dependencies.py and lifespan.py. Use once the design is decided and any tables it needs exist. It does not see this conversation, so pass the domain, entities and fields, and service method signatures. Doesn't write Orm classes, migrations, or tests.
 tools: Read, Write, Edit, Glob, Grep
 model: sonnet
 effort: low
@@ -34,6 +34,9 @@ The rules files say where each of these lives and how it is shaped.
   constants, enums (`types.py`), background tasks (`tasks.py`), prompts, exceptions,
   `Utils` classes in `libs/<domain>/utils/` (and `libs/core/utils/` for ones with no
   domain)
+- **LangGraph workflow files** — `states.py`, `graphs.py`, the `<Domain>NodeType` enum
+  and the `<Domain>NodeService`, per `fastapi-structure.md` › LangGraph workflows, for
+  a domain whose work is a graph
 - **HTTP layer** — DTOs, dependency factories with their `Annotated` aliases, thin
   routers
 - **Wiring a domain in** — add its settings field to `AppSettings` and register its

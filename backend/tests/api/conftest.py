@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from langgraph.checkpoint.memory import InMemorySaver
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -20,6 +21,9 @@ async def fastapi_app(
     fastapi_app = create_app()
     async with fastapi_app.router.lifespan_context(fastapi_app):
         fastapi_app.state.db_session_factory = db_session_factory
+        # lifespan leaves this unset under TEST: RediSearch only indexes database 0 and the
+        # suite runs on 15, so graph state is kept in memory for the life of the test.
+        fastapi_app.state.graph_checkpointer = InMemorySaver()
         yield fastapi_app
 
 
