@@ -1,10 +1,13 @@
+from decimal import Decimal
 from uuid import uuid4
 
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from libs.database.orm.llm_call import LlmCallOrm
 from libs.llm.inputs import LlmCompletionInput, LlmProviderCompletionInput
 from libs.llm.results import LlmCompletionResult, LlmProviderCompletionResult
-from libs.llm.types import LlmCallReasonType, LlmType
+from libs.llm.types import LlmCallReasonType, LlmCallStatusType, LlmProviderType, LlmType
 
 
 def build_llm_completion_input(
@@ -74,3 +77,39 @@ def build_llm_provider_completion_result(
         reasoning_tokens=reasoning_tokens,
         provider_request_reference=provider_request_reference,
     )
+
+
+async def insert_llm_call_row(
+    db_session: AsyncSession,
+    *,
+    created_by_id: int,
+    run_id: int | None = None,
+    step_id: int | None = None,
+    llm_type: LlmType = LlmType.FAST,
+    provider: LlmProviderType = LlmProviderType.OPENAI,
+    model_name: str = "test-model",
+    purpose: str = "test_purpose",
+    status: LlmCallStatusType = LlmCallStatusType.SUCCEEDED,
+    input_tokens: int | None = 100,
+    output_tokens: int | None = 50,
+    cost_usd: Decimal | None = Decimal("0.01"),
+) -> LlmCallOrm:
+    llm_call_record = LlmCallOrm(
+        llm_type=llm_type,
+        provider=provider,
+        model_name=model_name,
+        purpose=purpose,
+        system_prompt=None,
+        user_prompt="Say hello.",
+        status=status,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost_usd,
+        run_id=run_id,
+        step_id=step_id,
+        created_by_id=created_by_id,
+        updated_by_id=created_by_id,
+    )
+    db_session.add(llm_call_record)
+    await db_session.flush()
+    return llm_call_record
