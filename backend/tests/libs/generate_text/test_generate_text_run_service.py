@@ -76,23 +76,6 @@ async def test_start_run_unknown_run_raises_not_found_exception(
         await generate_text_run_service.start_run(999999)
 
 
-async def test_record_current_step_sets_current_step(
-    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
-) -> None:
-    auth_user = await _insert_auth_user(db_session)
-    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    create_run_result = await generate_text_run_service.create_run(
-        build_create_generate_text_run_input(), auth_user
-    )
-
-    await generate_text_run_service.record_current_step(create_run_result.id, "GENERATE_DRAFT")
-
-    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
-    run_record = await db_session.scalar(run_query)
-    assert run_record is not None
-    assert run_record.current_step == "GENERATE_DRAFT"
-
-
 async def test_complete_run_sets_completed_status_and_zero_rollup_when_no_calls(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
@@ -200,9 +183,7 @@ async def test_fail_run_sets_failed_status_error_fields_and_rolls_up_calls(
     )
     await db_session.commit()
 
-    await generate_text_run_service.fail_run(
-        create_run_result.id, "ValueError", "boom", "GENERATE_DRAFT"
-    )
+    await generate_text_run_service.fail_run(create_run_result.id, "ValueError", "boom")
 
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
     run_record = await db_session.scalar(run_query)
@@ -210,12 +191,31 @@ async def test_fail_run_sets_failed_status_error_fields_and_rolls_up_calls(
     assert run_record.status == GenerateTextRunStatusType.FAILED
     assert run_record.error_code == "ValueError"
     assert run_record.error_message == "boom"
-    assert run_record.error_step == "GENERATE_DRAFT"
     assert run_record.finished_at is not None
     assert run_record.llm_call_count == 1
     assert run_record.input_tokens == 100
     assert run_record.output_tokens == 50
     assert run_record.cost_usd == Decimal("0.01")
+
+
+async def test_fail_run_already_failed_keeps_first_failures_values(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    create_run_result = await generate_text_run_service.create_run(
+        build_create_generate_text_run_input(), auth_user
+    )
+    await generate_text_run_service.fail_run(create_run_result.id, "ValueError", "first failure")
+
+    await generate_text_run_service.fail_run(create_run_result.id, "RuntimeError", "second failure")
+
+    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
+    run_record = await db_session.scalar(run_query)
+    assert run_record is not None
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "ValueError"
+    assert run_record.error_message == "first failure"
 
 
 async def test_find_run_by_identity_returns_result(
@@ -241,7 +241,6 @@ async def test_find_run_by_identity_returns_result(
         graph_name="blog_post",
         graph_version="2026-09-24.1",
         status=GenerateTextRunStatusType.PENDING,
-        current_step=None,
         options={},
         llm_call_count=0,
         input_tokens=0,

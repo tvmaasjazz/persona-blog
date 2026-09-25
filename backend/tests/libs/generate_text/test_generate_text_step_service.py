@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
+from libs.generate_text.results import FindLatestGenerateTextStepResult
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
 from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionType
@@ -15,6 +16,7 @@ from tests.factories.auth import build_auth_user
 from tests.factories.generate_text import (
     build_create_generate_text_run_input,
     build_create_generate_text_step_input,
+    insert_generate_text_step_row,
 )
 from tests.factories.llm import insert_llm_call_row
 from tests.factories.users import insert_user_row
@@ -269,7 +271,7 @@ async def test_record_awaiting_review_not_found_raises_not_found_exception(
         await step_service.record_awaiting_review(999999, 1)
 
 
-async def test_find_latest_output_returns_newest_step_output(
+async def test_find_latest_step_returns_newest_step_name_and_content(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
@@ -286,22 +288,43 @@ async def test_find_latest_output_returns_newest_step_output(
     )
     await step_service.complete_step(second_step_result.id, "A draft.", 20)
 
-    latest_output = await step_service.find_latest_output(run_id)
+    find_latest_step_result = await step_service.find_latest_step(run_id)
 
-    assert latest_output == "A draft."
+    assert find_latest_step_result == FindLatestGenerateTextStepResult(
+        step_name="GENERATE_DRAFT", content="A draft."
+    )
 
 
-async def test_find_latest_output_no_steps_returns_empty_string(
+async def test_find_latest_step_output_null_returns_empty_content(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
     run_id = await _insert_run_id(run_service, auth_user)
+    await insert_generate_text_step_row(
+        db_session,
+        run_id=run_id,
+        created_by_id=auth_user.id,
+        step_name="GENERATE_OUTLINE",
+        status=GenerateTextStepStatusType.RUNNING,
+    )
+    await db_session.commit()
 
-    latest_output = await step_service.find_latest_output(run_id)
+    find_latest_step_result = await step_service.find_latest_step(run_id)
 
-    assert latest_output == ""
+    assert find_latest_step_result == FindLatestGenerateTextStepResult(
+        step_name="GENERATE_OUTLINE", content=""
+    )
+
+
+async def test_find_latest_step_no_steps_raises_not_found_exception(
+    db_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+
+    with pytest.raises(NotFoundException):
+        await step_service.find_latest_step(999999)
 
 
 async def test_complete_step_not_found_raises_not_found_exception(

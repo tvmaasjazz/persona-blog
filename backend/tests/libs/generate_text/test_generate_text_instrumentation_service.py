@@ -46,7 +46,7 @@ def _build_instrumentation_service(
     return run_service, instrumentation_service
 
 
-async def test_instrument_writes_completed_step_and_records_current_step_on_run(
+async def test_instrument_writes_completed_step_with_step_name_and_rollup(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
@@ -91,17 +91,15 @@ async def test_instrument_writes_completed_step_and_records_current_step_on_run(
         GenerateTextStepOrm.run_id == create_run_result.id
     )
     step_record = await db_session.scalar(step_query)
-    run_record = await db_session.get(GenerateTextRunOrm, create_run_result.id)
     assert node_result == {"step_outputs": {"GENERATE_DRAFT": "A draft."}}
     assert step_record is not None
+    assert step_record.step_name == "GENERATE_DRAFT"
     assert step_record.status == GenerateTextStepStatusType.SUCCEEDED
     assert step_record.output == {"text": "A draft."}
     assert step_record.llm_call_count == 1
     assert step_record.input_tokens == 10
     assert step_record.output_tokens == 5
     assert step_record.cost_usd == Decimal("0.001")
-    assert run_record is not None
-    assert run_record.current_step == "GENERATE_DRAFT"
     assert len(received_states) == 1
     assert received_states[0].current_step_id == step_record.id
 
@@ -142,9 +140,9 @@ async def test_instrument_node_raises_leaves_failed_step_and_failed_run(
     assert step_record.error_message == "boom"
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.FAILED
-    assert run_record.error_code == "ValueError"
-    assert run_record.error_message == "boom"
-    assert run_record.error_step == "GENERATE_DRAFT"
+    # The failure is recorded on the step that raised it; the run carries no copy.
+    assert run_record.error_code is None
+    assert run_record.error_message is None
 
 
 async def test_instrument_node_raises_graph_bubble_up_records_awaiting_review_and_reraises(
