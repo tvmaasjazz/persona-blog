@@ -15,7 +15,6 @@ CREATE TABLE pb_generate_text_run (
     text_type pb_text_type NOT NULL,
     graph_name TEXT NOT NULL,
     graph_version TEXT NOT NULL,
-    thread_id TEXT NOT NULL UNIQUE,
     status pb_generate_text_run_status_type NOT NULL DEFAULT 'PENDING',
     current_step TEXT,
     prompt_text TEXT NOT NULL,

@@ -31,7 +31,6 @@ class GenerateTextRunOrm(BaseOrm):
     text_type: Mapped[TextType] = mapped_column(Enum(TextType, name="pb_text_type"))
     graph_name: Mapped[str]
     graph_version: Mapped[str]
-    thread_id: Mapped[str] = mapped_column(unique=True)
     status: Mapped[GenerateTextRunStatusType] = mapped_column(
         Enum(GenerateTextRunStatusType, name="pb_generate_text_run_status_type"),
         server_default=text("'PENDING'"),

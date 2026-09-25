@@ -12,7 +12,7 @@ CREATE TABLE pb_generate_text_step (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     identity UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
     run_id BIGINT NOT NULL REFERENCES pb_generate_text_run (id) ON DELETE CASCADE,
-    seq INTEGER NOT NULL,
+    step_number INTEGER NOT NULL,
     step_name TEXT NOT NULL,
     attempt INTEGER NOT NULL DEFAULT 1,
     status pb_generate_text_step_status_type NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE pb_generate_text_step (
     created_by_id BIGINT NOT NULL REFERENCES pb_user (id),
     updated_by_id BIGINT NOT NULL REFERENCES pb_user (id),
     deleted_by_id BIGINT REFERENCES pb_user (id),
-    CONSTRAINT pb_generate_text_step_run_id_seq_key UNIQUE (run_id, seq)
+    CONSTRAINT pb_generate_text_step_run_id_step_number_key UNIQUE (run_id, step_number)
 );
 
-CREATE INDEX pb_generate_text_step_run_id_seq_idx ON pb_generate_text_step (run_id, seq);
+CREATE INDEX pb_generate_text_step_run_id_step_number_idx ON pb_generate_text_step (run_id, step_number);

@@ -15,14 +15,16 @@ from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionTy
 class GenerateTextStepOrm(BaseOrm):
     __tablename__ = "pb_generate_text_step"
     __table_args__ = (
-        UniqueConstraint("run_id", "seq", name="pb_generate_text_step_run_id_seq_key"),
-        Index("pb_generate_text_step_run_id_seq_idx", "run_id", "seq"),
+        UniqueConstraint(
+            "run_id", "step_number", name="pb_generate_text_step_run_id_step_number_key"
+        ),
+        Index("pb_generate_text_step_run_id_step_number_idx", "run_id", "step_number"),
     )
 
     run_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey(GenerateTextRunOrm.id, ondelete="CASCADE")
     )
-    seq: Mapped[int] = mapped_column(Integer)
+    step_number: Mapped[int] = mapped_column(Integer)
     step_name: Mapped[str]
     attempt: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     status: Mapped[GenerateTextStepStatusType] = mapped_column(
