@@ -102,7 +102,7 @@ beside `libs/auth/` because signing in with Google has routes, a domain and a ca
 of its own. A provider that is only an implementation of another lib's contract has no
 surface of its own and stays inside that lib, as one more module in its `services/`
 package: `libs/llm/services/openai_llm_service.py` implements
-`LlmProviderBaseService`, and the next provider lands beside it.
+`BaseLlmProviderService`, and the next provider lands beside it.
 
 ### Utils
 
@@ -114,21 +114,24 @@ domain at all, like `DateTimeUtils`, live in `libs/core/utils/`.
 
 ### LangGraph workflows
 
-A domain whose work is a graph spreads across four places beside its service:
+A domain whose work is a graph keeps it under `libs/<domain>/`:
 
 - `types.py` — `<Domain>NodeType`, one member per node. LangGraph takes a `StrEnum`
   member as the node name, so nothing refers to a node by a loose string.
 - `states.py` — one `<Domain>State`, the graph's state model.
-- `services/<domain>_node_service.py` — `<Domain>NodeService`, holding every node as a
-  private `async` method and a public `get_node(node_type)` that looks it up in a
-  dispatch map built in `__init__` (`python-naming.md` › Enum dispatch). Collaborators
-  arrive through `__init__` like any other service.
-- `graphs.py` — `build_<domain>_graph(...)`, which adds a node for every member of the
-  node type enum, wires the edges, and compiles with the checkpointer it is given. Its
-  routing functions live here too.
+- `services/<domain>_node_service.py` — `<Domain>NodeService`, which builds the nodes.
+  Collaborators arrive through `__init__` like any other service.
+- `graphs/` — a package, not a module, once there is more than one graph:
+  - `base_<domain>_graph_builder.py` — the abstract builder: `graph_name` and
+    `graph_version` as class attributes, an abstract `build_graph(options, checkpointer)`,
+    and the services every builder needs taken through `__init__`.
+  - `<domain>_graph_builder_registry.py` — one builder per enum member, built in
+    `__init__`, looked up by `get_by_text_type`-style method that raises
+    `NotImplementedError` for a member with none (`python-naming.md` › Enum dispatch).
+  - `<variant>/` — one folder per graph: its builder, its prompts, its options input.
 
-Iterating the enum to add nodes is what makes a member without a node fail when the
-graph is built, rather than on the first run that reaches it.
+A variant is not a lib of its own. Splitting one out puts the engine and the variant in
+a mutual import, which is what the cycle rule below exists to prevent.
 
 **A graph state holds primitives only** — `str`, `int`, `bool`, `UUID`, and containers
 of them. The state is a persisted wire format, not an in-memory object. A domain class
@@ -141,23 +144,19 @@ the shape: `GenerateTextState.build_auth_user()` returns the `AuthUser` its
 `auth_user_id` and `auth_user_identity` describe. The method reads like an attribute at
 the call site, and the stored checkpoint stays plain.
 
-The service owns the graph's lifecycle, not its shape: it mints the thread identity,
-runs the graph, reads the snapshot, and maps it to a `Result`. The dependency factory
-builds the node service, then the compiled graph, and hands the graph to the service
-through `__init__`.
-
-**An engine never imports the domains it runs.** When one lib builds graphs for several
-others — `libs/generate_text/` for `libs/blog_post/` and whatever follows — the caller
-registers itself: `build_<domain>_graph_spec(...)` returns a record of the graph's name,
-its current version and its builder, and the dependency factory passes the map of them
-in. The same inversion as the LLM provider map, and for the same reason: the import
-points one way, and a new domain is a new registration rather than an edit to the
-engine.
+**A lib never imports a lib that imports it back.** Inside one lib the same cycle
+appears through the package `__init__`: a registry's builders need the lib's services,
+and a service needs the registry. The service imports the registry under
+`if TYPE_CHECKING:` and receives the instance through `__init__`, so nothing is imported
+at runtime in both directions.
 
 **A wrapper around a node re-raises `GraphBubbleUp` before any `except Exception`.**
 LangGraph signals an interrupt by raising it, so a generic handler turns every review
 pause into a recorded failure. Catch the control-flow exception first, record the pause
 for what it is, and let it through.
+
+The service owns the graph's lifecycle, not its shape: it asks the registry for the
+builder, calls `build_graph`, runs it, reads the snapshot, and maps it to a `Result`.
 
 ### Background tasks
 

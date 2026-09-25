@@ -24,7 +24,8 @@ Every class ends in the suffix for what it is:
 | `Result`     | A function's return shape                    | `FindUserByEmailResult`          |
 | `Router`     | FastAPI `APIRouter` modules                  | `account_router` (an `APIRouter` instance) |
 | `Service`    | Business logic, framework-free               | `AccountService`                 |
-| `BaseService`| An abstract service that other services implement | `LlmProviderBaseService`    |
+| `Builder`    | Builds one thing from configuration, as a class | `BlogPostGraphBuilder`         |
+| `Registry`   | Holds one of something per enum member, looked up by it | `GenerateTextGraphBuilderRegistry` |
 | `Utils`      | Stateless static builders and mappers for one domain | `LlmUtils`, `DateTimeUtils` |
 | `State`      | A LangGraph graph's state model              | `GenerateTextState`              |
 | `Middleware` | ASGI / FastAPI middleware                    | `RequestLogMiddleware`           |
@@ -37,6 +38,10 @@ Every class ends in the suffix for what it is:
 | `Stub`       | A hand-written test double (`tests/` only)   | `LlmServiceStub`, `HttpHandlerStub` |
 | `Mixin`      | SQLAlchemy column mixins (`libs/database/` only) | `SoftDeleteMixin`            |
 | `Model`      | Only when the purpose is genuinely unclear   | —                                |
+
+An abstract class takes a `Base` prefix and keeps the suffix of what it is:
+`BaseLlmProviderService`, `BaseGenerateTextGraphBuilder`. A concrete one is named for
+the case it handles, with no prefix: `OpenAiLlmService`, `BlogPostGraphBuilder`.
 
 A `Utils` class holds `@staticmethod`s and nothing else: no state, no `__init__`, no
 db session, no HTTP client, no settings held as attributes. Values it needs are

@@ -43,11 +43,10 @@ for the files the domain needs from this list:
   - `tasks.py` — only if the domain has work that runs after a response
   - `prompts.py` — only if the domain calls an LLM
   - `exceptions.py` — only if the domain needs exceptions callers must tell apart
-  - `states.py`, `graphs.py` and a `<Domain>NodeService` in `services/` — only if the
-    domain owns a graph (`fastapi-structure.md` › LangGraph workflows)
-  - `prompts.py`, `graphs.py` with `build_<domain>_graph_spec(...)`, and nothing else —
-    when the domain registers its graph with an existing engine instead of owning one,
-    as `libs/blog_post/` does with `libs/generate_text/`
+  - `states.py`, a `graphs/` package and a `<Domain>NodeService` in `services/` — only
+    if the domain's work is a graph, laid out as `fastapi-structure.md` › LangGraph
+    workflows describes. A second graph for an existing domain is a folder under that
+    domain's `graphs/`, and needs no new domain at all
 - `apps/api/domains/$1/`
   - `dtos.py`, `dependencies.py`, and `router.py`
 - Wiring: the router in `apps/api/app_factory.py`, and the settings model on

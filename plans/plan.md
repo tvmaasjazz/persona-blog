@@ -533,9 +533,9 @@ than on the call. A caller that needs a particular model is asking for a new tie
 `RESEARCH` waits until web search is needed: it's a tool capability, not a model tier.
 
 Provider code lives in its own lib beside the generic one, as `google_auth` sits beside
-`auth`. `libs/llm/` defines the contract, an abstract `LlmProviderBaseService`, and each
+`auth`. `libs/llm/` defines the contract, an abstract `BaseLlmProviderService`, and each
 provider implements it. `LlmService` never imports a provider. It receives a
-dispatch map `{LlmProviderType: LlmProviderBaseService}` through `__init__`, built by the
+dispatch map `{LlmProviderType: BaseLlmProviderService}` through `__init__`, built by the
 dependency factory, so the imports run one way and tests can hand it a stub provider.
 Only OpenAI is built in this step. The `openai` and `anthropic` SDKs are both installed.
 `libs/anthropic_llm/` lands as a follow-up once OpenAI works end to end.
@@ -604,9 +604,9 @@ Build:
     mapping the Responses API payloads). `DateTimeUtils` lands in `libs/core/utils/`,
     since elapsed time isn't an LLM concern
   - `services/` — a package:
-    - `llm_provider_base_service.py` — `LlmProviderBaseService(ABC)` with `complete()`
+    - `base_llm_provider_service.py` — `BaseLlmProviderService(ABC)` with `complete()`
       and `complete_structured(provider_input, output_type)`
-    - `openai_llm_service.py` — `OpenAiLlmService(LlmProviderBaseService)`, taking an
+    - `openai_llm_service.py` — `OpenAiLlmService(BaseLlmProviderService)`, taking an
       `AsyncOpenAI`. It has no HTTP surface of its own, so it lives here rather than in
       a provider lib. Uses the Responses API, with `responses.parse()` for structured
       output, and maps each response status to a reason rather than raising:

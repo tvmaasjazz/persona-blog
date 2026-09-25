@@ -37,41 +37,37 @@ in a domain per type. Creating a blog post record from a finished run is ordinar
 in a blog-post domain, and that arrives with the feature that needs it.
 
 ```
-libs/generate_text/                 the engine, text-type agnostic
-├── types.py                        GenerateTextNodeType, run and step status types,
-│                                   HumanDecisionType
+libs/generate_text/
+├── types.py                        GenerateTextNodeType, run and step status types
 ├── states.py                       GenerateTextState
 ├── inputs.py                       GenerateTextInput, StepOptionInput, resume input
-├── results.py                      GenerateTextRunResult, run and step results
+├── results.py                      GenerateTextRunResult and the writers' results
 ├── settings.py                     max_rewrite_passes, checkpoint_ttl_minutes
 ├── services/
-│   ├── generate_text_run_service.py    writes pb_generate_text_run, nothing else
-│   ├── generate_text_step_service.py   writes pb_generate_text_step, nothing else
-│   ├── generate_text_rollup_service.py aggregates llm calls into steps and runs
+│   ├── generate_text_run_service.py    writes pb_generate_text_run, rollup included
+│   ├── generate_text_step_service.py   writes pb_generate_text_step, rollup included
 │   ├── generate_text_instrumentation_service.py  wraps a node in step records
-│   ├── generate_text_node_service.py   the shared nodes
-│   ├── generate_text_graph_service.py  text type → its registered graph
+│   ├── generate_text_node_service.py   builds the nodes
 │   └── generate_text_service.py        starts and resumes runs
-└── graphs.py                       GenerateTextGraphSpec: what a text type registers
+└── graphs/
+    ├── base_generate_text_graph_builder.py      the abstract builder
+    ├── generate_text_graph_builder_registry.py  text type → its builder
+    └── blog_post/                  graph_builder.py, prompts.py, inputs.py
 
-libs/blog_post/                     one text type: prompts, topology, version
-├── prompts.py                      BlogPostPrompt, per step and per rewrite
-├── inputs.py                       BlogPostOptionsInput
-├── graphs.py                       build_blog_post_graph + build_blog_post_graph_spec
-└── constants.py                    BLOG_POST_GRAPH_NAME, BLOG_POST_GRAPH_VERSION
-
-apps/api/domains/generate_text/     POST /generate-text/blog-post
-apps/api/domains/generate_text_runs/ GET and POST .../{run_identity}/resume
+apps/api/domains/generate_text/     all three routes, one router, one dtos.py
 ```
 
-`GenerateTextGraphService` holds a map of text type to the graph registered for it, and
-raises `NotImplementedError` for a type without one. A text type registers itself —
-`build_blog_post_graph_spec(...)` returns its name, current version and builder, and the
-dependency factory passes the map in — so the engine imports no text type. Building it
-the other way round produced a genuine import cycle, which is why the rule now says so.
-The lookup takes a graph version from the start, even though only the current version
-resolves today: running two versions side by side across a deploy is the feature that
-needs it, and a signature with no room for it is the hard part to add later.
+A text type is not a lib of its own. It is a folder under `graphs/` holding a builder,
+its prompts and its options — the engine writes blog posts; turning a finished run into
+a blog post row is a different feature's concern.
+
+`GenerateTextGraphBuilderRegistry` holds one builder per text type and raises
+`NotImplementedError` for a type without one. `BlogPostGraphBuilder` extends
+`BaseGenerateTextGraphBuilder`, carrying its `graph_name` and `graph_version` as class
+attributes. `GenerateTextService` asks the registry for the builder and calls
+`build_graph` on it; the version check on resume compares the run's stored version with
+the builder's, which is what makes running two versions across a deploy a later feature
+rather than a rewrite.
 
 ## The graph a builder produces
 
@@ -97,7 +93,7 @@ Every node is wrapped before it is added to the graph:
 graph_node = instrumentation_service.instrument(GenerateTextNodeType.GENERATE_DRAFT, node)
 ```
 
-The wrapper writes a `RUNNING` step row with the next `seq`, points the run's
+The wrapper writes a `RUNNING` step row with the next `step_number`, points the run's
 `current_step` at it, runs the node, then marks the row `SUCCEEDED` or `FAILED` with its
 duration. Each write is its own committed transaction, the rule `pb_llm_call` already
 follows, so a run that fails still has its trail.
@@ -107,13 +103,12 @@ interrupt is how a review node pauses: the first version caught it and recorded 
 paused run as failed. The paused step row is picked back up when the graph resumes, so
 one pause is one step rather than two.
 
-The three services under it each do one thing: `GenerateTextRunService` writes the run
-table, `GenerateTextStepService` writes the step table, and `GenerateTextRollupService`
-sums the `pb_llm_call` rows of a finished step into that step, and the steps of a
-finished run into the run. Rollups run synchronously in their own transaction: a step's
-rollup is one indexed aggregate over a handful of rows, and a node cannot reach
-`BackgroundTasks` anyway. If the run-level rollup ever costs too much, the route can
-schedule it, which is the one place background work exists.
+Two services under it, each writing one table: `GenerateTextRunService` and
+`GenerateTextStepService`. Each rolls up as part of the transitions it already writes —
+a step when it completes, a run when it completes, fails or pauses for review, which is
+exactly when someone is looking at what it has cost. Rollups run synchronously in their
+own transaction: one indexed aggregate over a handful of `pb_llm_call` rows, and a node
+cannot reach `BackgroundTasks` anyway.
 
 ## Tables
 
@@ -127,7 +122,6 @@ were deliberately deferred until runs existed.
 | `text_type` | `pb_text_type NOT NULL` | new enum type, `BLOG_POST` |
 | `graph_name` | `TEXT NOT NULL` | |
 | `graph_version` | `TEXT NOT NULL` | refusing a resume across versions depends on it |
-| `thread_id` | `TEXT NOT NULL UNIQUE` | the LangGraph thread |
 | `status` | `pb_generate_text_run_status_type NOT NULL DEFAULT 'PENDING'` | `PENDING`, `RUNNING`, `AWAITING_REVIEW`, `COMPLETED`, `FAILED`, `CANCELLED` |
 | `current_step` | `TEXT` | |
 | `prompt_text` | `TEXT NOT NULL` | |
@@ -139,17 +133,18 @@ were deliberately deferred until runs existed.
 | `cost_usd` | `NUMERIC(16,10) NOT NULL DEFAULT 0` | |
 | `started_at` / `finished_at` | `TIMESTAMP` | |
 
-Indexes: `(created_by_id, created_at DESC)` for a user's runs, a partial on `status` for
-in-flight runs, and the unique on `thread_id`.
+The run's own `identity` is the LangGraph thread id, so there is no separate column for
+it. Indexes: `(created_by_id, created_at DESC)` for a user's runs, and a partial on
+`status` for in-flight ones.
 
 ### `pb_generate_text_step`
 
-Same shape as the run's rollup columns, plus `run_id` (FK, cascade), `seq`, `step_name`,
+Same shape as the run's rollup columns, plus `run_id` (FK, cascade), `step_number`, `step_name`,
 `attempt`, `status` (`RUNNING`, `SUCCEEDED`, `FAILED`, `SKIPPED`, `AWAITING_REVIEW`),
 `input` / `output` JSONB, `duration_ms`, and the review columns: `human_decision`
 (`APPROVED` / `REJECTED`), `human_feedback`, `decided_by_id`, `decided_at`.
 
-`UNIQUE (run_id, seq)` is what a replay depends on, and a retry is a new row with the
+`UNIQUE (run_id, step_number)` is what a replay depends on, and a retry is a new row with the
 same `step_name` and `attempt` incremented.
 
 ### `pb_llm_call`
@@ -177,8 +172,9 @@ itself; the instrumentation wrapper hands the step id to the node it wraps.
 2. The writer services and the instrumentation wrapper, with `LlmCompletionInput`
    carrying the run and step.
 3. The engine: state, options, shared nodes, the graph service.
-4. `libs/blog_post/`: prompts per step and per rewrite, the builder, the version.
-5. `apps/api/domains/generate_text/` and `apps/api/domains/generate_text_runs/`.
+4. `libs/generate_text/graphs/blog_post/`: prompts per step and per rewrite, the
+   builder and its version.
+5. `apps/api/domains/generate_text/`, one router carrying all three routes.
 6. Delete the step 13 route and its hardcoded graph, which this supersedes.
 7. Tests, then a verification script covering a run with every step enabled, a rejection,
    and a resume.

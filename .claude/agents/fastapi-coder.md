@@ -34,11 +34,9 @@ The rules files say where each of these lives and how it is shaped.
   constants, enums (`types.py`), background tasks (`tasks.py`), prompts, exceptions,
   `Utils` classes in `libs/<domain>/utils/` (and `libs/core/utils/` for ones with no
   domain)
-- **LangGraph workflow files** — `states.py`, `graphs.py`, the `<Domain>NodeType` enum
-  and the `<Domain>NodeService`, per `fastapi-structure.md` › LangGraph workflows, for
-  a domain whose work is a graph. A domain that instead *registers* a graph with an
-  existing engine writes far less: its prompts, its builder and a
-  `build_<domain>_graph_spec(...)`, borrowing the engine's state, nodes and services
+- **LangGraph workflow files**, for a domain whose work is a graph: the layout and what
+  belongs in each file are `fastapi-structure.md` › LangGraph workflows. A new graph for
+  a domain that already has one is a folder under its `graphs/`, not a domain of its own
 - **HTTP layer** — DTOs, dependency factories with their `Annotated` aliases, thin
   routers
 - **Wiring a domain in** — add its settings field to `AppSettings` and register its
