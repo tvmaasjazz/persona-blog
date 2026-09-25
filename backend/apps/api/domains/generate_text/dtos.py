@@ -65,7 +65,7 @@ class GenerateTextRunResponseDto(BaseModel):
     run_identity: UUID
     text_type: TextType
     status: GenerateTextRunStatusType
-    current_step: str | None
+    last_step: str | None
     graph_name: str
     graph_version: str
     content: str
@@ -83,7 +83,7 @@ class GenerateTextRunResponseDto(BaseModel):
             run_identity=result.run_identity,
             text_type=result.text_type,
             status=result.status,
-            current_step=result.current_step,
+            last_step=result.last_step,
             graph_name=result.graph_name,
             graph_version=result.graph_version,
             content=result.content,

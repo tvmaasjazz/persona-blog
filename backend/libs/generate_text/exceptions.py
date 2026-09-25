@@ -1,4 +1,4 @@
-from libs.core.exceptions import ConflictException
+from libs.core.exceptions import ConflictException, UnprocessableException
 
 
 class GenerateTextException(Exception): ...
@@ -8,3 +8,6 @@ class GenerateTextRunNotPausedException(GenerateTextException, ConflictException
 
 
 class GenerateTextRunVersionMismatchException(GenerateTextException, ConflictException): ...
+
+
+class GenerateTextOptionsInvalidException(GenerateTextException, UnprocessableException): ...

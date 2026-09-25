@@ -39,8 +39,6 @@ class GenerateTextInstrumentationService:
             )
             step_id = create_step_result.id
 
-            await self._run_service.record_current_step(state.generate_text_run_id, step_name)
-
             node_state = state.model_copy(update={"current_step_id": step_id})
 
             start_time = DateTimeUtils.now_monotonic()
@@ -57,12 +55,7 @@ class GenerateTextInstrumentationService:
                 await self._step_service.fail_step(
                     step_id, type(node_exception).__name__, str(node_exception), duration_ms
                 )
-                await self._run_service.fail_run(
-                    state.generate_text_run_id,
-                    type(node_exception).__name__,
-                    str(node_exception),
-                    step_name,
-                )
+                await self._run_service.fail_run(state.generate_text_run_id)
                 raise
 
             duration_ms = DateTimeUtils.elapsed_ms(start_time)

@@ -4,7 +4,9 @@ from typing import Any
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from pydantic import ValidationError
 
+from libs.generate_text.exceptions import GenerateTextOptionsInvalidException
 from libs.generate_text.graphs.base_generate_text_graph_builder import BaseGenerateTextGraphBuilder
 from libs.generate_text.graphs.blog_post.inputs import BlogPostOptionsInput
 from libs.generate_text.graphs.blog_post.prompts import BlogPostPrompt
@@ -42,7 +44,14 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
     def build_graph(
         self, options: dict[str, Any], checkpointer: BaseCheckpointSaver
     ) -> CompiledStateGraph:
-        blog_post_options_input = BlogPostOptionsInput.model_validate(options)
+        try:
+            blog_post_options_input = BlogPostOptionsInput.model_validate(options)
+        except ValidationError as validation_error:
+            # Options a text type can't read are the caller's mistake, not a 500. A
+            # pydantic error must not reach apps/ (fastapi-structure.md > Errors).
+            raise GenerateTextOptionsInvalidException(
+                "These options are not valid for a blog post"
+            ) from validation_error
         step_specs = self._build_step_specs(blog_post_options_input)
 
         state_graph = StateGraph(GenerateTextState)

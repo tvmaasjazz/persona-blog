@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, StateSnapshot
 from pydantic import BaseModel
 
@@ -65,11 +66,11 @@ class GenerateTextService:
             additional_context=generate_text_input.additional_context,
             options=options_dict,
         )
+        # Built before the row exists, so bad options fail with nothing left behind.
+        generate_text_graph = graph_builder.build_graph(options_dict, self._checkpointer)
         create_run_result = await self._run_service.create_run(
             create_generate_text_run_input, auth_user
         )
-
-        generate_text_graph = graph_builder.build_graph(options_dict, self._checkpointer)
         initial_state = GenerateTextState(
             auth_user_id=auth_user.id,
             auth_user_identity=auth_user.identity,
@@ -87,7 +88,9 @@ class GenerateTextService:
         # The run's identity is its LangGraph thread id, so no separate thread_id needs
         # to be minted or stored.
         graph_run_config = {"configurable": {"thread_id": str(create_run_result.identity)}}
-        await generate_text_graph.ainvoke(initial_state, graph_run_config)
+        await self._invoke_graph(
+            generate_text_graph, initial_state, graph_run_config, create_run_result.id
+        )
 
         state_snapshot = await generate_text_graph.aget_state(graph_run_config)
         return await self._finish(create_run_result.id, create_run_result.identity, state_snapshot)
@@ -99,8 +102,7 @@ class GenerateTextService:
         if find_run_result.created_by_id != auth_user.id:
             raise NotFoundException(f"Generate text run {run_identity} not found")
 
-        latest_output = await self._step_service.find_latest_output(find_run_result.id)
-        return self._build_run_result(find_run_result, latest_output)
+        return await self._build_run_result_from_steps(find_run_result)
 
     async def resume_generate_text(
         self,
@@ -145,32 +147,72 @@ class GenerateTextService:
             )
 
         resume_payload = resume_generate_text_input.model_dump()
-        await generate_text_graph.ainvoke(Command(resume=resume_payload), graph_run_config)
+        await self._invoke_graph(
+            generate_text_graph,
+            Command(resume=resume_payload),
+            graph_run_config,
+            find_run_result.id,
+        )
 
         new_state_snapshot = await generate_text_graph.aget_state(graph_run_config)
         return await self._finish(find_run_result.id, run_identity, new_state_snapshot)
 
+    async def _invoke_graph(
+        self,
+        generate_text_graph: CompiledStateGraph,
+        graph_input: object,
+        graph_run_config: dict[str, object],
+        run_id: int,
+    ) -> None:
+        """A node's failure is already recorded by the instrumentation wrapper, which then
+        re-raises. Anything else that breaks — the checkpointer, the graph itself — has no
+        step to own it, so the run is failed here rather than left RUNNING forever."""
+        try:
+            await generate_text_graph.ainvoke(graph_input, graph_run_config)
+        except Exception as graph_exception:
+            await self._run_service.fail_run(
+                run_id, type(graph_exception).__name__, str(graph_exception)
+            )
+            raise
+
     async def _finish(
         self, run_id: int, run_identity: UUID, state_snapshot: StateSnapshot
     ) -> GenerateTextRunResult:
-        generate_text_state = GenerateTextState.model_validate(state_snapshot.values)
         if state_snapshot.next:
             await self._run_service.record_awaiting_review(run_id)
         else:
             await self._run_service.complete_run(run_id)
 
         find_run_result = await self._run_service.find_run_by_identity(run_identity)
-        return self._build_run_result(find_run_result, generate_text_state.latest_output())
+        # The wrapper has already written the steps this run produced, so they answer both
+        # where it sits and what it wrote — the same source the GET route reads.
+        return await self._build_run_result_from_steps(find_run_result)
+
+    async def _build_run_result_from_steps(
+        self, find_run_result: FindGenerateTextRunByIdentityResult
+    ) -> GenerateTextRunResult:
+        """Where the run sits and what it has produced both come from its newest step."""
+        try:
+            find_latest_step_result = await self._step_service.find_latest_step(find_run_result.id)
+        except NotFoundException:
+            # A run whose first node hasn't finished has no step to report yet.
+            return self._build_run_result(find_run_result, last_step=None, content="")
+
+        return self._build_run_result(
+            find_run_result,
+            last_step=find_latest_step_result.step_name,
+            content=find_latest_step_result.content,
+        )
 
     @staticmethod
     def _build_run_result(
-        find_run_result: FindGenerateTextRunByIdentityResult, content: str
+        find_run_result: FindGenerateTextRunByIdentityResult, last_step: str | None, content: str
     ) -> GenerateTextRunResult:
         return GenerateTextRunResult(
             run_identity=find_run_result.identity,
             text_type=find_run_result.text_type,
             status=find_run_result.status,
-            current_step=find_run_result.current_step,
+            last_step=last_step,
             graph_name=find_run_result.graph_name,
             graph_version=find_run_result.graph_version,
             content=content,

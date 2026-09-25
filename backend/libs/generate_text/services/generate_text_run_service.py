@@ -54,12 +54,6 @@ class GenerateTextRunService:
             run_record.started_at = datetime.now(UTC)
             await db_session.flush()
 
-    async def record_current_step(self, run_id: int, step_name: str) -> None:
-        async with self._db_session_factory() as db_session, db_session.begin():
-            run_record = await self._get_run(db_session, run_id)
-            run_record.current_step = step_name
-            await db_session.flush()
-
     async def complete_run(self, run_id: int) -> None:
         async with self._db_session_factory() as db_session, db_session.begin():
             run_record = await self._get_run(db_session, run_id)
@@ -77,14 +71,21 @@ class GenerateTextRunService:
             await db_session.flush()
 
     async def fail_run(
-        self, run_id: int, error_code: str, error_message: str, error_step: str
+        self, run_id: int, error_code: str | None = None, error_message: str | None = None
     ) -> None:
+        """The error is recorded here only when no step owns it — a graph that failed to
+        run at all, say. A node's failure is recorded on its own step row, and the run
+        just goes FAILED."""
         async with self._db_session_factory() as db_session, db_session.begin():
             run_record = await self._get_run(db_session, run_id)
+            if run_record.status is GenerateTextRunStatusType.FAILED:
+                # The first failure wins: a node's failure reaches here again as the
+                # exception travels up, and it must not overwrite what recorded it.
+                return
+
             run_record.status = GenerateTextRunStatusType.FAILED
             run_record.error_code = error_code
             run_record.error_message = error_message
-            run_record.error_step = error_step
             run_record.finished_at = datetime.now(UTC)
             await self._apply_rollup(db_session, run_record)
             await db_session.flush()

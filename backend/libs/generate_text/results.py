@@ -15,7 +15,7 @@ class GenerateTextRunResult(BaseModel):
     run_identity: UUID
     text_type: TextType
     status: GenerateTextRunStatusType
-    current_step: str | None
+    last_step: str | None
     graph_name: str
     graph_version: str
     content: str
@@ -40,7 +40,6 @@ class FindGenerateTextRunByIdentityResult(BaseModel):
     graph_name: str
     graph_version: str
     status: GenerateTextRunStatusType
-    current_step: str | None
     options: dict[str, Any]
     llm_call_count: int
     input_tokens: int
@@ -54,3 +53,10 @@ class FindGenerateTextRunByIdentityResult(BaseModel):
 class CreateGenerateTextStepResult(BaseModel):
     id: int
     identity: UUID
+
+
+class FindLatestGenerateTextStepResult(BaseModel):
+    """The run's newest step: where it sits, and the text it produced."""
+
+    step_name: str
+    content: str

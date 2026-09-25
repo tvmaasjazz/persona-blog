@@ -10,7 +10,10 @@ from libs.database.orm.generate_text_step import GenerateTextStepOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.generate_text.constants import STEP_OUTPUT_TEXT_KEY
 from libs.generate_text.inputs import CreateGenerateTextStepInput
-from libs.generate_text.results import CreateGenerateTextStepResult
+from libs.generate_text.results import (
+    CreateGenerateTextStepResult,
+    FindLatestGenerateTextStepResult,
+)
 from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionType
 
 
@@ -66,7 +69,9 @@ class GenerateTextStepService:
         async with self._db_session_factory() as db_session, db_session.begin():
             step_record = await self._get_step(db_session, step_id)
             step_record.status = GenerateTextStepStatusType.SUCCEEDED
-            step_record.output = {STEP_OUTPUT_TEXT_KEY: output}
+            # A node that produced no text — a review node, say — stores nothing rather than
+            # an empty string, so "the latest output" skips it.
+            step_record.output = {STEP_OUTPUT_TEXT_KEY: output} if output else None
             step_record.duration_ms = duration_ms
             step_record.finished_at = datetime.now(UTC)
             await self._apply_rollup(db_session, step_record)
@@ -113,21 +118,34 @@ class GenerateTextStepService:
         query_result = await db_session.execute(query)
         return query_result.scalar_one_or_none()
 
-    async def find_latest_output(self, run_id: int) -> str:
-        """The newest step output for a run, which is what the run produced so far. Read
-        from the step rows rather than the checkpoint, so it survives the checkpoint's TTL."""
-        query = (
+    async def find_latest_step(self, run_id: int) -> FindLatestGenerateTextStepResult:
+        """Where the run sits, and the text it has produced. These are two different rows:
+        a run paused for review sits on its review step, which has no output of its own,
+        while the text came from the step before it. Read from the step rows rather than
+        the checkpoint, so both survive the checkpoint's TTL."""
+        latest_step_query = (
+            select(GenerateTextStepOrm.step_name)
+            .where(GenerateTextStepOrm.run_id == run_id)
+            .order_by(GenerateTextStepOrm.step_number.desc())
+            .limit(1)
+        )
+        latest_output_query = (
             select(GenerateTextStepOrm.output)
             .where(GenerateTextStepOrm.run_id == run_id, GenerateTextStepOrm.output.is_not(None))
             .order_by(GenerateTextStepOrm.step_number.desc())
             .limit(1)
         )
         async with self._db_session_factory() as db_session:
-            latest_output = await db_session.scalar(query)
+            latest_step_name = await db_session.scalar(latest_step_query)
+            latest_output = await db_session.scalar(latest_output_query)
 
-        if latest_output is None:
-            return ""
-        return latest_output.get(STEP_OUTPUT_TEXT_KEY, "")
+        if latest_step_name is None:
+            raise NotFoundException(f"Generate text run {run_id} has no steps")
+
+        step_output = latest_output or {}
+        return FindLatestGenerateTextStepResult(
+            step_name=latest_step_name, content=step_output.get(STEP_OUTPUT_TEXT_KEY, "")
+        )
 
     async def record_awaiting_review(self, step_id: int, duration_ms: int) -> None:
         """A review node paused rather than failed: the graph will call it again on resume."""
