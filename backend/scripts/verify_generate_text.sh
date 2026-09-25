@@ -94,7 +94,7 @@ GENERATE_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/blog-post" \
 echo "$GENERATE_RESPONSE" | print_json
 RUN_IDENTITY="$(echo "$GENERATE_RESPONSE" | read_json_field run_identity)"
 [ "$(echo "$GENERATE_RESPONSE" | read_json_field status)" = "AWAITING_REVIEW" ] || fail "expected AWAITING_REVIEW"
-pass "run $RUN_IDENTITY paused at $(echo "$GENERATE_RESPONSE" | read_json_field current_step)"
+pass "run $RUN_IDENTITY paused after $(echo "$GENERATE_RESPONSE" | read_json_field last_step)"
 
 step "2. Read the run back"
 curl -sf -b "sid=$SESSION_ID" "$API_URL/generate-text/runs/$RUN_IDENTITY" | print_json
@@ -142,7 +142,7 @@ check_status 401 "generating while signed out" \
 
 step "6. What the run recorded"
 docker compose exec -T postgres psql -U pb -d pb_local -c \
-  "SELECT status, current_step, graph_version, llm_call_count, input_tokens, output_tokens, cost_usd
+  "SELECT status, error_code, graph_version, llm_call_count, input_tokens, output_tokens, cost_usd
    FROM pb_generate_text_run WHERE identity = '$RUN_IDENTITY';"
 docker compose exec -T postgres psql -U pb -d pb_local -c \
   "SELECT s.step_number, s.step_name, s.attempt, s.status, s.human_decision, s.llm_call_count, s.cost_usd, s.duration_ms
