@@ -5,20 +5,20 @@ from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
-from libs.blog_post.graphs import build_blog_post_graph_spec
-from libs.blog_post.inputs import BlogPostOptionsInput
 from libs.core.exceptions import NotFoundException
 from libs.generate_text.exceptions import (
     GenerateTextRunNotPausedException,
     GenerateTextRunVersionMismatchException,
 )
+from libs.generate_text.graphs.blog_post.inputs import BlogPostOptionsInput
+from libs.generate_text.graphs.generate_text_graph_builder_registry import (
+    GenerateTextGraphBuilderRegistry,
+)
 from libs.generate_text.inputs import StepOptionInput
-from libs.generate_text.services.generate_text_graph_service import GenerateTextGraphService
 from libs.generate_text.services.generate_text_instrumentation_service import (
     GenerateTextInstrumentationService,
 )
 from libs.generate_text.services.generate_text_node_service import GenerateTextNodeService
-from libs.generate_text.services.generate_text_rollup_service import GenerateTextRollupService
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.services.generate_text_service import GenerateTextService
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
@@ -46,22 +46,17 @@ def _build_generate_text_service(
 ) -> GenerateTextService:
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    rollup_service = GenerateTextRollupService(db_session_factory=db_session_factory)
     instrumentation_service = GenerateTextInstrumentationService(
-        run_service=run_service, step_service=step_service, rollup_service=rollup_service
+        run_service=run_service, step_service=step_service
     )
     node_service = GenerateTextNodeService(llm_service=llm_service_stub)
-    graph_service = GenerateTextGraphService(
-        generate_text_graph_specs={
-            TextType.BLOG_POST: build_blog_post_graph_spec(
-                node_service=node_service,
-                instrumentation_service=instrumentation_service,
-                generate_text_settings=GenerateTextSettings(),
-            )
-        }
+    graph_builder_registry = GenerateTextGraphBuilderRegistry(
+        node_service=node_service,
+        instrumentation_service=instrumentation_service,
+        generate_text_settings=GenerateTextSettings(),
     )
     return GenerateTextService(
-        graph_service=graph_service,
+        graph_builder_registry=graph_builder_registry,
         run_service=run_service,
         step_service=step_service,
         checkpointer=InMemorySaver(),

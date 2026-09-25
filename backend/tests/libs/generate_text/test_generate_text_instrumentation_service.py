@@ -2,6 +2,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
+from langgraph.errors import GraphBubbleUp
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -11,7 +12,6 @@ from libs.database.orm.generate_text_step import GenerateTextStepOrm
 from libs.generate_text.services.generate_text_instrumentation_service import (
     GenerateTextInstrumentationService,
 )
-from libs.generate_text.services.generate_text_rollup_service import GenerateTextRollupService
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
 from libs.generate_text.states import GenerateTextState
@@ -40,14 +40,13 @@ def _build_instrumentation_service(
 ) -> tuple[GenerateTextRunService, GenerateTextInstrumentationService]:
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    rollup_service = GenerateTextRollupService(db_session_factory=db_session_factory)
     instrumentation_service = GenerateTextInstrumentationService(
-        run_service=run_service, step_service=step_service, rollup_service=rollup_service
+        run_service=run_service, step_service=step_service
     )
     return run_service, instrumentation_service
 
 
-async def test_instrument_writes_completed_step_and_rolls_up_run_and_step(
+async def test_instrument_writes_completed_step_and_records_current_step_on_run(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
@@ -103,10 +102,6 @@ async def test_instrument_writes_completed_step_and_rolls_up_run_and_step(
     assert step_record.cost_usd == Decimal("0.001")
     assert run_record is not None
     assert run_record.current_step == "GENERATE_DRAFT"
-    assert run_record.llm_call_count == 1
-    assert run_record.input_tokens == 10
-    assert run_record.output_tokens == 5
-    assert run_record.cost_usd == Decimal("0.001")
     assert len(received_states) == 1
     assert received_states[0].current_step_id == step_record.id
 
@@ -150,3 +145,39 @@ async def test_instrument_node_raises_leaves_failed_step_and_failed_run(
     assert run_record.error_code == "ValueError"
     assert run_record.error_message == "boom"
     assert run_record.error_step == "GENERATE_DRAFT"
+
+
+async def test_instrument_node_raises_graph_bubble_up_records_awaiting_review_and_reraises(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_service, instrumentation_service = _build_instrumentation_service(db_session_factory)
+    create_run_result = await run_service.create_run(
+        build_create_generate_text_run_input(), auth_user
+    )
+    generate_text_state = build_generate_text_state(
+        auth_user_id=auth_user.id,
+        auth_user_identity=auth_user.identity,
+        generate_text_run_id=create_run_result.id,
+        generate_text_run_identity=create_run_result.identity,
+    )
+
+    async def interrupting_node(state: GenerateTextState) -> dict[str, Any]:
+        raise GraphBubbleUp("paused for review")
+
+    instrumented_node = instrumentation_service.instrument(
+        GenerateTextNodeType.REVIEW_DRAFT, interrupting_node
+    )
+
+    with pytest.raises(GraphBubbleUp):
+        await instrumented_node(generate_text_state)
+
+    step_query = select(GenerateTextStepOrm).where(
+        GenerateTextStepOrm.run_id == create_run_result.id
+    )
+    step_record = await db_session.scalar(step_query)
+    run_record = await db_session.get(GenerateTextRunOrm, create_run_result.id)
+    assert step_record is not None
+    assert step_record.status == GenerateTextStepStatusType.AWAITING_REVIEW
+    assert run_record is not None
+    assert run_record.status == GenerateTextRunStatusType.PENDING

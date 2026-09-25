@@ -5,13 +5,12 @@ from langgraph.types import Command
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
-from libs.blog_post.graphs import build_blog_post_graph
+from libs.generate_text.graphs.blog_post.graph_builder import BlogPostGraphBuilder
 from libs.generate_text.inputs import StepOptionInput
 from libs.generate_text.services.generate_text_instrumentation_service import (
     GenerateTextInstrumentationService,
 )
 from libs.generate_text.services.generate_text_node_service import GenerateTextNodeService
-from libs.generate_text.services.generate_text_rollup_service import GenerateTextRollupService
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
 from libs.generate_text.settings import GenerateTextSettings
@@ -19,8 +18,8 @@ from libs.generate_text.states import GenerateTextState
 from libs.generate_text.types import GenerateTextNodeType
 from libs.llm.types import LlmType
 from tests.factories.auth import build_auth_user
-from tests.factories.blog_post import build_blog_post_options_input
 from tests.factories.generate_text import (
+    build_blog_post_options_input,
     build_create_generate_text_run_input,
     build_generate_text_state,
 )
@@ -35,17 +34,24 @@ async def _insert_auth_user(db_session: AsyncSession) -> AuthUser:
     return build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
 
 
-def _build_services(
-    db_session_factory: async_sessionmaker[AsyncSession], llm_service_stub: LlmServiceStub
-) -> tuple[GenerateTextRunService, GenerateTextNodeService, GenerateTextInstrumentationService]:
+def _build_graph_builder(
+    db_session_factory: async_sessionmaker[AsyncSession],
+    llm_service_stub: LlmServiceStub,
+    *,
+    max_rewrite_passes: int = 3,
+) -> tuple[GenerateTextRunService, BlogPostGraphBuilder]:
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    rollup_service = GenerateTextRollupService(db_session_factory=db_session_factory)
     instrumentation_service = GenerateTextInstrumentationService(
-        run_service=run_service, step_service=step_service, rollup_service=rollup_service
+        run_service=run_service, step_service=step_service
     )
     node_service = GenerateTextNodeService(llm_service=llm_service_stub)
-    return run_service, node_service, instrumentation_service
+    blog_post_graph_builder = BlogPostGraphBuilder(
+        node_service=node_service,
+        instrumentation_service=instrumentation_service,
+        generate_text_settings=GenerateTextSettings(max_rewrite_passes=max_rewrite_passes),
+    )
+    return run_service, blog_post_graph_builder
 
 
 async def _seed_state(
@@ -64,13 +70,13 @@ async def _seed_state(
     )
 
 
-async def test_build_blog_post_graph_all_steps_auto_approved_runs_to_end(
+async def test_build_graph_all_steps_auto_approved_runs_to_end(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="Generated text.")
-    run_service, node_service, instrumentation_service = _build_services(
+    run_service, blog_post_graph_builder = _build_graph_builder(
         db_session_factory, llm_service_stub
     )
     generate_text_state = await _seed_state(db_session, run_service, auth_user)
@@ -79,12 +85,8 @@ async def test_build_blog_post_graph_all_steps_auto_approved_runs_to_end(
         draft=StepOptionInput(is_auto_approved=True),
         humanize=StepOptionInput(is_enabled=True, is_auto_approved=True),
     )
-    blog_post_graph = build_blog_post_graph(
-        options=options,
-        node_service=node_service,
-        instrumentation_service=instrumentation_service,
-        generate_text_settings=GenerateTextSettings(),
-        checkpointer=InMemorySaver(),
+    blog_post_graph = blog_post_graph_builder.build_graph(
+        options.model_dump(mode="json"), InMemorySaver()
     )
     graph_run_config = {"configurable": {"thread_id": str(uuid4())}}
 
@@ -107,23 +109,19 @@ async def test_build_blog_post_graph_all_steps_auto_approved_runs_to_end(
     assert outline_completion_input.step_id is not None
 
 
-async def test_build_blog_post_graph_step_not_auto_approved_pauses_at_review(
+async def test_build_graph_step_not_auto_approved_pauses_at_review(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
-    run_service, node_service, instrumentation_service = _build_services(
+    run_service, blog_post_graph_builder = _build_graph_builder(
         db_session_factory, llm_service_stub
     )
     generate_text_state = await _seed_state(db_session, run_service, auth_user)
     options = build_blog_post_options_input(draft=StepOptionInput(is_auto_approved=False))
-    blog_post_graph = build_blog_post_graph(
-        options=options,
-        node_service=node_service,
-        instrumentation_service=instrumentation_service,
-        generate_text_settings=GenerateTextSettings(),
-        checkpointer=InMemorySaver(),
+    blog_post_graph = blog_post_graph_builder.build_graph(
+        options.model_dump(mode="json"), InMemorySaver()
     )
     graph_run_config = {"configurable": {"thread_id": str(uuid4())}}
 
@@ -134,23 +132,19 @@ async def test_build_blog_post_graph_step_not_auto_approved_pauses_at_review(
     assert graph_state_snapshot.interrupts[0].value == {"step_output": "A draft."}
 
 
-async def test_build_blog_post_graph_rejection_routes_to_rewrite_and_pauses_again(
+async def test_build_graph_rejection_routes_to_rewrite_and_pauses_again(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
-    run_service, node_service, instrumentation_service = _build_services(
+    run_service, blog_post_graph_builder = _build_graph_builder(
         db_session_factory, llm_service_stub
     )
     generate_text_state = await _seed_state(db_session, run_service, auth_user)
     options = build_blog_post_options_input(draft=StepOptionInput(is_auto_approved=False))
-    blog_post_graph = build_blog_post_graph(
-        options=options,
-        node_service=node_service,
-        instrumentation_service=instrumentation_service,
-        generate_text_settings=GenerateTextSettings(),
-        checkpointer=InMemorySaver(),
+    blog_post_graph = blog_post_graph_builder.build_graph(
+        options.model_dump(mode="json"), InMemorySaver()
     )
     graph_run_config = {"configurable": {"thread_id": str(uuid4())}}
     await blog_post_graph.ainvoke(generate_text_state, graph_run_config)
@@ -165,23 +159,19 @@ async def test_build_blog_post_graph_rejection_routes_to_rewrite_and_pauses_agai
     assert graph_state_snapshot.values["rewrite_counts"]["REVIEW_DRAFT"] == 1
 
 
-async def test_build_blog_post_graph_max_rewrite_passes_ends_run_instead_of_looping(
+async def test_build_graph_max_rewrite_passes_ends_run_instead_of_looping(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
-    run_service, node_service, instrumentation_service = _build_services(
-        db_session_factory, llm_service_stub
+    run_service, blog_post_graph_builder = _build_graph_builder(
+        db_session_factory, llm_service_stub, max_rewrite_passes=1
     )
     generate_text_state = await _seed_state(db_session, run_service, auth_user)
     options = build_blog_post_options_input(draft=StepOptionInput(is_auto_approved=False))
-    blog_post_graph = build_blog_post_graph(
-        options=options,
-        node_service=node_service,
-        instrumentation_service=instrumentation_service,
-        generate_text_settings=GenerateTextSettings(max_rewrite_passes=1),
-        checkpointer=InMemorySaver(),
+    blog_post_graph = blog_post_graph_builder.build_graph(
+        options.model_dump(mode="json"), InMemorySaver()
     )
     graph_run_config = {"configurable": {"thread_id": str(uuid4())}}
     await blog_post_graph.ainvoke(generate_text_state, graph_run_config)
@@ -195,19 +185,15 @@ async def test_build_blog_post_graph_max_rewrite_passes_ends_run_instead_of_loop
     assert graph_state_snapshot.values["rewrite_counts"]["REVIEW_DRAFT"] == 1
 
 
-def test_build_blog_post_graph_outline_and_humanize_disabled_omits_their_nodes(
+def test_build_graph_outline_and_humanize_disabled_omits_their_nodes(
     db_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     llm_service_stub = LlmServiceStub()
-    _, node_service, instrumentation_service = _build_services(db_session_factory, llm_service_stub)
+    _, blog_post_graph_builder = _build_graph_builder(db_session_factory, llm_service_stub)
     options = build_blog_post_options_input(draft=StepOptionInput(is_auto_approved=True))
 
-    blog_post_graph = build_blog_post_graph(
-        options=options,
-        node_service=node_service,
-        instrumentation_service=instrumentation_service,
-        generate_text_settings=GenerateTextSettings(),
-        checkpointer=InMemorySaver(),
+    blog_post_graph = blog_post_graph_builder.build_graph(
+        options.model_dump(mode="json"), InMemorySaver()
     )
 
     assert set(blog_post_graph.nodes.keys()) == {
@@ -216,22 +202,18 @@ def test_build_blog_post_graph_outline_and_humanize_disabled_omits_their_nodes(
     }
 
 
-def test_build_blog_post_graph_outline_enabled_not_auto_approved_adds_review_and_rewrite_nodes(
+def test_build_graph_outline_enabled_not_auto_approved_adds_review_and_rewrite_nodes(
     db_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     llm_service_stub = LlmServiceStub()
-    _, node_service, instrumentation_service = _build_services(db_session_factory, llm_service_stub)
+    _, blog_post_graph_builder = _build_graph_builder(db_session_factory, llm_service_stub)
     options = build_blog_post_options_input(
         outline=StepOptionInput(is_enabled=True, is_auto_approved=False),
         draft=StepOptionInput(is_auto_approved=True),
     )
 
-    blog_post_graph = build_blog_post_graph(
-        options=options,
-        node_service=node_service,
-        instrumentation_service=instrumentation_service,
-        generate_text_settings=GenerateTextSettings(),
-        checkpointer=InMemorySaver(),
+    blog_post_graph = blog_post_graph_builder.build_graph(
+        options.model_dump(mode="json"), InMemorySaver()
     )
 
     assert set(blog_post_graph.nodes.keys()) == {

@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
-from libs.generate_text.results import GenerateTextRollupResult
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
 from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionType
@@ -17,6 +16,7 @@ from tests.factories.generate_text import (
     build_create_generate_text_run_input,
     build_create_generate_text_step_input,
 )
+from tests.factories.llm import insert_llm_call_row
 from tests.factories.users import insert_user_row
 
 
@@ -33,7 +33,7 @@ async def _insert_run_id(run_service: GenerateTextRunService, auth_user: AuthUse
     return create_run_result.id
 
 
-async def test_create_step_persists_first_seq_and_attempt(
+async def test_create_step_persists_first_step_number_and_attempt(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
@@ -51,7 +51,7 @@ async def test_create_step_persists_first_seq_and_attempt(
     assert step_record is not None
     assert step_record.identity == create_step_result.identity
     assert step_record.run_id == run_id
-    assert step_record.seq == 1
+    assert step_record.step_number == 1
     assert step_record.attempt == 1
     assert step_record.step_name == "GENERATE_DRAFT"
     assert step_record.status == GenerateTextStepStatusType.RUNNING
@@ -60,7 +60,7 @@ async def test_create_step_persists_first_seq_and_attempt(
     assert step_record.updated_by_id == auth_user.id
 
 
-async def test_create_step_seq_increments_per_run(
+async def test_create_step_step_number_increments_per_run(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
@@ -80,8 +80,8 @@ async def test_create_step_seq_increments_per_run(
     second_step_record = await db_session.get(GenerateTextStepOrm, second_step_result.id)
     assert first_step_record is not None
     assert second_step_record is not None
-    assert first_step_record.seq == 1
-    assert second_step_record.seq == 2
+    assert first_step_record.step_number == 1
+    assert second_step_record.step_number == 2
 
 
 async def test_create_step_attempt_increments_per_repeated_step_name(
@@ -105,10 +105,32 @@ async def test_create_step_attempt_increments_per_repeated_step_name(
     assert second_step_record is not None
     assert first_step_record.attempt == 1
     assert second_step_record.attempt == 2
-    assert second_step_record.seq == 2
+    assert second_step_record.step_number == 2
 
 
-async def test_complete_step_sets_succeeded_status_and_output(
+async def test_create_step_awaiting_review_step_resumes_instead_of_duplicating(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    run_id = await _insert_run_id(run_service, auth_user)
+    create_step_result = await step_service.create_step(
+        build_create_generate_text_step_input(run_id=run_id, step_name="REVIEW_DRAFT"), auth_user
+    )
+    await step_service.record_awaiting_review(create_step_result.id, 10)
+
+    resumed_step_result = await step_service.create_step(
+        build_create_generate_text_step_input(run_id=run_id, step_name="REVIEW_DRAFT"), auth_user
+    )
+
+    assert resumed_step_result.id == create_step_result.id
+    step_record = await db_session.get(GenerateTextStepOrm, create_step_result.id)
+    assert step_record is not None
+    assert step_record.status == GenerateTextStepStatusType.RUNNING
+
+
+async def test_complete_step_sets_succeeded_status_output_and_zero_rollup_when_no_calls(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
@@ -127,6 +149,50 @@ async def test_complete_step_sets_succeeded_status_and_output(
     assert step_record.output == {"text": "A draft about coffee."}
     assert step_record.duration_ms == 250
     assert step_record.finished_at is not None
+    assert step_record.llm_call_count == 0
+    assert step_record.input_tokens == 0
+    assert step_record.output_tokens == 0
+    assert step_record.cost_usd == Decimal("0")
+
+
+async def test_complete_step_sums_llm_calls_coalescing_null_tokens_and_cost(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    run_id = await _insert_run_id(run_service, auth_user)
+    create_step_result = await step_service.create_step(
+        build_create_generate_text_step_input(run_id=run_id), auth_user
+    )
+    await insert_llm_call_row(
+        db_session,
+        created_by_id=auth_user.id,
+        run_id=run_id,
+        step_id=create_step_result.id,
+        input_tokens=100,
+        output_tokens=50,
+        cost_usd=Decimal("0.01"),
+    )
+    await insert_llm_call_row(
+        db_session,
+        created_by_id=auth_user.id,
+        run_id=run_id,
+        step_id=create_step_result.id,
+        input_tokens=None,
+        output_tokens=None,
+        cost_usd=None,
+    )
+    await db_session.commit()
+
+    await step_service.complete_step(create_step_result.id, "A draft about coffee.", 250)
+
+    step_record = await db_session.get(GenerateTextStepOrm, create_step_result.id)
+    assert step_record is not None
+    assert step_record.llm_call_count == 2
+    assert step_record.input_tokens == 100
+    assert step_record.output_tokens == 50
+    assert step_record.cost_usd == Decimal("0.01")
 
 
 async def test_fail_step_sets_failed_status_and_error_fields(
@@ -175,7 +241,7 @@ async def test_record_decision_sets_human_decision_and_feedback(
     assert step_record.decided_at == decided_at
 
 
-async def test_record_rollup_updates_step_rollup_columns(
+async def test_record_awaiting_review_sets_awaiting_review_status_and_duration(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
@@ -183,20 +249,59 @@ async def test_record_rollup_updates_step_rollup_columns(
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
     run_id = await _insert_run_id(run_service, auth_user)
     create_step_result = await step_service.create_step(
-        build_create_generate_text_step_input(run_id=run_id), auth_user
-    )
-    rollup_result = GenerateTextRollupResult(
-        llm_call_count=1, input_tokens=100, output_tokens=50, cost_usd=Decimal("0.005")
+        build_create_generate_text_step_input(run_id=run_id, step_name="REVIEW_DRAFT"), auth_user
     )
 
-    await step_service.record_rollup(create_step_result.id, rollup_result)
+    await step_service.record_awaiting_review(create_step_result.id, 120)
 
     step_record = await db_session.get(GenerateTextStepOrm, create_step_result.id)
     assert step_record is not None
-    assert step_record.llm_call_count == 1
-    assert step_record.input_tokens == 100
-    assert step_record.output_tokens == 50
-    assert step_record.cost_usd == Decimal("0.005")
+    assert step_record.status == GenerateTextStepStatusType.AWAITING_REVIEW
+    assert step_record.duration_ms == 120
+
+
+async def test_record_awaiting_review_not_found_raises_not_found_exception(
+    db_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+
+    with pytest.raises(NotFoundException):
+        await step_service.record_awaiting_review(999999, 1)
+
+
+async def test_find_latest_output_returns_newest_step_output(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    run_id = await _insert_run_id(run_service, auth_user)
+    first_step_result = await step_service.create_step(
+        build_create_generate_text_step_input(run_id=run_id, step_name="GENERATE_OUTLINE"),
+        auth_user,
+    )
+    await step_service.complete_step(first_step_result.id, "An outline.", 10)
+    second_step_result = await step_service.create_step(
+        build_create_generate_text_step_input(run_id=run_id, step_name="GENERATE_DRAFT"), auth_user
+    )
+    await step_service.complete_step(second_step_result.id, "A draft.", 20)
+
+    latest_output = await step_service.find_latest_output(run_id)
+
+    assert latest_output == "A draft."
+
+
+async def test_find_latest_output_no_steps_returns_empty_string(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    run_id = await _insert_run_id(run_service, auth_user)
+
+    latest_output = await step_service.find_latest_output(run_id)
+
+    assert latest_output == ""
 
 
 async def test_complete_step_not_found_raises_not_found_exception(

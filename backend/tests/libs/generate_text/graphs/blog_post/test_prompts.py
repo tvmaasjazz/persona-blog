@@ -1,4 +1,4 @@
-from libs.blog_post.prompts import BlogPostPrompt
+from libs.generate_text.graphs.blog_post.prompts import BlogPostPrompt
 
 
 def test_build_outline_prompt_includes_prompt_text() -> None:

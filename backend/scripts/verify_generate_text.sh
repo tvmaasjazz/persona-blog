@@ -97,11 +97,11 @@ RUN_IDENTITY="$(echo "$GENERATE_RESPONSE" | read_json_field run_identity)"
 pass "run $RUN_IDENTITY paused at $(echo "$GENERATE_RESPONSE" | read_json_field current_step)"
 
 step "2. Read the run back"
-curl -sf -b "sid=$SESSION_ID" "$API_URL/generate-text-runs/$RUN_IDENTITY" | print_json
+curl -sf -b "sid=$SESSION_ID" "$API_URL/generate-text/runs/$RUN_IDENTITY" | print_json
 pass "the run reports its own cost and token counts"
 
 step "3. Reject the draft with direction — expect a rewrite, paused again"
-REJECT_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text-runs/$RUN_IDENTITY/resume" \
+REJECT_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/runs/$RUN_IDENTITY/resume" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
   -d "$(json_body is_approved=false feedback_text=@FEEDBACK_TEXT)")"
 echo "$REJECT_RESPONSE" | print_json
@@ -111,7 +111,7 @@ echo "$REJECT_RESPONSE" | print_json
 pass "the draft changed after feedback"
 
 step "4. Approve — the run finishes through humanize"
-APPROVE_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text-runs/$RUN_IDENTITY/resume" \
+APPROVE_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/runs/$RUN_IDENTITY/resume" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
   -d "$(json_body is_approved=true feedback_text=null)")"
 echo "$APPROVE_RESPONSE" | print_json
@@ -128,13 +128,13 @@ check_status() {
 
 step "5. The error paths"
 check_status 409 "resuming a finished run" \
-  -X POST "$API_URL/generate-text-runs/$RUN_IDENTITY/resume" \
+  -X POST "$API_URL/generate-text/runs/$RUN_IDENTITY/resume" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
   -d '{"is_approved": true, "feedback_text": null}'
 check_status 404 "reading a run that never existed" \
-  -b "sid=$SESSION_ID" "$API_URL/generate-text-runs/00000000-0000-0000-0000-000000000000"
+  -b "sid=$SESSION_ID" "$API_URL/generate-text/runs/00000000-0000-0000-0000-000000000000"
 check_status 422 "a malformed run identity" \
-  -b "sid=$SESSION_ID" "$API_URL/generate-text-runs/not-a-uuid"
+  -b "sid=$SESSION_ID" "$API_URL/generate-text/runs/not-a-uuid"
 check_status 401 "generating while signed out" \
   -X POST "$API_URL/generate-text/blog-post" \
   -H 'Content-Type: application/json' \
@@ -145,10 +145,10 @@ docker compose exec -T postgres psql -U pb -d pb_local -c \
   "SELECT status, current_step, graph_version, llm_call_count, input_tokens, output_tokens, cost_usd
    FROM pb_generate_text_run WHERE identity = '$RUN_IDENTITY';"
 docker compose exec -T postgres psql -U pb -d pb_local -c \
-  "SELECT s.seq, s.step_name, s.attempt, s.status, s.human_decision, s.llm_call_count, s.cost_usd, s.duration_ms
+  "SELECT s.step_number, s.step_name, s.attempt, s.status, s.human_decision, s.llm_call_count, s.cost_usd, s.duration_ms
    FROM pb_generate_text_step s
    JOIN pb_generate_text_run r ON r.id = s.run_id
-   WHERE r.identity = '$RUN_IDENTITY' ORDER BY s.seq;"
+   WHERE r.identity = '$RUN_IDENTITY' ORDER BY s.step_number;"
 docker compose exec -T postgres psql -U pb -d pb_local -c \
   "SELECT c.purpose, c.model_name, c.status, c.input_tokens, c.output_tokens, c.cost_usd, s.step_name
    FROM pb_llm_call c

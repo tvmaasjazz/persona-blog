@@ -3,17 +3,29 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from libs.blog_post.inputs import BlogPostOptionsInput
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
+from libs.generate_text.graphs.blog_post.inputs import BlogPostOptionsInput
 from libs.generate_text.inputs import (
     CreateGenerateTextRunInput,
     CreateGenerateTextStepInput,
     GenerateTextInput,
     ResumeGenerateTextInput,
+    StepOptionInput,
 )
 from libs.generate_text.states import GenerateTextState
 from libs.generate_text.types import GenerateTextRunStatusType, GenerateTextStepStatusType, TextType
+
+
+def build_blog_post_options_input(
+    *,
+    outline: StepOptionInput | None = None,
+    draft: StepOptionInput | None = None,
+    humanize: StepOptionInput | None = None,
+) -> BlogPostOptionsInput:
+    return BlogPostOptionsInput(
+        outline=outline, draft=draft or StepOptionInput(), humanize=humanize
+    )
 
 
 def build_create_generate_text_run_input(
@@ -21,7 +33,6 @@ def build_create_generate_text_run_input(
     text_type: TextType = TextType.BLOG_POST,
     graph_name: str = "blog_post",
     graph_version: str = "test-version",
-    thread_id: str | None = None,
     prompt_text: str = "Write about coffee.",
     persona_info: str | None = None,
     additional_context: str | None = None,
@@ -31,7 +42,6 @@ def build_create_generate_text_run_input(
         text_type=text_type,
         graph_name=graph_name,
         graph_version=graph_version,
-        thread_id=thread_id or _build_unique_thread_id(),
         prompt_text=prompt_text,
         persona_info=persona_info,
         additional_context=additional_context,
@@ -46,7 +56,6 @@ async def insert_generate_text_run_row(
     text_type: TextType = TextType.BLOG_POST,
     graph_name: str = "blog_post",
     graph_version: str = "test-version",
-    thread_id: str | None = None,
     status: GenerateTextRunStatusType = GenerateTextRunStatusType.PENDING,
     current_step: str | None = None,
     prompt_text: str = "Write about coffee.",
@@ -58,7 +67,6 @@ async def insert_generate_text_run_row(
         text_type=text_type,
         graph_name=graph_name,
         graph_version=graph_version,
-        thread_id=thread_id or _build_unique_thread_id(),
         status=status,
         current_step=current_step,
         prompt_text=prompt_text,
@@ -87,7 +95,7 @@ async def insert_generate_text_step_row(
     *,
     run_id: int,
     created_by_id: int,
-    seq: int = 1,
+    step_number: int = 1,
     step_name: str = "GENERATE_DRAFT",
     attempt: int = 1,
     status: GenerateTextStepStatusType = GenerateTextStepStatusType.RUNNING,
@@ -95,7 +103,7 @@ async def insert_generate_text_step_row(
 ) -> GenerateTextStepOrm:
     step_record = GenerateTextStepOrm(
         run_id=run_id,
-        seq=seq,
+        step_number=step_number,
         step_name=step_name,
         attempt=attempt,
         status=status,
@@ -164,7 +172,3 @@ def build_resume_generate_text_input(
     *, is_approved: bool = True, feedback_text: str | None = None
 ) -> ResumeGenerateTextInput:
     return ResumeGenerateTextInput(is_approved=is_approved, feedback_text=feedback_text)
-
-
-def _build_unique_thread_id() -> str:
-    return f"thread-{uuid4().hex}"
