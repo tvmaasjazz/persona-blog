@@ -9,18 +9,7 @@ from apps.api.core.config import AppSettings
 from libs.auth.constants import SESSION_COOKIE_NAME
 from libs.auth.results import AuthUser
 from libs.auth.services import AuthSessionService
-from libs.blog_post.graphs import build_blog_post_graph_spec
-from libs.core.exceptions import ServiceUnavailableException, UnauthorizedException
-from libs.generate_text.services import (
-    GenerateTextGraphService,
-    GenerateTextInstrumentationService,
-    GenerateTextNodeService,
-    GenerateTextRollupService,
-    GenerateTextRunService,
-    GenerateTextService,
-    GenerateTextStepService,
-)
-from libs.generate_text.types import TextType
+from libs.core.exceptions import UnauthorizedException
 from libs.llm.services import LlmCallService, LlmService, OpenAiLlmService
 from libs.llm.types import LlmProviderType
 from libs.users.tasks import record_user_activity
@@ -65,11 +54,9 @@ async def get_auth_user(request: Request, background_tasks: BackgroundTasks) -> 
     return auth_user
 
 
-# This sits in core/ rather than a domain even though only dev_llm uses it today, which the
-# Layer rules' "used by only two domains" line argues against. Domains can't import each
-# other, so the alternative is every domain that reaches an LLM rebuilding the same provider
-# map. generate_text is the second consumer in the next step; revisit the placement, and the
-# rule, once it's clear how many domains really need it.
+# Two domains reach an LLM now, dev_llm and generate_text, and domains can't import each
+# other — so the alternative to core/ is each of them rebuilding the same provider map.
+# Worth revisiting if a third arrives and the shape has settled.
 def get_llm_service(request: Request) -> LlmService:
     app_settings: AppSettings = request.app.state.settings
     openai_llm_service = OpenAiLlmService(openai_client=request.app.state.openai_client)
@@ -84,45 +71,7 @@ def get_llm_service(request: Request) -> LlmService:
 LlmServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 
 
-# This sits in core/ rather than a domain because generate_text and generate_text_runs
-# both need the identical stack; a domain can't import another domain's dependencies, so
-# core is the only place both can reach it (fastapi-structure.md > Layer rules).
-def get_generate_text_service(request: Request, llm_service: LlmServiceDep) -> GenerateTextService:
-    graph_checkpointer = request.app.state.graph_checkpointer
-    if graph_checkpointer is None:
-        # lifespan says why: RediSearch only indexes Redis database 0.
-        raise ServiceUnavailableException("Text generation is unavailable")
-
-    app_settings: AppSettings = request.app.state.settings
-    db_session_factory = request.app.state.db_session_factory
-    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    generate_text_step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    generate_text_rollup_service = GenerateTextRollupService(db_session_factory=db_session_factory)
-    generate_text_instrumentation_service = GenerateTextInstrumentationService(
-        run_service=generate_text_run_service,
-        step_service=generate_text_step_service,
-        rollup_service=generate_text_rollup_service,
-    )
-    generate_text_node_service = GenerateTextNodeService(llm_service=llm_service)
-    generate_text_graph_service = GenerateTextGraphService(
-        generate_text_graph_specs={
-            TextType.BLOG_POST: build_blog_post_graph_spec(
-                node_service=generate_text_node_service,
-                instrumentation_service=generate_text_instrumentation_service,
-                generate_text_settings=app_settings.generate_text,
-            )
-        }
-    )
-    return GenerateTextService(
-        graph_service=generate_text_graph_service,
-        run_service=generate_text_run_service,
-        step_service=generate_text_step_service,
-        checkpointer=graph_checkpointer,
-    )
-
-
 AppSettingsDep = Annotated[AppSettings, Depends(get_app_settings)]
 AuthUserDep = Annotated[AuthUser, Depends(get_auth_user)]
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 DbTransactionDep = Annotated[AsyncSession, Depends(get_db_transaction)]
-GenerateTextServiceDep = Annotated[GenerateTextService, Depends(get_generate_text_service)]
