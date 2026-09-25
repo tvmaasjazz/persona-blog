@@ -35,14 +35,12 @@ class GenerateTextRunOrm(BaseOrm):
         Enum(GenerateTextRunStatusType, name="pb_generate_text_run_status_type"),
         server_default=text("'PENDING'"),
     )
-    current_step: Mapped[str | None]
     prompt_text: Mapped[str]
     persona_info: Mapped[str | None]
     additional_context: Mapped[str | None]
     options: Mapped[dict[str, Any]] = mapped_column(JSONB)
     error_code: Mapped[str | None]
     error_message: Mapped[str | None]
-    error_step: Mapped[str | None]
     llm_call_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     input_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     output_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
