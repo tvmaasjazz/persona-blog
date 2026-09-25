@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Walks the generate-text workflow end to end against a running dev server and a real
-# LLM, printing each step and what came back. Run from backend/:
+# Walks a blog post generation end to end against a running dev server and a real LLM:
+# outline, draft and humanize, with the draft held for review. Prints each step, the run
+# and step rows it wrote, and the LLM calls they cost. Run from backend/:
 #
 #   ./scripts/verify_generate_text.sh
 #
@@ -12,7 +13,8 @@ API_URL="${API_URL:-http://localhost:8000}"
 PROMPT_TEXT="${PROMPT_TEXT:-Why sourdough starter needs a feeding schedule}"
 FEEDBACK_TEXT="${FEEDBACK_TEXT:-Too general. Give concrete timings and temperatures.}"
 # Exported so the json_body python below can read them from os.environ.
-export PROMPT_TEXT FEEDBACK_TEXT
+PERSONA_INFO="${PERSONA_INFO:-Writes plainly, bakes at home, distrusts jargon.}"
+export PROMPT_TEXT FEEDBACK_TEXT PERSONA_INFO
 
 step() { printf '\n\033[1m── %s\033[0m\n' "$1"; }
 fail() { printf '\033[31mFAIL\033[0m %s\n' "$1"; exit 1; }
@@ -83,17 +85,23 @@ PY
 )"
 pass "session ready"
 
-step "1. Generate — expect AWAITING_REVIEW with a draft"
-GENERATE_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/" \
+step "1. Generate a blog post — outline auto-approved, draft held for review"
+GENERATE_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/blog-post" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
-  -d "$(json_body text_type='"BLOG_POST"' prompt_text=@PROMPT_TEXT)")"
+  -d "$(json_body prompt_text=@PROMPT_TEXT persona_info=@PERSONA_INFO \
+        additional_context=null \
+        options='{"outline": {"is_enabled": true, "is_auto_approved": true}, "draft": {"is_auto_approved": false}, "humanize": {"is_enabled": true, "is_auto_approved": true}}')")"
 echo "$GENERATE_RESPONSE" | print_json
-THREAD_IDENTITY="$(echo "$GENERATE_RESPONSE" | read_json_field thread_identity)"
+RUN_IDENTITY="$(echo "$GENERATE_RESPONSE" | read_json_field run_identity)"
 [ "$(echo "$GENERATE_RESPONSE" | read_json_field status)" = "AWAITING_REVIEW" ] || fail "expected AWAITING_REVIEW"
-pass "thread $THREAD_IDENTITY is awaiting review"
+pass "run $RUN_IDENTITY paused at $(echo "$GENERATE_RESPONSE" | read_json_field current_step)"
 
-step "2. Reject with direction — expect a new draft, still AWAITING_REVIEW"
-REJECT_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/$THREAD_IDENTITY/resume" \
+step "2. Read the run back"
+curl -sf -b "sid=$SESSION_ID" "$API_URL/generate-text-runs/$RUN_IDENTITY" | print_json
+pass "the run reports its own cost and token counts"
+
+step "3. Reject the draft with direction — expect a rewrite, paused again"
+REJECT_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text-runs/$RUN_IDENTITY/resume" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
   -d "$(json_body is_approved=false feedback_text=@FEEDBACK_TEXT)")"
 echo "$REJECT_RESPONSE" | print_json
@@ -102,10 +110,10 @@ echo "$REJECT_RESPONSE" | print_json
   || fail "the rewrite returned the same draft"
 pass "the draft changed after feedback"
 
-step "3. Approve — expect COMPLETED"
-APPROVE_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/$THREAD_IDENTITY/resume" \
+step "4. Approve — the run finishes through humanize"
+APPROVE_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text-runs/$RUN_IDENTITY/resume" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
-  -d '{"is_approved": true, "feedback_text": null}')"
+  -d "$(json_body is_approved=true feedback_text=null)")"
 echo "$APPROVE_RESPONSE" | print_json
 [ "$(echo "$APPROVE_RESPONSE" | read_json_field status)" = "COMPLETED" ] || fail "expected COMPLETED"
 pass "run completed"
@@ -118,31 +126,34 @@ check_status() {
   pass "$description → $expected"
 }
 
-step "4. The error paths"
-check_status 409 "resuming a finished thread" \
-  -X POST "$API_URL/generate-text/$THREAD_IDENTITY/resume" \
+step "5. The error paths"
+check_status 409 "resuming a finished run" \
+  -X POST "$API_URL/generate-text-runs/$RUN_IDENTITY/resume" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
   -d '{"is_approved": true, "feedback_text": null}'
-check_status 404 "resuming a thread that never existed" \
-  -X POST "$API_URL/generate-text/00000000-0000-0000-0000-000000000000/resume" \
-  -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
-  -d '{"is_approved": true, "feedback_text": null}'
-check_status 422 "a malformed thread identity" \
-  -X POST "$API_URL/generate-text/not-a-uuid/resume" \
-  -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
-  -d '{"is_approved": true, "feedback_text": null}'
+check_status 404 "reading a run that never existed" \
+  -b "sid=$SESSION_ID" "$API_URL/generate-text-runs/00000000-0000-0000-0000-000000000000"
+check_status 422 "a malformed run identity" \
+  -b "sid=$SESSION_ID" "$API_URL/generate-text-runs/not-a-uuid"
 check_status 401 "generating while signed out" \
-  -X POST "$API_URL/generate-text/" \
+  -X POST "$API_URL/generate-text/blog-post" \
   -H 'Content-Type: application/json' \
-  -d '{"text_type": "BLOG_POST", "prompt_text": "anything"}'
-check_status 422 "an unknown text type" \
-  -X POST "$API_URL/generate-text/" \
-  -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
-  -d '{"text_type": "HAIKU", "prompt_text": "anything"}'
+  -d '{"prompt_text": "anything", "persona_info": null, "additional_context": null, "options": {"draft": {"is_auto_approved": true}}}'
 
-step "5. What the run recorded in pb_llm_call"
+step "6. What the run recorded"
 docker compose exec -T postgres psql -U pb -d pb_local -c \
-  "SELECT purpose, llm_type, model_name, status, reason, input_tokens, output_tokens, cost_usd, duration_ms
-   FROM pb_llm_call ORDER BY created_at DESC LIMIT 5;"
+  "SELECT status, current_step, graph_version, llm_call_count, input_tokens, output_tokens, cost_usd
+   FROM pb_generate_text_run WHERE identity = '$RUN_IDENTITY';"
+docker compose exec -T postgres psql -U pb -d pb_local -c \
+  "SELECT s.seq, s.step_name, s.attempt, s.status, s.human_decision, s.llm_call_count, s.cost_usd, s.duration_ms
+   FROM pb_generate_text_step s
+   JOIN pb_generate_text_run r ON r.id = s.run_id
+   WHERE r.identity = '$RUN_IDENTITY' ORDER BY s.seq;"
+docker compose exec -T postgres psql -U pb -d pb_local -c \
+  "SELECT c.purpose, c.model_name, c.status, c.input_tokens, c.output_tokens, c.cost_usd, s.step_name
+   FROM pb_llm_call c
+   JOIN pb_generate_text_run r ON r.id = c.run_id
+   LEFT JOIN pb_generate_text_step s ON s.id = c.step_id
+   WHERE r.identity = '$RUN_IDENTITY' ORDER BY c.created_at;"
 
-printf '\n\033[32mAll steps passed.\033[0m One row per generation and rewrite should appear above.\n'
+printf '\n\033[32mAll steps passed.\033[0m One step row per node, and every LLM call tied to its step.\n'
