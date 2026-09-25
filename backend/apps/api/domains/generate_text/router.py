@@ -5,32 +5,42 @@ from fastapi import APIRouter
 from apps.api.core.dependencies import AuthUserDep
 from apps.api.domains.generate_text.dependencies import GenerateTextServiceDep
 from apps.api.domains.generate_text.dtos import (
-    GeneratedTextResponseDto,
-    GenerateTextDto,
+    GenerateBlogPostDto,
+    GenerateTextRunResponseDto,
     ResumeGenerateTextDto,
 )
 
 generate_text_router = APIRouter(prefix="/generate-text", tags=["generate-text"])
 
 
-@generate_text_router.post("/")
-async def generate_text(
-    dto: GenerateTextDto,
+@generate_text_router.post("/blog-post")
+async def generate_blog_post(
+    dto: GenerateBlogPostDto,
     auth_user: AuthUserDep,
     generate_text_service: GenerateTextServiceDep,
-) -> GeneratedTextResponseDto:
+) -> GenerateTextRunResponseDto:
     generate_text_result = await generate_text_service.generate_text(dto.to_input(), auth_user)
-    return GeneratedTextResponseDto.from_result(generate_text_result)
+    return GenerateTextRunResponseDto.from_result(generate_text_result)
 
 
-@generate_text_router.post("/{thread_identity}/resume")
+@generate_text_router.get("/runs/{run_identity}")
+async def find_generate_text_run(
+    run_identity: UUID, auth_user: AuthUserDep, generate_text_service: GenerateTextServiceDep
+) -> GenerateTextRunResponseDto:
+    find_generate_text_run_result = await generate_text_service.find_generate_text_run(
+        run_identity, auth_user
+    )
+    return GenerateTextRunResponseDto.from_result(find_generate_text_run_result)
+
+
+@generate_text_router.post("/runs/{run_identity}/resume")
 async def resume_generate_text(
-    thread_identity: UUID,
-    dto: ResumeGenerateTextDto,
+    run_identity: UUID,
+    resume_generate_text_dto: ResumeGenerateTextDto,
     auth_user: AuthUserDep,
     generate_text_service: GenerateTextServiceDep,
-) -> GeneratedTextResponseDto:
+) -> GenerateTextRunResponseDto:
     resume_generate_text_result = await generate_text_service.resume_generate_text(
-        thread_identity, dto.to_input(), auth_user
+        run_identity, resume_generate_text_dto.to_input(), auth_user
     )
-    return GeneratedTextResponseDto.from_result(resume_generate_text_result)
+    return GenerateTextRunResponseDto.from_result(resume_generate_text_result)

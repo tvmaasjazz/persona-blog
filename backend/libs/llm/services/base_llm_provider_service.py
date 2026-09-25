@@ -6,7 +6,7 @@ from libs.llm.inputs import LlmProviderCompletionInput
 from libs.llm.results import LlmProviderCompletionResult
 
 
-class LlmProviderBaseService(ABC):
+class BaseLlmProviderService(ABC):
     @abstractmethod
     async def complete(
         self, provider_input: LlmProviderCompletionInput

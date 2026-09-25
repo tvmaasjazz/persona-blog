@@ -8,6 +8,8 @@ class LlmCompletionInput(BaseModel):
     purpose: str
     system_prompt: str | None
     user_prompt: str
+    run_id: int | None = None
+    step_id: int | None = None
 
 
 class LlmProviderCompletionInput(BaseModel):

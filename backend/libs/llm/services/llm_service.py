@@ -10,8 +10,8 @@ from libs.llm.results import (
     LlmCompletionResult,
     LlmStructuredCompletionResult,
 )
+from libs.llm.services.base_llm_provider_service import BaseLlmProviderService
 from libs.llm.services.llm_call_service import LlmCallService
-from libs.llm.services.llm_provider_base_service import LlmProviderBaseService
 from libs.llm.settings import LlmSettings, LlmTierSettings
 from libs.llm.types import LlmProviderType, LlmType
 from libs.llm.utils import LlmUtils
@@ -22,7 +22,7 @@ logger = structlog.get_logger(__name__)
 class LlmService:
     def __init__(
         self,
-        llm_provider_services: dict[LlmProviderType, LlmProviderBaseService],
+        llm_provider_services: dict[LlmProviderType, BaseLlmProviderService],
         llm_call_service: LlmCallService,
         llm_settings: LlmSettings,
     ) -> None:
@@ -144,7 +144,7 @@ class LlmService:
             raise NotImplementedError(f"No tier configured for {llm_type}")
         return tier_settings
 
-    def _resolve_provider_service(self, provider: LlmProviderType) -> LlmProviderBaseService:
+    def _resolve_provider_service(self, provider: LlmProviderType) -> BaseLlmProviderService:
         llm_provider_service = self._llm_provider_services.get(provider)
         if llm_provider_service is None:
             raise NotImplementedError(f"No provider service registered for {provider}")

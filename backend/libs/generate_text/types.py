@@ -5,14 +5,40 @@ class TextType(StrEnum):
     BLOG_POST = "BLOG_POST"
 
 
-class GenerateTextStatusType(StrEnum):
+class GenerateTextNodeType(StrEnum):
+    """The graph's nodes: the shared vocabulary every text type draws on. LangGraph
+    takes the member itself as the node name."""
+
+    GENERATE_OUTLINE = "GENERATE_OUTLINE"
+    REWRITE_OUTLINE = "REWRITE_OUTLINE"
+    REVIEW_OUTLINE = "REVIEW_OUTLINE"
+    GENERATE_DRAFT = "GENERATE_DRAFT"
+    REWRITE_DRAFT = "REWRITE_DRAFT"
+    REVIEW_DRAFT = "REVIEW_DRAFT"
+    HUMANIZE = "HUMANIZE"
+    REWRITE_HUMANIZE = "REWRITE_HUMANIZE"
+    REVIEW_HUMANIZE = "REVIEW_HUMANIZE"
+
+
+class GenerateTextRunStatusType(StrEnum):
+    """Where a run is. AWAITING_REVIEW means a review node is holding it."""
+
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
     AWAITING_REVIEW = "AWAITING_REVIEW"
     COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
-class GenerateTextNodeType(StrEnum):
-    """The graph's nodes. LangGraph takes the member itself as the node name."""
+class GenerateTextStepStatusType(StrEnum):
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+    AWAITING_REVIEW = "AWAITING_REVIEW"
 
-    WRITE_BLOG_POST = "WRITE_BLOG_POST"
-    REVIEW_BLOG_POST = "REVIEW_BLOG_POST"
-    REWRITE_BLOG_POST = "REWRITE_BLOG_POST"
+
+class HumanDecisionType(StrEnum):
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"

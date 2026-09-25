@@ -1,143 +1,347 @@
 from uuid import uuid4
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from libs.auth.results import AuthUser
+from libs.core.exceptions import NotFoundException
+from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.generate_text.exceptions import (
-    GenerateTextThreadNotFoundException,
-    GenerateTextThreadNotPausedException,
+    GenerateTextOptionsInvalidException,
+    GenerateTextRunNotPausedException,
+    GenerateTextRunVersionMismatchException,
 )
-from libs.generate_text.results import GenerateTextResult
-from libs.generate_text.services import GenerateTextService
-from libs.generate_text.types import GenerateTextStatusType
+from libs.generate_text.graphs.blog_post.inputs import BlogPostOptionsInput
+from libs.generate_text.graphs.generate_text_graph_builder_registry import (
+    GenerateTextGraphBuilderRegistry,
+)
+from libs.generate_text.inputs import GenerateTextInput, StepOptionInput
+from libs.generate_text.services.generate_text_instrumentation_service import (
+    GenerateTextInstrumentationService,
+)
+from libs.generate_text.services.generate_text_node_service import GenerateTextNodeService
+from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
+from libs.generate_text.services.generate_text_service import GenerateTextService
+from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
+from libs.generate_text.settings import GenerateTextSettings
+from libs.generate_text.types import GenerateTextRunStatusType, TextType
 from tests.factories.auth import build_auth_user
 from tests.factories.generate_text import (
     build_generate_text_input,
     build_resume_generate_text_input,
+    insert_generate_text_run_row,
 )
 from tests.factories.llm import build_llm_completion_result
+from tests.factories.users import insert_user_row
+from tests.stubs.generate_text import GenerateTextGraphBuilderRegistryStub
 from tests.stubs.llm import LlmServiceStub
 
 
-async def test_generate_text_returns_awaiting_review_with_draft_and_thread_identity(
-    generate_text_service: GenerateTextService, llm_service_stub: LlmServiceStub
+class _InvalidBlogPostOptionsInput(BaseModel):
+    """A wrong-shaped options payload: BlogPostOptionsInput.draft expects an object,
+    not an int, so build_graph's model_validate rejects it."""
+
+    draft: int = 5
+
+
+async def _insert_auth_user(db_session: AsyncSession) -> AuthUser:
+    user_record = await insert_user_row(db_session)
+    await db_session.commit()
+    return build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+
+
+def _build_generate_text_service(
+    db_session_factory: async_sessionmaker[AsyncSession], llm_service_stub: LlmServiceStub
+) -> GenerateTextService:
+    run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    instrumentation_service = GenerateTextInstrumentationService(
+        run_service=run_service, step_service=step_service
+    )
+    node_service = GenerateTextNodeService(llm_service=llm_service_stub)
+    graph_builder_registry = GenerateTextGraphBuilderRegistry(
+        node_service=node_service,
+        instrumentation_service=instrumentation_service,
+        generate_text_settings=GenerateTextSettings(),
+    )
+    return GenerateTextService(
+        graph_builder_registry=graph_builder_registry,
+        run_service=run_service,
+        step_service=step_service,
+        checkpointer=InMemorySaver(),
+    )
+
+
+def _build_generate_text_service_with_stub_registry(
+    db_session_factory: async_sessionmaker[AsyncSession],
+) -> tuple[GenerateTextService, GenerateTextGraphBuilderRegistryStub]:
+    run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    graph_builder_registry_stub = GenerateTextGraphBuilderRegistryStub()
+    generate_text_service = GenerateTextService(
+        graph_builder_registry=graph_builder_registry_stub,
+        run_service=run_service,
+        step_service=step_service,
+        checkpointer=InMemorySaver(),
+    )
+    return generate_text_service, graph_builder_registry_stub
+
+
+def _build_all_auto_approved_options() -> BlogPostOptionsInput:
+    return BlogPostOptionsInput(
+        outline=StepOptionInput(is_enabled=True, is_auto_approved=True),
+        draft=StepOptionInput(is_auto_approved=True),
+        humanize=StepOptionInput(is_enabled=False),
+    )
+
+
+def _build_draft_needs_review_options() -> BlogPostOptionsInput:
+    return BlogPostOptionsInput(
+        outline=None, draft=StepOptionInput(is_auto_approved=False), humanize=None
+    )
+
+
+async def test_generate_text_all_steps_auto_approved_returns_completed(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
-    llm_service_stub.complete_result = build_llm_completion_result(content="A draft about coffee.")
-    auth_user = build_auth_user()
-    generate_text_input = build_generate_text_input(prompt_text="Write about coffee.")
+    auth_user = await _insert_auth_user(db_session)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="Final text.")
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
+    generate_text_input = build_generate_text_input(options=_build_all_auto_approved_options())
 
     generate_text_result = await generate_text_service.generate_text(generate_text_input, auth_user)
 
-    assert generate_text_result.status == GenerateTextStatusType.AWAITING_REVIEW
-    assert generate_text_result.content == "A draft about coffee."
-    assert generate_text_result.character_count == 21
-    assert generate_text_result.thread_identity is not None
+    assert generate_text_result.status == GenerateTextRunStatusType.COMPLETED
+    assert generate_text_result.last_step == "GENERATE_DRAFT"
+    assert generate_text_result.content == "Final text."
+    assert generate_text_result.character_count == 11
 
 
-async def test_generate_text_character_count_matches_content(
-    generate_text_service: GenerateTextService, llm_service_stub: LlmServiceStub
+async def test_generate_text_step_not_auto_approved_returns_awaiting_review(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
-    llm_service_stub.complete_result = build_llm_completion_result(content="Short.")
-    auth_user = build_auth_user()
-    generate_text_input = build_generate_text_input()
+    auth_user = await _insert_auth_user(db_session)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
+    generate_text_input = build_generate_text_input(options=_build_draft_needs_review_options())
 
     generate_text_result = await generate_text_service.generate_text(generate_text_input, auth_user)
 
-    assert generate_text_result.character_count == 6
-
-
-async def test_resume_generate_text_rejection_returns_new_draft(
-    generate_text_service: GenerateTextService, llm_service_stub: LlmServiceStub
-) -> None:
-    llm_service_stub.complete_result = build_llm_completion_result(content="A draft about coffee.")
-    auth_user = build_auth_user()
-    generate_text_result = await generate_text_service.generate_text(
-        build_generate_text_input(), auth_user
-    )
-
-    llm_service_stub.complete_result = build_llm_completion_result(content="A revised draft.")
-    resume_generate_text_input = build_resume_generate_text_input(
-        is_approved=False, feedback_text="Make it shorter."
-    )
-    resume_generate_text_result = await generate_text_service.resume_generate_text(
-        generate_text_result.thread_identity, resume_generate_text_input, auth_user
-    )
-
-    assert resume_generate_text_result == GenerateTextResult(
-        thread_identity=generate_text_result.thread_identity,
-        status=GenerateTextStatusType.AWAITING_REVIEW,
-        content="A revised draft.",
-        character_count=16,
-    )
+    assert generate_text_result.status == GenerateTextRunStatusType.AWAITING_REVIEW
+    assert generate_text_result.last_step == "REVIEW_DRAFT"
+    assert generate_text_result.content == "A draft."
+    assert generate_text_result.character_count == 8
 
 
 async def test_resume_generate_text_approval_returns_completed(
-    generate_text_service: GenerateTextService, llm_service_stub: LlmServiceStub
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
-    llm_service_stub.complete_result = build_llm_completion_result(content="A draft about coffee.")
-    auth_user = build_auth_user()
+    auth_user = await _insert_auth_user(db_session)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
     generate_text_result = await generate_text_service.generate_text(
-        build_generate_text_input(), auth_user
+        build_generate_text_input(options=_build_draft_needs_review_options()), auth_user
     )
 
-    resume_generate_text_input = build_resume_generate_text_input(
-        is_approved=True, feedback_text=None
-    )
     resume_generate_text_result = await generate_text_service.resume_generate_text(
-        generate_text_result.thread_identity, resume_generate_text_input, auth_user
-    )
-
-    assert resume_generate_text_result == GenerateTextResult(
-        thread_identity=generate_text_result.thread_identity,
-        status=GenerateTextStatusType.COMPLETED,
-        content="A draft about coffee.",
-        character_count=21,
-    )
-
-
-async def test_resume_generate_text_unknown_thread_raises_generate_text_thread_not_found_exception(
-    generate_text_service: GenerateTextService,
-) -> None:
-    auth_user = build_auth_user()
-    resume_generate_text_input = build_resume_generate_text_input()
-
-    with pytest.raises(GenerateTextThreadNotFoundException):
-        await generate_text_service.resume_generate_text(
-            uuid4(), resume_generate_text_input, auth_user
-        )
-
-
-async def test_resume_generate_text_another_users_thread_raises_thread_not_found_exception(
-    generate_text_service: GenerateTextService, llm_service_stub: LlmServiceStub
-) -> None:
-    llm_service_stub.complete_result = build_llm_completion_result(content="A draft about coffee.")
-    generate_text_result = await generate_text_service.generate_text(
-        build_generate_text_input(), build_auth_user()
-    )
-
-    resume_generate_text_input = build_resume_generate_text_input()
-    with pytest.raises(GenerateTextThreadNotFoundException):
-        await generate_text_service.resume_generate_text(
-            generate_text_result.thread_identity, resume_generate_text_input, build_auth_user()
-        )
-
-
-async def test_resume_generate_text_finished_thread_raises_thread_not_paused_exception(
-    generate_text_service: GenerateTextService, llm_service_stub: LlmServiceStub
-) -> None:
-    llm_service_stub.complete_result = build_llm_completion_result(content="A draft about coffee.")
-    auth_user = build_auth_user()
-    generate_text_result = await generate_text_service.generate_text(
-        build_generate_text_input(), auth_user
-    )
-    await generate_text_service.resume_generate_text(
-        generate_text_result.thread_identity,
-        build_resume_generate_text_input(is_approved=True, feedback_text=None),
+        generate_text_result.run_identity,
+        build_resume_generate_text_input(is_approved=True),
         auth_user,
     )
 
-    with pytest.raises(GenerateTextThreadNotPausedException):
-        await generate_text_service.resume_generate_text(
-            generate_text_result.thread_identity,
-            build_resume_generate_text_input(),
-            auth_user,
+    assert resume_generate_text_result.status == GenerateTextRunStatusType.COMPLETED
+    assert resume_generate_text_result.content == "A draft."
+    assert resume_generate_text_result.character_count == 8
+
+
+async def test_resume_generate_text_rejection_rewrites_and_returns_awaiting_review(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
+    generate_text_result = await generate_text_service.generate_text(
+        build_generate_text_input(options=_build_draft_needs_review_options()), auth_user
+    )
+
+    llm_service_stub.complete_result = build_llm_completion_result(content="A revised draft.")
+    resume_generate_text_result = await generate_text_service.resume_generate_text(
+        generate_text_result.run_identity,
+        build_resume_generate_text_input(is_approved=False, feedback_text="Make it shorter."),
+        auth_user,
+    )
+
+    assert resume_generate_text_result.status == GenerateTextRunStatusType.AWAITING_REVIEW
+    assert resume_generate_text_result.content == "A revised draft."
+    assert resume_generate_text_result.character_count == 16
+
+
+async def test_find_generate_text_run_returns_result(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="Final text.")
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
+    generate_text_result = await generate_text_service.generate_text(
+        build_generate_text_input(options=_build_all_auto_approved_options()), auth_user
+    )
+
+    find_generate_text_run_result = await generate_text_service.find_generate_text_run(
+        generate_text_result.run_identity, auth_user
+    )
+
+    assert find_generate_text_run_result.run_identity == generate_text_result.run_identity
+    assert find_generate_text_run_result.text_type == TextType.BLOG_POST
+    assert find_generate_text_run_result.graph_name == "blog_post"
+    assert find_generate_text_run_result.status == GenerateTextRunStatusType.COMPLETED
+    assert find_generate_text_run_result.last_step == "GENERATE_DRAFT"
+    assert find_generate_text_run_result.started_at is not None
+    assert find_generate_text_run_result.finished_at is not None
+    assert find_generate_text_run_result.content == "Final text."
+    assert find_generate_text_run_result.character_count == len("Final text.")
+
+
+async def test_find_generate_text_run_unknown_raises_not_found_exception(
+    db_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    llm_service_stub = LlmServiceStub()
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
+
+    with pytest.raises(NotFoundException):
+        await generate_text_service.find_generate_text_run(uuid4(), build_auth_user())
+
+
+async def test_find_generate_text_run_another_users_run_raises_not_found_exception(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    owner_auth_user = await _insert_auth_user(db_session)
+    other_auth_user = await _insert_auth_user(db_session)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="Final text.")
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
+    generate_text_result = await generate_text_service.generate_text(
+        build_generate_text_input(options=_build_all_auto_approved_options()), owner_auth_user
+    )
+
+    with pytest.raises(NotFoundException):
+        await generate_text_service.find_generate_text_run(
+            generate_text_result.run_identity, other_auth_user
         )
+
+
+async def test_resume_generate_text_unknown_run_raises_not_found_exception(
+    db_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    llm_service_stub = LlmServiceStub()
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
+
+    with pytest.raises(NotFoundException):
+        await generate_text_service.resume_generate_text(
+            uuid4(), build_resume_generate_text_input(), build_auth_user()
+        )
+
+
+async def test_resume_generate_text_another_users_run_raises_not_found_exception(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    owner_auth_user = await _insert_auth_user(db_session)
+    other_auth_user = await _insert_auth_user(db_session)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
+    generate_text_result = await generate_text_service.generate_text(
+        build_generate_text_input(options=_build_draft_needs_review_options()), owner_auth_user
+    )
+
+    with pytest.raises(NotFoundException):
+        await generate_text_service.resume_generate_text(
+            generate_text_result.run_identity, build_resume_generate_text_input(), other_auth_user
+        )
+
+
+async def test_resume_generate_text_run_not_paused_raises_not_paused_exception(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="Final text.")
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
+    generate_text_result = await generate_text_service.generate_text(
+        build_generate_text_input(options=_build_all_auto_approved_options()), auth_user
+    )
+
+    with pytest.raises(GenerateTextRunNotPausedException):
+        await generate_text_service.resume_generate_text(
+            generate_text_result.run_identity, build_resume_generate_text_input(), auth_user
+        )
+
+
+async def test_resume_generate_text_version_mismatch_raises_version_mismatch_exception(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        graph_version="stale-version",
+        status=GenerateTextRunStatusType.AWAITING_REVIEW,
+    )
+    await db_session.commit()
+    llm_service_stub = LlmServiceStub()
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
+
+    with pytest.raises(GenerateTextRunVersionMismatchException):
+        await generate_text_service.resume_generate_text(
+            run_record.identity, build_resume_generate_text_input(), auth_user
+        )
+
+
+async def test_generate_text_graph_invoke_fails_with_no_step_marks_run_failed(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    generate_text_service, graph_builder_registry_stub = (
+        _build_generate_text_service_with_stub_registry(db_session_factory)
+    )
+    graph_builder_stub = graph_builder_registry_stub.get_by_text_type_result
+    graph_builder_stub.build_graph_result.ainvoke_error = RuntimeError("checkpointer unreachable")
+    generate_text_input = build_generate_text_input(options=_build_all_auto_approved_options())
+
+    with pytest.raises(RuntimeError):
+        await generate_text_service.generate_text(generate_text_input, auth_user)
+
+    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.created_by_id == auth_user.id)
+    run_record = await db_session.scalar(run_query)
+    assert run_record is not None
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "RuntimeError"
+    assert run_record.error_message == "checkpointer unreachable"
+    assert run_record.finished_at is not None
+
+
+async def test_generate_text_invalid_options_raises_and_persists_no_run(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    llm_service_stub = LlmServiceStub()
+    generate_text_service = _build_generate_text_service(db_session_factory, llm_service_stub)
+    generate_text_input = GenerateTextInput[_InvalidBlogPostOptionsInput](
+        text_type=TextType.BLOG_POST,
+        prompt_text="Write about coffee.",
+        options=_InvalidBlogPostOptionsInput(),
+    )
+
+    with pytest.raises(GenerateTextOptionsInvalidException):
+        await generate_text_service.generate_text(generate_text_input, auth_user)
+
+    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.created_by_id == auth_user.id)
+    run_record = await db_session.scalar(run_query)
+    assert run_record is None

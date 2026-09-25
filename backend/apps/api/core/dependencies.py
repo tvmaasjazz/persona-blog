@@ -54,11 +54,9 @@ async def get_auth_user(request: Request, background_tasks: BackgroundTasks) -> 
     return auth_user
 
 
-# This sits in core/ rather than a domain even though only dev_llm uses it today, which the
-# Layer rules' "used by only two domains" line argues against. Domains can't import each
-# other, so the alternative is every domain that reaches an LLM rebuilding the same provider
-# map. generate_text is the second consumer in the next step; revisit the placement, and the
-# rule, once it's clear how many domains really need it.
+# Two domains reach an LLM now, dev_llm and generate_text, and domains can't import each
+# other — so the alternative to core/ is each of them rebuilding the same provider map.
+# Worth revisiting if a third arrives and the shape has settled.
 def get_llm_service(request: Request) -> LlmService:
     app_settings: AppSettings = request.app.state.settings
     openai_llm_service = OpenAiLlmService(openai_client=request.app.state.openai_client)
@@ -70,8 +68,10 @@ def get_llm_service(request: Request) -> LlmService:
     )
 
 
+LlmServiceDep = Annotated[LlmService, Depends(get_llm_service)]
+
+
 AppSettingsDep = Annotated[AppSettings, Depends(get_app_settings)]
 AuthUserDep = Annotated[AuthUser, Depends(get_auth_user)]
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 DbTransactionDep = Annotated[AsyncSession, Depends(get_db_transaction)]
-LlmServiceDep = Annotated[LlmService, Depends(get_llm_service)]
