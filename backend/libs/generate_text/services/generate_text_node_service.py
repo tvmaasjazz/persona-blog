@@ -3,6 +3,7 @@ from typing import Any
 
 from langgraph.types import interrupt
 
+from libs.generate_text.inputs import ResumeGenerateTextInput
 from libs.generate_text.states import GenerateTextState
 from libs.generate_text.types import GenerateTextNodeType, HumanDecisionType
 from libs.llm.inputs import LlmCompletionInput
@@ -86,8 +87,9 @@ class GenerateTextNodeService:
     def build_review_node(self, node_type: GenerateTextNodeType) -> GenerateTextNode:
         async def review_node(state: GenerateTextState) -> dict[str, Any]:
             resume_payload = interrupt({"step_output": state.latest_output()})
-            is_approved = resume_payload["is_approved"]
-            feedback_text = resume_payload.get("feedback_text") or ""
+            resume_generate_text_input = ResumeGenerateTextInput.model_validate(resume_payload)
+            is_approved = resume_generate_text_input.is_approved
+            feedback_text = resume_generate_text_input.feedback_text or ""
             human_decision = (
                 HumanDecisionType.APPROVED if is_approved else HumanDecisionType.REJECTED
             )

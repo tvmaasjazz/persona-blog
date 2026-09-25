@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -6,12 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
+from libs.database.orm.llm_call import LlmCallOrm
 from libs.generate_text.constants import STEP_OUTPUT_TEXT_KEY
 from libs.generate_text.inputs import CreateGenerateTextStepInput
-from libs.generate_text.results import (
-    CreateGenerateTextStepResult,
-    GenerateTextRollupResult,
-)
+from libs.generate_text.results import CreateGenerateTextStepResult
 from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionType
 
 
@@ -42,12 +41,12 @@ class GenerateTextStepService:
                     id=paused_step_record.id, identity=paused_step_record.identity
                 )
 
-            next_seq = await self._resolve_next_seq(db_session, run_id)
+            next_step_number = await self._resolve_next_step_number(db_session, run_id)
             next_attempt = await self._resolve_next_attempt(db_session, run_id, step_name)
 
             step_record = GenerateTextStepOrm(
                 run_id=run_id,
-                seq=next_seq,
+                step_number=next_step_number,
                 step_name=step_name,
                 attempt=next_attempt,
                 status=GenerateTextStepStatusType.RUNNING,
@@ -70,6 +69,7 @@ class GenerateTextStepService:
             step_record.output = {STEP_OUTPUT_TEXT_KEY: output}
             step_record.duration_ms = duration_ms
             step_record.finished_at = datetime.now(UTC)
+            await self._apply_rollup(db_session, step_record)
             await db_session.flush()
 
     async def fail_step(
@@ -101,15 +101,6 @@ class GenerateTextStepService:
             step_record.updated_by_id = auth_user.id
             await db_session.flush()
 
-    async def record_rollup(self, step_id: int, rollup_result: GenerateTextRollupResult) -> None:
-        async with self._db_session_factory() as db_session, db_session.begin():
-            step_record = await self._get_step(db_session, step_id)
-            step_record.llm_call_count = rollup_result.llm_call_count
-            step_record.input_tokens = rollup_result.input_tokens
-            step_record.output_tokens = rollup_result.output_tokens
-            step_record.cost_usd = rollup_result.cost_usd
-            await db_session.flush()
-
     @staticmethod
     async def _find_awaiting_review_step(
         db_session: AsyncSession, run_id: int, step_name: str
@@ -128,7 +119,7 @@ class GenerateTextStepService:
         query = (
             select(GenerateTextStepOrm.output)
             .where(GenerateTextStepOrm.run_id == run_id, GenerateTextStepOrm.output.is_not(None))
-            .order_by(GenerateTextStepOrm.seq.desc())
+            .order_by(GenerateTextStepOrm.step_number.desc())
             .limit(1)
         )
         async with self._db_session_factory() as db_session:
@@ -149,13 +140,32 @@ class GenerateTextStepService:
             step_record.duration_ms = duration_ms
             await db_session.flush()
 
-    async def _resolve_next_seq(self, db_session: AsyncSession, run_id: int) -> int:
-        query = select(func.max(GenerateTextStepOrm.seq)).where(
+    async def _apply_rollup(
+        self, db_session: AsyncSession, step_record: GenerateTextStepOrm
+    ) -> None:
+        """Sums this step's pb_llm_call rows onto the step row itself, run as part of
+        completing a step."""
+        query = select(
+            func.count(LlmCallOrm.id),
+            func.coalesce(func.sum(LlmCallOrm.input_tokens), 0),
+            func.coalesce(func.sum(LlmCallOrm.output_tokens), 0),
+            func.coalesce(func.sum(LlmCallOrm.cost_usd), 0),
+        ).where(LlmCallOrm.step_id == step_record.id)
+        query_result = await db_session.execute(query)
+        llm_call_count, input_tokens, output_tokens, cost_usd = query_result.one()
+
+        step_record.llm_call_count = llm_call_count
+        step_record.input_tokens = input_tokens
+        step_record.output_tokens = output_tokens
+        step_record.cost_usd = Decimal(cost_usd)
+
+    async def _resolve_next_step_number(self, db_session: AsyncSession, run_id: int) -> int:
+        query = select(func.max(GenerateTextStepOrm.step_number)).where(
             GenerateTextStepOrm.run_id == run_id
         )
         query_result = await db_session.execute(query)
-        max_seq = query_result.scalar_one_or_none()
-        return (max_seq or 0) + 1
+        max_step_number = query_result.scalar_one_or_none()
+        return (max_step_number or 0) + 1
 
     async def _resolve_next_attempt(
         self, db_session: AsyncSession, run_id: int, step_name: str

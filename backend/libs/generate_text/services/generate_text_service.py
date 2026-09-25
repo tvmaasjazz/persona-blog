@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from typing import TYPE_CHECKING
+from uuid import UUID
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command, StateSnapshot
@@ -17,26 +18,33 @@ from libs.generate_text.inputs import (
     ResumeGenerateTextInput,
 )
 from libs.generate_text.results import FindGenerateTextRunByIdentityResult, GenerateTextRunResult
-from libs.generate_text.services.generate_text_graph_service import GenerateTextGraphService
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
 from libs.generate_text.states import GenerateTextState
 from libs.generate_text.types import GenerateTextRunStatusType, HumanDecisionType
 
+if TYPE_CHECKING:
+    # Imported for the annotation only: the builders this registry holds import the node
+    # and instrumentation services, so importing it at runtime closes a cycle through
+    # services/__init__.py. The registry itself arrives through __init__.
+    from libs.generate_text.graphs.generate_text_graph_builder_registry import (
+        GenerateTextGraphBuilderRegistry,
+    )
+
 
 class GenerateTextService:
-    """Starts and resumes generate-text runs. Owns the graph's lifecycle: it mints
-    the thread identity, builds the graph a run needs, runs it, reads the snapshot,
-    and maps it to a Result."""
+    """Starts and resumes generate-text runs. Owns the graph's lifecycle: it asks the
+    registry for the run's builder, runs the graph on the run's own identity as the
+    LangGraph thread id, reads the snapshot, and maps it to a Result."""
 
     def __init__(
         self,
-        graph_service: GenerateTextGraphService,
+        graph_builder_registry: GenerateTextGraphBuilderRegistry,
         run_service: GenerateTextRunService,
         step_service: GenerateTextStepService,
         checkpointer: BaseCheckpointSaver,
     ) -> None:
-        self._graph_service = graph_service
+        self._graph_builder_registry = graph_builder_registry
         self._run_service = run_service
         self._step_service = step_service
         self._checkpointer = checkpointer
@@ -45,16 +53,13 @@ class GenerateTextService:
         self, generate_text_input: GenerateTextInput[OptionsT], auth_user: AuthUser
     ) -> GenerateTextRunResult:
         text_type = generate_text_input.text_type
-        graph_name = self._graph_service.current_graph_name(text_type)
-        graph_version = self._graph_service.current_graph_version(text_type)
+        graph_builder = self._graph_builder_registry.get_by_text_type(text_type)
         options_dict = generate_text_input.options.model_dump(mode="json")
 
-        thread_id = str(uuid4())
         create_generate_text_run_input = CreateGenerateTextRunInput(
             text_type=text_type,
-            graph_name=graph_name,
-            graph_version=graph_version,
-            thread_id=thread_id,
+            graph_name=graph_builder.graph_name,
+            graph_version=graph_builder.graph_version,
             prompt_text=generate_text_input.prompt_text,
             persona_info=generate_text_input.persona_info,
             additional_context=generate_text_input.additional_context,
@@ -64,15 +69,13 @@ class GenerateTextService:
             create_generate_text_run_input, auth_user
         )
 
-        generate_text_graph = self._graph_service.build_graph(
-            text_type, graph_version, options_dict, self._checkpointer
-        )
+        generate_text_graph = graph_builder.build_graph(options_dict, self._checkpointer)
         initial_state = GenerateTextState(
             auth_user_id=auth_user.id,
             auth_user_identity=auth_user.identity,
             generate_text_run_id=create_run_result.id,
             generate_text_run_identity=create_run_result.identity,
-            graph_version=graph_version,
+            graph_version=graph_builder.graph_version,
             text_type=text_type.value,
             prompt_text=generate_text_input.prompt_text,
             persona_info=generate_text_input.persona_info,
@@ -81,7 +84,9 @@ class GenerateTextService:
 
         await self._run_service.start_run(create_run_result.id)
 
-        graph_run_config = {"configurable": {"thread_id": thread_id}}
+        # The run's identity is its LangGraph thread id, so no separate thread_id needs
+        # to be minted or stored.
+        graph_run_config = {"configurable": {"thread_id": str(create_run_result.identity)}}
         await generate_text_graph.ainvoke(initial_state, graph_run_config)
 
         state_snapshot = await generate_text_graph.aget_state(graph_run_config)
@@ -112,21 +117,16 @@ class GenerateTextService:
                 f"Generate text run {run_identity} is not awaiting review"
             )
 
-        current_graph_version = self._graph_service.current_graph_version(find_run_result.text_type)
-        if find_run_result.graph_version != current_graph_version:
+        graph_builder = self._graph_builder_registry.get_by_text_type(find_run_result.text_type)
+        if find_run_result.graph_version != graph_builder.graph_version:
             # The checkpoint is shaped by a topology that no longer exists.
             raise GenerateTextRunVersionMismatchException(
                 f"Generate text run {run_identity} was built on graph version "
-                f"{find_run_result.graph_version}, not the current {current_graph_version}"
+                f"{find_run_result.graph_version}, not the current {graph_builder.graph_version}"
             )
 
-        generate_text_graph = self._graph_service.build_graph(
-            find_run_result.text_type,
-            find_run_result.graph_version,
-            find_run_result.options,
-            self._checkpointer,
-        )
-        graph_run_config = {"configurable": {"thread_id": find_run_result.thread_id}}
+        generate_text_graph = graph_builder.build_graph(find_run_result.options, self._checkpointer)
+        graph_run_config = {"configurable": {"thread_id": str(run_identity)}}
         state_snapshot = await generate_text_graph.aget_state(graph_run_config)
         generate_text_state = GenerateTextState.model_validate(state_snapshot.values)
 
@@ -144,10 +144,7 @@ class GenerateTextService:
                 datetime.now(UTC),
             )
 
-        resume_payload = {
-            "is_approved": resume_generate_text_input.is_approved,
-            "feedback_text": resume_generate_text_input.feedback_text,
-        }
+        resume_payload = resume_generate_text_input.model_dump()
         await generate_text_graph.ainvoke(Command(resume=resume_payload), graph_run_config)
 
         new_state_snapshot = await generate_text_graph.aget_state(graph_run_config)

@@ -36,7 +36,6 @@ class CreateGenerateTextRunResult(BaseModel):
 class FindGenerateTextRunByIdentityResult(BaseModel):
     id: int
     identity: UUID
-    thread_id: str
     text_type: TextType
     graph_name: str
     graph_version: str
@@ -55,10 +54,3 @@ class FindGenerateTextRunByIdentityResult(BaseModel):
 class CreateGenerateTextStepResult(BaseModel):
     id: int
     identity: UUID
-
-
-class GenerateTextRollupResult(BaseModel):
-    llm_call_count: int
-    input_tokens: int
-    output_tokens: int
-    cost_usd: Decimal

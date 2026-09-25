@@ -3,11 +3,11 @@ from pydantic import BaseModel
 
 from libs.llm.inputs import LlmProviderCompletionInput
 from libs.llm.results import LlmProviderCompletionResult
-from libs.llm.services.llm_provider_base_service import LlmProviderBaseService
+from libs.llm.services.base_llm_provider_service import BaseLlmProviderService
 from libs.llm.utils import OpenAiLlmUtils
 
 
-class OpenAiLlmService(LlmProviderBaseService):
+class OpenAiLlmService(BaseLlmProviderService):
     def __init__(self, openai_client: AsyncOpenAI) -> None:
         self._openai_client = openai_client
 

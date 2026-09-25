@@ -5,7 +5,6 @@ from langgraph.errors import GraphBubbleUp
 
 from libs.core.utils.date_time_utils import DateTimeUtils
 from libs.generate_text.inputs import CreateGenerateTextStepInput
-from libs.generate_text.services.generate_text_rollup_service import GenerateTextRollupService
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
 from libs.generate_text.states import GenerateTextState
@@ -15,18 +14,16 @@ GenerateTextNode = Callable[[GenerateTextState], Awaitable[dict[str, Any]]]
 
 
 class GenerateTextInstrumentationService:
-    """Wraps a node so every run of it is recorded as a step, timed, and rolled up. See
+    """Wraps a node so every run of it is recorded as a step and timed. See
     plans/generate-text-engine.md, Instrumentation."""
 
     def __init__(
         self,
         run_service: GenerateTextRunService,
         step_service: GenerateTextStepService,
-        rollup_service: GenerateTextRollupService,
     ) -> None:
         self._run_service = run_service
         self._step_service = step_service
-        self._rollup_service = rollup_service
 
     def instrument(
         self, node_type: GenerateTextNodeType, node: GenerateTextNode
@@ -71,14 +68,6 @@ class GenerateTextInstrumentationService:
             duration_ms = DateTimeUtils.elapsed_ms(start_time)
             step_output = self._resolve_step_output(node_result, step_name)
             await self._step_service.complete_step(step_id, step_output, duration_ms)
-
-            step_rollup_result = await self._rollup_service.build_step_rollup(step_id)
-            await self._step_service.record_rollup(step_id, step_rollup_result)
-
-            run_rollup_result = await self._rollup_service.build_run_rollup(
-                state.generate_text_run_id
-            )
-            await self._run_service.record_rollup(state.generate_text_run_id, run_rollup_result)
 
             return node_result
 

@@ -1,17 +1,18 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
+from libs.database.orm.llm_call import LlmCallOrm
 from libs.generate_text.inputs import CreateGenerateTextRunInput
 from libs.generate_text.results import (
     CreateGenerateTextRunResult,
     FindGenerateTextRunByIdentityResult,
-    GenerateTextRollupResult,
 )
 from libs.generate_text.types import GenerateTextRunStatusType
 
@@ -32,7 +33,6 @@ class GenerateTextRunService:
                 text_type=create_generate_text_run_input.text_type,
                 graph_name=create_generate_text_run_input.graph_name,
                 graph_version=create_generate_text_run_input.graph_version,
-                thread_id=create_generate_text_run_input.thread_id,
                 prompt_text=create_generate_text_run_input.prompt_text,
                 persona_info=create_generate_text_run_input.persona_info,
                 additional_context=create_generate_text_run_input.additional_context,
@@ -65,12 +65,15 @@ class GenerateTextRunService:
             run_record = await self._get_run(db_session, run_id)
             run_record.status = GenerateTextRunStatusType.COMPLETED
             run_record.finished_at = datetime.now(UTC)
+            await self._apply_rollup(db_session, run_record)
             await db_session.flush()
 
     async def record_awaiting_review(self, run_id: int) -> None:
+        # A paused run is exactly when someone looks at what it has cost so far.
         async with self._db_session_factory() as db_session, db_session.begin():
             run_record = await self._get_run(db_session, run_id)
             run_record.status = GenerateTextRunStatusType.AWAITING_REVIEW
+            await self._apply_rollup(db_session, run_record)
             await db_session.flush()
 
     async def fail_run(
@@ -83,15 +86,7 @@ class GenerateTextRunService:
             run_record.error_message = error_message
             run_record.error_step = error_step
             run_record.finished_at = datetime.now(UTC)
-            await db_session.flush()
-
-    async def record_rollup(self, run_id: int, rollup_result: GenerateTextRollupResult) -> None:
-        async with self._db_session_factory() as db_session, db_session.begin():
-            run_record = await self._get_run(db_session, run_id)
-            run_record.llm_call_count = rollup_result.llm_call_count
-            run_record.input_tokens = rollup_result.input_tokens
-            run_record.output_tokens = rollup_result.output_tokens
-            run_record.cost_usd = rollup_result.cost_usd
+            await self._apply_rollup(db_session, run_record)
             await db_session.flush()
 
     async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
@@ -103,6 +98,24 @@ class GenerateTextRunService:
         if run_record is None:
             raise NotFoundException(f"Generate text run {run_identity} not found")
         return FindGenerateTextRunByIdentityResult.model_validate(run_record, from_attributes=True)
+
+    async def _apply_rollup(self, db_session: AsyncSession, run_record: GenerateTextRunOrm) -> None:
+        """Sums this run's pb_llm_call rows onto the run row itself. Aggregating by
+        run_id, rather than summing the step rows, means a call made outside a step
+        still counts."""
+        query = select(
+            func.count(LlmCallOrm.id),
+            func.coalesce(func.sum(LlmCallOrm.input_tokens), 0),
+            func.coalesce(func.sum(LlmCallOrm.output_tokens), 0),
+            func.coalesce(func.sum(LlmCallOrm.cost_usd), 0),
+        ).where(LlmCallOrm.run_id == run_record.id)
+        query_result = await db_session.execute(query)
+        llm_call_count, input_tokens, output_tokens, cost_usd = query_result.one()
+
+        run_record.llm_call_count = llm_call_count
+        run_record.input_tokens = input_tokens
+        run_record.output_tokens = output_tokens
+        run_record.cost_usd = Decimal(cost_usd)
 
     async def _get_run(self, db_session: AsyncSession, run_id: int) -> GenerateTextRunOrm:
         run_record = await db_session.get(GenerateTextRunOrm, run_id)

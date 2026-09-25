@@ -27,7 +27,6 @@ class CreateGenerateTextRunInput(BaseModel):
     text_type: TextType
     graph_name: str
     graph_version: str
-    thread_id: str
     prompt_text: str
     persona_info: str | None
     additional_context: str | None
