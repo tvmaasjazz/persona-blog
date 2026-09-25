@@ -93,9 +93,9 @@ Every node is wrapped before it is added to the graph:
 graph_node = instrumentation_service.instrument(GenerateTextNodeType.GENERATE_DRAFT, node)
 ```
 
-The wrapper writes a `RUNNING` step row with the next `step_number`, points the run's
-`current_step` at it, runs the node, then marks the row `SUCCEEDED` or `FAILED` with its
-duration. Each write is its own committed transaction, the rule `pb_llm_call` already
+The wrapper writes a `RUNNING` step row with the next `step_number`, runs the node, then
+marks the row `SUCCEEDED` or `FAILED` with its duration. It writes nothing to the run
+itself: the newest step row is where the run sits. Each write is its own committed transaction, the rule `pb_llm_call` already
 follows, so a run that fails still has its trail.
 
 It re-raises LangGraph's `GraphBubbleUp` before its `except Exception`, because an
@@ -123,18 +123,19 @@ were deliberately deferred until runs existed.
 | `graph_name` | `TEXT NOT NULL` | |
 | `graph_version` | `TEXT NOT NULL` | refusing a resume across versions depends on it |
 | `status` | `pb_generate_text_run_status_type NOT NULL DEFAULT 'PENDING'` | `PENDING`, `RUNNING`, `AWAITING_REVIEW`, `COMPLETED`, `FAILED`, `CANCELLED` |
-| `current_step` | `TEXT` | |
 | `prompt_text` | `TEXT NOT NULL` | |
 | `persona_info` | `TEXT` | |
 | `additional_context` | `TEXT` | |
 | `options` | `JSONB NOT NULL` | what the topology was built from; a resume reads it, never the resume payload |
-| `error_code` / `error_message` / `error_step` | `TEXT` | |
+| `error_code` / `error_message` | `TEXT` | Set only when no step owns the failure — a graph that never ran. A node's failure is recorded on its own step row |
 | `llm_call_count` / `input_tokens` / `output_tokens` | `INTEGER NOT NULL DEFAULT 0` | rollups: zero is true before any call, unlike an unknown token count on `pb_llm_call` |
 | `cost_usd` | `NUMERIC(16,10) NOT NULL DEFAULT 0` | |
 | `started_at` / `finished_at` | `TIMESTAMP` | |
 
 The run's own `identity` is the LangGraph thread id, so there is no separate column for
-it. Indexes: `(created_by_id, created_at DESC)` for a user's runs, and a partial on
+it, and there is no `current_step`: the newest step row answers that, and cannot go
+stale the way a copy does. Where a run sits and what it produced come from two different
+step rows — a run paused for review sits on its review step, whose own output is empty. Indexes: `(created_by_id, created_at DESC)` for a user's runs, and a partial on
 `status` for in-flight ones.
 
 ### `pb_generate_text_step`
@@ -152,6 +153,19 @@ same `step_name` and `attempt` incremented.
 Gains `run_id` and `step_id`, both nullable, both `ON DELETE SET NULL` — a cost record
 should outlive the run it belonged to. `LlmCompletionInput` carries them so a call links
 itself; the instrumentation wrapper hands the step id to the node it wraps.
+
+## Failing a run
+
+`fail_run` is called from two places and they record different things. The
+instrumentation wrapper calls it when a node raises: the step row holds the error, and
+the run only changes status. `GenerateTextService._invoke_graph` calls it when the graph
+itself breaks — an unreachable checkpointer, say — where no step exists to own the
+error, so the run carries it. The first failure wins, because a node's exception passes
+through both on its way out.
+
+The graph is built before the run row is created, so options a text type can't read
+leave nothing behind, and they raise `GenerateTextOptionsInvalidException` rather than
+letting a pydantic error reach the route as a 500.
 
 ## What changed while building it
 
