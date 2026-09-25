@@ -39,6 +39,8 @@ class LlmCallService:
                 purpose=llm_completion_input.purpose,
                 system_prompt=llm_completion_input.system_prompt,
                 user_prompt=llm_completion_input.user_prompt,
+                run_id=llm_completion_input.run_id,
+                step_id=llm_completion_input.step_id,
                 status=LlmCallStatusType.PENDING,
                 created_by_id=auth_user.id,
                 updated_by_id=auth_user.id,

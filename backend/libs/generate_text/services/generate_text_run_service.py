@@ -1,0 +1,111 @@
+from datetime import UTC, datetime
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from libs.auth.results import AuthUser
+from libs.core.exceptions import NotFoundException
+from libs.database.orm.generate_text_run import GenerateTextRunOrm
+from libs.generate_text.inputs import CreateGenerateTextRunInput
+from libs.generate_text.results import (
+    CreateGenerateTextRunResult,
+    FindGenerateTextRunByIdentityResult,
+    GenerateTextRollupResult,
+)
+from libs.generate_text.types import GenerateTextRunStatusType
+
+
+class GenerateTextRunService:
+    """Owns every write to pb_generate_text_run. Each write opens its own session and
+    commits in its own transaction, so a row survives the caller's rollback. See
+    fastapi-structure.md, Services > Records that must survive a rollback."""
+
+    def __init__(self, db_session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._db_session_factory = db_session_factory
+
+    async def create_run(
+        self, create_generate_text_run_input: CreateGenerateTextRunInput, auth_user: AuthUser
+    ) -> CreateGenerateTextRunResult:
+        async with self._db_session_factory() as db_session, db_session.begin():
+            run_record = GenerateTextRunOrm(
+                text_type=create_generate_text_run_input.text_type,
+                graph_name=create_generate_text_run_input.graph_name,
+                graph_version=create_generate_text_run_input.graph_version,
+                thread_id=create_generate_text_run_input.thread_id,
+                prompt_text=create_generate_text_run_input.prompt_text,
+                persona_info=create_generate_text_run_input.persona_info,
+                additional_context=create_generate_text_run_input.additional_context,
+                options=create_generate_text_run_input.options,
+                created_by_id=auth_user.id,
+                updated_by_id=auth_user.id,
+            )
+            db_session.add(run_record)
+            await db_session.flush()
+            run_id = run_record.id
+            run_identity = run_record.identity
+
+        return CreateGenerateTextRunResult(id=run_id, identity=run_identity)
+
+    async def start_run(self, run_id: int) -> None:
+        async with self._db_session_factory() as db_session, db_session.begin():
+            run_record = await self._get_run(db_session, run_id)
+            run_record.status = GenerateTextRunStatusType.RUNNING
+            run_record.started_at = datetime.now(UTC)
+            await db_session.flush()
+
+    async def record_current_step(self, run_id: int, step_name: str) -> None:
+        async with self._db_session_factory() as db_session, db_session.begin():
+            run_record = await self._get_run(db_session, run_id)
+            run_record.current_step = step_name
+            await db_session.flush()
+
+    async def complete_run(self, run_id: int) -> None:
+        async with self._db_session_factory() as db_session, db_session.begin():
+            run_record = await self._get_run(db_session, run_id)
+            run_record.status = GenerateTextRunStatusType.COMPLETED
+            run_record.finished_at = datetime.now(UTC)
+            await db_session.flush()
+
+    async def record_awaiting_review(self, run_id: int) -> None:
+        async with self._db_session_factory() as db_session, db_session.begin():
+            run_record = await self._get_run(db_session, run_id)
+            run_record.status = GenerateTextRunStatusType.AWAITING_REVIEW
+            await db_session.flush()
+
+    async def fail_run(
+        self, run_id: int, error_code: str, error_message: str, error_step: str
+    ) -> None:
+        async with self._db_session_factory() as db_session, db_session.begin():
+            run_record = await self._get_run(db_session, run_id)
+            run_record.status = GenerateTextRunStatusType.FAILED
+            run_record.error_code = error_code
+            run_record.error_message = error_message
+            run_record.error_step = error_step
+            run_record.finished_at = datetime.now(UTC)
+            await db_session.flush()
+
+    async def record_rollup(self, run_id: int, rollup_result: GenerateTextRollupResult) -> None:
+        async with self._db_session_factory() as db_session, db_session.begin():
+            run_record = await self._get_run(db_session, run_id)
+            run_record.llm_call_count = rollup_result.llm_call_count
+            run_record.input_tokens = rollup_result.input_tokens
+            run_record.output_tokens = rollup_result.output_tokens
+            run_record.cost_usd = rollup_result.cost_usd
+            await db_session.flush()
+
+    async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
+        async with self._db_session_factory() as db_session:
+            query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.identity == run_identity)
+            query_result = await db_session.execute(query)
+            run_record = query_result.scalar_one_or_none()
+
+        if run_record is None:
+            raise NotFoundException(f"Generate text run {run_identity} not found")
+        return FindGenerateTextRunByIdentityResult.model_validate(run_record, from_attributes=True)
+
+    async def _get_run(self, db_session: AsyncSession, run_id: int) -> GenerateTextRunOrm:
+        run_record = await db_session.get(GenerateTextRunOrm, run_id)
+        if run_record is None:
+            raise NotFoundException(f"Generate text run {run_id} not found")
+        return run_record
