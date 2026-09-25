@@ -93,6 +93,7 @@ backend/tests/
 | `libs/<d>/prompts.py`                | `tests/libs/<d>/test_prompts.py`       | Each builder: the arguments appear in the output (§1) |
 | `libs/<d>/utils/*.py`, `libs/core/utils/*.py` | `tests/libs/<d>/test_<utils>.py` | Every branch of every static method (§1, §2). A `Utils` class whose only output is a wall-clock measurement, like `DateTimeUtils`, gets no file: its effect is asserted through the service |
 | `libs/<d>/inputs.py`, `results.py`   | `tests/libs/<d>/test_inputs.py`, `test_results.py` | Only models with a validator or declared constraint: accepted and rejected values (§1) |
+| `libs/<d>/states.py`                 | `tests/libs/<d>/test_states.py`        | Only a method that does more than group stored fields; otherwise the graph and service tests cover it |
 | Class with an enum dispatch map      | That class's test file                 | Every enum member has a handler (§1) |
 | `apps/api/domains/<d>/router.py`     | `tests/api/<d>/test_router.py`         | For each route: happy path, 422 per declared constraint, each exception the service raises, 401 if protected, persisted state for writes (§6) |
 | `apps/api/domains/<d>/dtos.py`, `apps/api/core/dtos.py` | None, unless a mapper has logic | Route tests cover plain field copying |
@@ -152,7 +153,8 @@ default.
   missing and leaked fields. Field-by-field asserts don't.
 - If the test can't know a value (like a server timestamp), take it from the seeded
   row. Failing that, use `unittest.mock.ANY`. `ANY` is the only import allowed from
-  `unittest.mock`.
+  `unittest.mock`. It works inside a plain dict or JSON comparison; a Pydantic model
+  rejects it at validation, so assert those fields individually instead.
 - Assert exceptions with `with pytest.raises(UserEmailTakenException):`. Add `match=`
   only when the message is part of the contract, such as user-facing text.
 - Compare floats with `pytest.approx`.

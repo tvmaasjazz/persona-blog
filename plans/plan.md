@@ -725,6 +725,11 @@ than booting and failing on the first call. Set `ENVIRONMENT=PRODUCTION` and con
 
 ## Step 13 — `generate_text` lib + domain
 
+> **Superseded by `plans/generate-text-engine.md`.** That step proved one hardcoded
+> graph and its `POST /generate-text` route; both were replaced by graphs built from
+> the caller's options, with runs and steps recorded in Postgres. What is written
+> below is what this step built, not what the code looks like now.
+
 The app's core logic: a LangGraph workflow on top of `LlmService`, with a human review
 pause in the middle. This step proves the workflow and the code structure. How nodes
 and graphs are organized per text type comes after, once there is more than one type.

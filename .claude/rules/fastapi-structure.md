@@ -146,6 +146,19 @@ runs the graph, reads the snapshot, and maps it to a `Result`. The dependency fa
 builds the node service, then the compiled graph, and hands the graph to the service
 through `__init__`.
 
+**An engine never imports the domains it runs.** When one lib builds graphs for several
+others — `libs/generate_text/` for `libs/blog_post/` and whatever follows — the caller
+registers itself: `build_<domain>_graph_spec(...)` returns a record of the graph's name,
+its current version and its builder, and the dependency factory passes the map of them
+in. The same inversion as the LLM provider map, and for the same reason: the import
+points one way, and a new domain is a new registration rather than an edit to the
+engine.
+
+**A wrapper around a node re-raises `GraphBubbleUp` before any `except Exception`.**
+LangGraph signals an interrupt by raising it, so a generic handler turns every review
+pause into a recorded failure. Catch the control-flow exception first, record the pause
+for what it is, and let it through.
+
 ### Background tasks
 
 Work that runs after the response is sent is a function in `libs/<domain>/tasks.py`,

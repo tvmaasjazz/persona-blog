@@ -192,6 +192,18 @@ class PersonaOrm(BaseOrm):
 - A quoted class name in `relationship()` or `Mapped[...]` is allowed on **one** side
   of a mutual relationship only. Put the forward reference on the parent
   (`UserOrm.personas`) and the concrete import on the child.
+- The quoted side still imports its target under `if TYPE_CHECKING:`, so type checkers
+  resolve it and ruff doesn't strip the quotes as an unnecessary forward reference:
+
+```python
+# libs/database/orm/generate_text_run.py
+if TYPE_CHECKING:
+    from libs.database.orm.generate_text_step import GenerateTextStepOrm
+
+
+class GenerateTextRunOrm(BaseOrm):
+    steps: Mapped[list["GenerateTextStepOrm"]] = relationship(back_populates="run")
+```
 
 ## Migrations
 
