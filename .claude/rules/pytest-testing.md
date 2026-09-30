@@ -460,7 +460,7 @@ rolled back after each test.
 | Read, found                       | `insert_*_row`, call, compare the whole `Result` built from the row's values |
 | Read, not found                   | Call with a key that was never inserted and `pytest.raises(NotFoundException)` |
 | Update                            | Insert, call, select back, and assert both the changed and unchanged columns |
-| Unique, foreign-key, or check constraint | Insert the conflicting row first, then `pytest.raises` the lib or standard exception the service raises. The session can't be used afterwards, so the test ends at the `with` block |
+| Guard (`ensure_<condition>()`)    | Insert the conflicting row, then `pytest.raises` the lib exception; add a case for each row the guard must ignore (another user's, soft-deleted, the row being edited). A service's writes don't translate constraint violations (`fastapi-structure.md` › Database), so there is no service test for the raw constraint |
 | Relationships                     | Insert the parent and at least one child, and assert the child appears. A missing `selectinload()` fails as `MissingGreenlet` |
 | Lists                             | Insert rows out of order. If the method promises an order, assert the exact list; otherwise compare sorted |
 | Enum column                       | Parametrize a write-and-read round trip over every member |
@@ -627,10 +627,10 @@ async def signed_in_user(
 | Happy path                    | Send raw JSON; assert the status and the whole `response.json()` |
 | Wire format                   | Request bodies and expected responses are dict literals, never `Dto(...).model_dump()`. The test is what pins the JSON contract |
 | Validation → 422              | Parametrize one missing required field plus one case per constraint the DTO declares. Assert the status and `detail[0]["loc"]`, never the message |
-| Exception → status            | Set up the real condition (insert the duplicate row), or set the stub's `<method>_error`. Assert the status and the `{"detail": ...}` body |
+| Exception → status            | Set up the real condition (insert the duplicate row), or set the stub's `<method>_error`. Assert the status; assert the `{"detail": ...}` body only when the message is user-facing contract text |
 | Create (`POST`)               | Select the row by the returned `identity` and assert its columns. The body is `{"identity": "<uuid>"}` |
 | Malformed identity → 422      | One test per route with an identity path parameter: a non-UUID value returns 422 |
-| Update (`PUT`) or `DELETE`    | Assert the body `== {}`, then select to prove the row changed or is gone |
+| Update (`PUT`) or `DELETE`    | Assert the body `== {}`, then select to prove the row changed or is gone. `await db_session.refresh(<entity>_record)` before reading a row the test already holds: `expire_on_commit=False` leaves its copy stale |
 | Write persists                | After a 2xx, select the row through `db_session`. This catches a write route wired to `DbSessionDep` |
 | List (`GET` with a `FetchAllQueryDto`) | An invalid query value → 422 with `loc` starting `"query"`. Pagination and filter cases wait on the conventions `fastapi-structure.md` hasn't settled yet |
 | Write rolls back on failure   | Make the route fail after its first write; assert no row |
@@ -638,6 +638,7 @@ async def signed_in_user(
 | Protected route, signed out   | One test per protected route using plain `api_client`; assert 401 |
 | Protected route, signed in    | `@pytest.mark.usefixtures("signed_in_user")`, or request it to use the user's values |
 | Invalid or expired session    | Covered once in `tests/api/core/test_dependencies.py`, not per route |
+| Another user's rows           | Create them through a second signed-in client, the way a real second user would. Never insert them with a factory in a route test |
 | Not found → 404               | Use an id that was never inserted |
 | Redirect                      | httpx doesn't follow redirects by default. Assert the status, then check `Location` with `urllib.parse` |
 | Set-Cookie attributes         | Read `response.headers.get_list("set-cookie")`; assert `HttpOnly`, `Secure` for the environment, and `SameSite` |

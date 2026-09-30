@@ -33,7 +33,7 @@ Database. The procedure for making a schema change is the `db-migration` skill.
   | Primary key | `<table>_pkey`                   | `pb_user_pkey`              |
   | Unique      | `<table>_<columns>_key`          | `pb_user_identity_key`      |
   | Foreign key | `<table>_<column>_fkey`          | `pb_user_created_by_id_fkey` |
-  | Index       | `<table>_<columns>_idx`          | `pb_persona_user_id_idx`    |
+  | Index       | `<table>_<columns>_idx`          | `pb_persona_created_by_id_created_at_idx` |
   | Check       | `<table>_<name>_check`           | `pb_persona_name_check`     |
 
 - Columns ending `_id` are `BIGINT` foreign keys. A provider's or third party's
@@ -74,8 +74,8 @@ Every `CREATE TABLE` lists the shared columns in this order:
 CREATE TABLE pb_persona (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     identity UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
-    user_id BIGINT NOT NULL REFERENCES pb_user (id),
     name TEXT NOT NULL,
+    bio TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
     updated_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
     deleted_at TIMESTAMP,
@@ -84,7 +84,8 @@ CREATE TABLE pb_persona (
     deleted_by_id BIGINT REFERENCES pb_user (id)
 );
 
-CREATE INDEX pb_persona_user_id_idx ON pb_persona (user_id);
+CREATE INDEX pb_persona_created_by_id_created_at_idx
+    ON pb_persona (created_by_id, created_at DESC);
 ```
 
 - Table-specific columns go between `identity` and `created_at`.
@@ -176,22 +177,22 @@ __all__ = ["PersonaOrm", "UserOrm"]
 Use direct symbols where import order allows:
 
 ```python
-# libs/database/orm/persona.py
-class PersonaOrm(BaseOrm):
-    __tablename__ = "pb_persona"
+# libs/database/orm/generate_text_step.py
+class GenerateTextStepOrm(BaseOrm):
+    __tablename__ = "pb_generate_text_step"
 
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey(UserOrm.id))
-    user: Mapped[UserOrm] = relationship(back_populates="personas")
+    run_id: Mapped[int] = mapped_column(BigInteger, ForeignKey(GenerateTextRunOrm.id))
+    run: Mapped[GenerateTextRunOrm] = relationship(back_populates="steps")
 ```
 
-- `ForeignKey(UserOrm.id)`, never `ForeignKey("pb_user.id")`.
+- `ForeignKey(GenerateTextRunOrm.id)`, never `ForeignKey("pb_generate_text_run.id")`.
 - `__tablename__` and the `back_populates` attribute name are the only permitted loose
   strings, with one exception: `ForeignKey("pb_user.id")` on `BaseOrm`'s audit columns and
   `UserOrm`'s own overrides of them, because `UserOrm` extends `BaseOrm` and can't be
   imported there.
 - A quoted class name in `relationship()` or `Mapped[...]` is allowed on **one** side
   of a mutual relationship only. Put the forward reference on the parent
-  (`UserOrm.personas`) and the concrete import on the child.
+  (`GenerateTextRunOrm.steps`) and the concrete import on the child.
 - The quoted side still imports its target under `if TYPE_CHECKING:`, so type checkers
   resolve it and ruff doesn't strip the quotes as an unnecessary forward reference:
 

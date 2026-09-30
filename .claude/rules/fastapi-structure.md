@@ -232,13 +232,22 @@ them here.
 
 | Route                          | Returns                                               |
 | ------------------------------ | ----------------------------------------------------- |
-| `GET`                          | A custom `<Entity>ResponseDto`: `BlogPostResponseDto`  |
-| `POST` create                  | `IdentityResponseDto` — `{"identity": "<uuid>"}`      |
+| `GET /{identity}`              | A custom `<Entity>ResponseDto`: `BlogPostResponseDto`  |
+| `GET` list                     | `List<Entity>sResponseDto`, rows under a plural field: `{"blog_posts": [...]}` |
+| `POST` create                  | `IdentityResponseDto` — `{"identity": "<uuid>"}`, status 201 |
 | `PUT` update / `DELETE`        | `EmptyResponseDto` — `{}`                             |
 | Non-CRUD action                | A custom `ResponseDto` for what it carries: `GeneratedTextResponseDto` |
 
 On a CRUD route, a custom `ResponseDto` appears only on a `GET`. Every route declares
 its response DTO as its return annotation.
+
+A list is never a bare array. The service returns `List<Entity>sResult` and the route
+`List<Entity>sResponseDto`, each holding the rows under a plural field, so pagination
+or a count can join later without changing the shape.
+
+A route on the collection itself uses the path `""`, never `"/"`. The router's prefix
+already names it, and `"/"` puts the route at `/blog-posts/`, so a call to
+`/blog-posts` answers with a redirect.
 
 Two exceptions involve a real `Response`. A route that redirects returns
 `RedirectResponse`, annotated as such, and sets any cookie on that response. A route
@@ -365,7 +374,7 @@ async def find_blog_post(
     return BlogPostResponseDto.from_result(find_blog_post_result)
 
 
-@blog_post_router.post("/")
+@blog_post_router.post("", status_code=201)
 async def create_blog_post(
     dto: BlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> IdentityResponseDto:
@@ -428,8 +437,13 @@ DbTransactionDep = Annotated[AsyncSession, Depends(get_db_transaction)]
 
 - Never hand-roll a transaction decorator.
 - The commit runs in dependency teardown, after the route returns, so a constraint
-  violation surfaces as a 500. An endpoint that must turn a duplicate key into a 409
-  commits explicitly in the service and uses `DbSessionDep`.
+  violation surfaces as a 500, and that's intended: a service never catches
+  `IntegrityError` to translate it. When the client needs a specific error for a
+  clash, such as a duplicate name, a guard dependency checks for it before the write.
+  It calls a service method `ensure_<condition>()`, which raises a lib exception
+  (`PersonaNameTakenException`, a 409). The route attaches the guard with
+  `dependencies=[Depends(...)]`. The database constraint stays as the backstop against
+  races.
 - A service receives a db session; it never creates one, and never commits unless it
   owns the transaction boundary explicitly. The one exception is a record that must
   survive a rollback (Services › Records that must survive a rollback).
