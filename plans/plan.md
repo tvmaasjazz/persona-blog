@@ -67,9 +67,9 @@ in a transaction while the graph waits on the LLM. The route passes the loaded p
 to `GenerateTextService.generate_text`. Generating as a persona is creator-only, even
 for a public one: anyone else's is a 404.
 
-**State.** The graph state holds primitives only, so the persona's fields go in as a
-dict, and `state.build_persona()` groups them back into a `GenerateTextPersonaInput`,
-the way `build_auth_user()` does. `tone` and `target_audience` go in beside
+**State.** The graph state holds primitives only, so the persona's fields go in flat
+(`persona_name`, `persona_bio`, ...), and `state.build_persona()` groups them back into
+a `GenerateTextPersonaInput`, the way `build_auth_user()` does. `tone` and `target_audience` go in beside
 `prompt_text`.
 
 **Prompts.** One class per step, extending `BaseGenerateTextPrompt`:

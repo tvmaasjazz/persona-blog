@@ -252,5 +252,7 @@ The same applies to chained attribute access into a call:
 - A `Dto` name leads with its entity or domain: `PersonaListResponseDto`, never
   `ListPersonasResponseDto`. A `Result` is still named for its function
   (`FindUserPersonaListResult`).
-- `Result` and `Dto` classes are usually simple enough that their name and fields
-  explain them, so they rarely carry a docstring. Add one only when they don't.
+- A function or class gets a docstring or comment only when it isn't clear from its
+  name and context: a non-obvious reason, a constraint, a trap. Never restate what the
+  code already says. Most `Result` and `Dto` classes and most one-screen functions need
+  none.

@@ -90,7 +90,7 @@ backend/tests/
 | Source                               | Test file                              | Required cases |
 | ------------------------------------ | -------------------------------------- | -------------- |
 | `libs/<d>/services.py`, or each module in `libs/<d>/services/` | `tests/libs/<d>/test_services.py`, or `test_<service>.py` | For each public method: happy path, each branch, each exception it raises, each collaborator failure it handles. With a database, also persisted state, not found, constraint violations, related rows loaded (§2, §3) |
-| `libs/<d>/prompts.py`, or a graph variant's `libs/<d>/graphs/<v>/prompts.py` | `tests/libs/<d>/test_prompts.py`, or `tests/libs/<d>/graphs/<v>/test_prompts.py` | Each builder: the inputs land in the prompt they belong in (§1) |
+| `prompts.py`, or each module in a `prompts/` package, in a lib or a graph variant | The mirrored `test_prompts.py`, or `prompts/test_<prompt>.py` | Each builder: the inputs land in the prompt they belong in (§1) |
 | `libs/<d>/utils/*.py`, `libs/core/utils/*.py` | `tests/libs/<d>/test_<utils>.py` | Every branch of every static method (§1, §2). A `Utils` class whose only output is a wall-clock measurement, like `DateTimeUtils`, gets no file: its effect is asserted through the service |
 | `libs/<d>/inputs.py`, `results.py`   | `tests/libs/<d>/test_inputs.py`, `test_results.py` | Only models with a validator or declared constraint: accepted and rejected values (§1) |
 | `libs/<d>/states.py`                 | `tests/libs/<d>/test_states.py`        | Only a method that does more than group stored fields; otherwise the graph and service tests cover it |
@@ -405,7 +405,7 @@ dispatch maps, and DTO mappers that contain logic.
 | DTO mapper with logic              | Build the DTO, call the mapper, compare the whole returned model |
 
 ```python
-# tests/libs/generate_text/graphs/blog_post/test_prompts.py
+# tests/libs/generate_text/graphs/blog_post/prompts/test_blog_post_draft_prompt.py
 def test_build_generate_prompt_puts_persona_name_in_system_prompt() -> None:
     state = build_generate_text_state(persona_name="Marta Quill")
 

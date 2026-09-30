@@ -665,32 +665,58 @@ constants. Never use an `Enum` to group unrelated constants.
 
 Every LLM call takes a system prompt and a user prompt, and one `Prompt` class builds
 both for one step. A domain whose steps share a shape declares an abstract
-`Base<Domain>Prompt`, and each step extends it. The classes live in the domain's
-`prompts.py`, or in a graph variant's (`libs/<domain>/graphs/<variant>/prompts.py`).
+`Base<Domain>Prompt`, and each step extends it. A lib or graph variant with one prompt
+class keeps it in `prompts.py`. One with more keeps them in a `prompts/` package, one
+module per class named after it in snake_case, holding that class and its templates,
+with `__init__.py` re-exporting every class.
 
 ```python
-# libs/generate_text/graphs/blog_post/prompts.py
+# libs/generate_text/graphs/blog_post/prompts/blog_post_draft_prompt.py
+DRAFT_SYSTEM_TEMPLATE = (
+    "Write a complete blog post draft from the outline and brief provided. ..."
+    "{persona_prompt_section}{tone_and_audience_prompt_section}"
+)
+
+DRAFT_USER_TEMPLATE = (
+    "Outline:\n\n{outline_text}\n\nBrief:\n\n{prompt_text}{additional_context_prompt_section}"
+)
+
+
 class BlogPostDraftPrompt(BaseGenerateTextPrompt):
     def build_generate_prompt(self, state: GenerateTextState) -> BuildPromptResult:
+        additional_context_prompt_section = self._build_additional_context_prompt_section(
+            state.additional_context
+        )
         user_prompt = DRAFT_USER_TEMPLATE.format(
-            outline_text=state.latest_output(), prompt_text=state.prompt_text
-        ) + self._build_additional_context_section(state.additional_context)
+            outline_text=state.latest_output(),
+            prompt_text=state.prompt_text,
+            additional_context_prompt_section=additional_context_prompt_section,
+        )
         return BuildPromptResult(
             system_prompt=self._build_system_prompt(state), user_prompt=user_prompt
         )
 
     def _build_system_prompt(self, state: GenerateTextState) -> str:
-        persona_section = self._build_persona_section(
-            state.build_persona(), ["name", "bio", "writing_style", "sample_writing"]
+        persona = state.build_persona()
+        persona_prompt_section = self._build_persona_prompt_section(
+            persona,
+            ["name", "bio", "background", "expertise", "writing_style", "sample_writing"],
         )
-        tone_and_audience_section = self._build_tone_and_audience_section(
+        tone_and_audience_prompt_section = self._build_tone_and_audience_prompt_section(
             state.tone, state.target_audience
         )
-        return DRAFT_SYSTEM_PROMPT + persona_section + tone_and_audience_section
+        return DRAFT_SYSTEM_TEMPLATE.format(
+            persona_prompt_section=persona_prompt_section,
+            tone_and_audience_prompt_section=tone_and_audience_prompt_section,
+        )
 ```
 
 - The system prompt says what the model is expected to do, then who it is doing it
   as. The user prompt carries the material for this call.
+- Every prompt a class returns is one template, formatted once, with everything passed
+  in, including sections built by `_build_<what>_prompt_section` helpers. Never add to
+  a formatted template afterwards. The helpers format with templates too, and a
+  section that has nothing to say returns `""`.
 - A rewrite is a method on its step's class, not a class of its own, so it shares the
   step's system prompt.
 - Each class chooses which inputs it uses and where they go. Formatting shared by
@@ -700,8 +726,8 @@ class BlogPostDraftPrompt(BaseGenerateTextPrompt):
   `BuildPromptResult` holding `system_prompt` and `user_prompt`.
 - A prompt class holds no state. One needing configuration takes it through
   `__init__`, like a service.
-- Template text is an `UPPER_SNAKE` constant, in `constants.py` or at the top of
-  `prompts.py`. Never inline in the method.
+- Template text is an `UPPER_SNAKE` constant at the top of the module that uses it.
+  Never inline in the method.
 - A service or node never builds a prompt string inline.
 
 ## Errors
