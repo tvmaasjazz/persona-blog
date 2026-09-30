@@ -97,6 +97,34 @@ snake_case, with `__init__.py` re-exporting every class so callers import from
 
 Split a lib by what it is about, not by how big it gets.
 
+### Validation guards
+
+When checking an incoming payload needs a database read or more involved logic than a
+DTO field constraint, the route gets a validation guard: a dependency in the domain's
+`dependencies.py`, named `validate_<what>` and attached with
+`dependencies=[Depends(...)]`. The guard calls a method on the lib's
+`<Domain>ValidationService`, named `validate_<condition>()`, which returns nothing and
+raises a lib exception when the payload is invalid.
+
+```python
+# apps/api/domains/personas/dependencies.py
+async def validate_new_persona_name(
+    dto: PersonaDto,
+    auth_user: AuthUserDep,
+    persona_validation_service: PersonaValidationServiceDep,
+) -> None:
+    await persona_validation_service.validate_persona_name_available(dto.name, auth_user)
+```
+
+```python
+# apps/api/domains/personas/router.py
+@persona_router.post("", status_code=201, dependencies=[Depends(validate_new_persona_name)])
+```
+
+The validation service holds only the methods a guard calls. Business services never
+validate payloads this way, and access control, such as whether the caller may change
+a row, stays in the business service that loads the row.
+
 A provider gets its own lib when it has its own HTTP surface: `libs/google_auth/` sits
 beside `libs/auth/` because signing in with Google has routes, a domain and a callback
 of its own. A provider that is only an implementation of another lib's contract has no
@@ -232,13 +260,24 @@ them here.
 
 | Route                          | Returns                                               |
 | ------------------------------ | ----------------------------------------------------- |
-| `GET`                          | A custom `<Entity>ResponseDto`: `BlogPostResponseDto`  |
-| `POST` create                  | `IdentityResponseDto` — `{"identity": "<uuid>"}`      |
+| `GET /{identity}`              | A custom `<Entity>ResponseDto`: `BlogPostResponseDto`  |
+| `GET` list                     | `<Entity>ListResponseDto`, rows under a plural field: `{"blog_posts": [...]}` |
+| `POST` create                  | `IdentityResponseDto` — `{"identity": "<uuid>"}`, status 201 |
 | `PUT` update / `DELETE`        | `EmptyResponseDto` — `{}`                             |
 | Non-CRUD action                | A custom `ResponseDto` for what it carries: `GeneratedTextResponseDto` |
 
 On a CRUD route, a custom `ResponseDto` appears only on a `GET`. Every route declares
 its response DTO as its return annotation.
+
+A list is never a bare array. The service returns a `Result` and the route a
+`<Entity>ListResponseDto`, each holding the rows under a plural field, so pagination
+or a count can join later without changing the shape. A list of the signed-in user's
+own rows says so: `find_user_blog_post_list()` returns `FindUserBlogPostListResult`,
+and the route is `find_user_blog_post_list` too.
+
+A route on the collection itself uses the path `""`, never `"/"`. The router's prefix
+already names it, and `"/"` puts the route at `/blog-posts/`, so a call to
+`/blog-posts` answers with a redirect.
 
 Two exceptions involve a real `Response`. A route that redirects returns
 `RedirectResponse`, annotated as such, and sets any cookie on that response. A route
@@ -350,11 +389,20 @@ def get_user_service(request: Request, db_session: DbSessionDep) -> UserService:
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 ```
 
-Routers are one line of delegation, type hints only, no `= Depends(...)` defaults:
+Routers are one line of delegation, type hints only, no `= Depends(...)` defaults.
+Routes are ordered `GET` list, `GET` one, `POST`, `PUT`, `DELETE`:
 
 ```python
 # apps/api/domains/blog_posts/router.py
 blog_post_router = APIRouter(prefix="/blog-posts", tags=["blog-posts"])
+
+
+@blog_post_router.get("")
+async def find_user_blog_post_list(
+    auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
+) -> BlogPostListResponseDto:
+    find_user_blog_post_list_result = await blog_post_service.find_user_blog_post_list(auth_user)
+    return BlogPostListResponseDto.from_result(find_user_blog_post_list_result)
 
 
 @blog_post_router.get("/{blog_post_identity}")
@@ -365,7 +413,7 @@ async def find_blog_post(
     return BlogPostResponseDto.from_result(find_blog_post_result)
 
 
-@blog_post_router.post("/")
+@blog_post_router.post("", status_code=201)
 async def create_blog_post(
     dto: BlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> IdentityResponseDto:
@@ -428,8 +476,10 @@ DbTransactionDep = Annotated[AsyncSession, Depends(get_db_transaction)]
 
 - Never hand-roll a transaction decorator.
 - The commit runs in dependency teardown, after the route returns, so a constraint
-  violation surfaces as a 500. An endpoint that must turn a duplicate key into a 409
-  commits explicitly in the service and uses `DbSessionDep`.
+  violation surfaces as a 500, and that's intended: a service never catches
+  `IntegrityError` to translate it. A clash the client needs to hear about, such as a
+  duplicate name, is caught before the write by a validation guard (Services ›
+  Validation guards). The database constraint stays as the backstop against races.
 - A service receives a db session; it never creates one, and never commits unless it
   owns the transaction boundary explicitly. The one exception is a record that must
   survive a rollback (Services › Records that must survive a rollback).

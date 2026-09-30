@@ -19,7 +19,7 @@ class SoftDeleteMixin:
 
 
 class BaseOrm(SoftDeleteMixin, DeclarativeBase):
-    """Every table's shared columns. See plans/user-tables.md."""
+    """Every table's shared columns."""
 
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
     type_annotation_map: ClassVar[dict[Any, Any]] = {str: Text, datetime: UtcDateTime, UUID: Uuid}

@@ -50,3 +50,24 @@ async def signed_in_user(
     )
     api_client.cookies.set("sid", session_id)
     return user_record
+
+
+@pytest.fixture
+async def other_user_client(
+    fastapi_app: FastAPI,
+    db_session: AsyncSession,
+    redis_client: Redis,
+    app_settings: AppSettings,
+) -> AsyncIterator[AsyncClient]:
+    other_user_record = await insert_user_row(db_session)
+    auth_session_service = AuthSessionService(
+        redis_client=redis_client, auth_settings=app_settings.auth
+    )
+    other_session_id = await auth_session_service.create_session(
+        user_id=other_user_record.id, user_identity=other_user_record.identity
+    )
+    other_api_transport = ASGITransport(app=fastapi_app)
+    async with AsyncClient(
+        transport=other_api_transport, base_url="https://test", cookies={"sid": other_session_id}
+    ) as other_api_client:
+        yield other_api_client

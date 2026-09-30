@@ -249,3 +249,8 @@ The same applies to chained attribute access into a call:
   names the domain: `domains/users/router.py`, `libs/users/services.py`. Never
   `users/user_router.py`. Class and object names stay fully explicit regardless.
 - Enum members are `UPPER_SNAKE`. Constants are `UPPER_SNAKE` at module level.
+- A `Dto` name leads with its entity or domain: `PersonaListResponseDto`, never
+  `ListPersonasResponseDto`. A `Result` is still named for its function
+  (`FindUserPersonaListResult`).
+- `Result` and `Dto` classes are usually simple enough that their name and fields
+  explain them, so they rarely carry a docstring. Add one only when they don't.

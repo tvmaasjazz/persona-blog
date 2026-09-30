@@ -14,8 +14,7 @@ GenerateTextNode = Callable[[GenerateTextState], Awaitable[dict[str, Any]]]
 
 
 class GenerateTextInstrumentationService:
-    """Wraps a node so every run of it is recorded as a step and timed. See
-    plans/generate-text-engine.md, Instrumentation."""
+    """Wraps a node so every run of it is recorded as a step and timed."""
 
     def __init__(
         self,

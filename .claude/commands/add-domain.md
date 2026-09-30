@@ -35,6 +35,9 @@ for the files the domain needs from this list:
 - `libs/$1/`
   - `services.py` — `$1`'s service class, framework-free, dependencies via `__init__`;
     a `services/` package with one module per class if the domain has more than one
+  - `services/<domain>_validation_service.py` — `<Domain>ValidationService`, only if a
+    route needs a payload check that reads the database (`fastapi-structure.md` ›
+    Services › Validation guards). It makes `services/` a package
   - `inputs.py` — one `Input` model per method taking a structured payload
   - `results.py` — one `Result` per method, named after the method
   - `settings.py` — only if the domain has tunable values
@@ -48,7 +51,8 @@ for the files the domain needs from this list:
     workflows describes. A second graph for an existing domain is a folder under that
     domain's `graphs/`, and needs no new domain at all
 - `apps/api/domains/$1/`
-  - `dtos.py`, `dependencies.py`, and `router.py`
+  - `dtos.py`, `dependencies.py`, and `router.py`. Validation guard functions
+    (`validate_<what>`) live in `dependencies.py`
 - Wiring: the router in `apps/api/app_factory.py`, and the settings model on
   `AppSettings` in `apps/api/core/config.py`
 
