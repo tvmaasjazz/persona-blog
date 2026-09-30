@@ -460,7 +460,7 @@ rolled back after each test.
 | Read, found                       | `insert_*_row`, call, compare the whole `Result` built from the row's values |
 | Read, not found                   | Call with a key that was never inserted and `pytest.raises(NotFoundException)` |
 | Update                            | Insert, call, select back, and assert both the changed and unchanged columns |
-| Guard (`ensure_<condition>()`)    | Insert the conflicting row, then `pytest.raises` the lib exception; add a case for each row the guard must ignore (another user's, soft-deleted, the row being edited). A service's writes don't translate constraint violations (`fastapi-structure.md` › Database), so there is no service test for the raw constraint |
+| Validation service (`validate_<condition>()`) | Insert the conflicting row, then `pytest.raises` the lib exception; add a case for each row the check must ignore (another user's, soft-deleted, the row being edited). A service's writes don't translate constraint violations (`fastapi-structure.md` › Database), so there is no service test for the raw constraint |
 | Relationships                     | Insert the parent and at least one child, and assert the child appears. A missing `selectinload()` fails as `MissingGreenlet` |
 | Lists                             | Insert rows out of order. If the method promises an order, assert the exact list; otherwise compare sorted |
 | Enum column                       | Parametrize a write-and-read round trip over every member |
