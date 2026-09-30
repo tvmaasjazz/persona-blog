@@ -29,9 +29,6 @@ class FindUserPersonaListResult(BaseModel):
 
 
 class FindUserPersonaResult(BaseModel):
-    """The caller's own persona, including its id: the BIGINT foreign key another
-    domain's write needs, which never leaves the backend."""
-
     id: int
     identity: UUID
     name: str

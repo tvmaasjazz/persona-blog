@@ -43,9 +43,6 @@ class CreateGenerateTextStepInput(BaseModel):
 
 
 class GenerateTextPersonaInput(BaseModel):
-    """The persona fields a prompt may draw on, grouped back from the state's plain
-    dict by GenerateTextState.build_persona()."""
-
     name: str
     bio: str
     background: str | None = None

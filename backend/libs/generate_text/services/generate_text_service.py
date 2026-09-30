@@ -57,8 +57,6 @@ class GenerateTextService:
         find_user_persona_result: FindUserPersonaResult,
         auth_user: AuthUser,
     ) -> GenerateTextRunResult:
-        """find_user_persona_result is loaded before this call, on a session that closes
-        right after, so no connection sits idle across the LLM calls."""
         text_type = generate_text_input.text_type
         graph_builder = self._graph_builder_registry.get_by_text_type(text_type)
         options_dict = generate_text_input.options.model_dump(mode="json")
@@ -87,14 +85,12 @@ class GenerateTextService:
             graph_version=graph_builder.graph_version,
             text_type=text_type.value,
             prompt_text=generate_text_input.prompt_text,
-            persona={
-                "name": find_user_persona_result.name,
-                "bio": find_user_persona_result.bio,
-                "background": find_user_persona_result.background,
-                "expertise": find_user_persona_result.expertise,
-                "writing_style": find_user_persona_result.writing_style,
-                "sample_writing": find_user_persona_result.sample_writing,
-            },
+            persona_name=find_user_persona_result.name,
+            persona_bio=find_user_persona_result.bio,
+            persona_background=find_user_persona_result.background,
+            persona_expertise=find_user_persona_result.expertise,
+            persona_writing_style=find_user_persona_result.writing_style,
+            persona_sample_writing=find_user_persona_result.sample_writing,
             tone=generate_text_input.tone,
             target_audience=generate_text_input.target_audience,
             additional_context=generate_text_input.additional_context,

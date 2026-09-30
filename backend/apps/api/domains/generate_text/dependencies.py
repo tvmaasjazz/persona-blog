@@ -55,9 +55,6 @@ async def get_generate_text_persona(
     dto: GenerateBlogPostDto,
     auth_user: AuthUserDep,
 ) -> FindUserPersonaResult:
-    """Loads the persona on its own short session, closed before the route runs, so no
-    connection sits idle inside a transaction while the graph waits on the LLM. Generating
-    as a persona is creator-only, even for a public one."""
     db_session_factory = request.app.state.db_session_factory
     async with db_session_factory() as db_session:
         persona_service = PersonaService(db_session=db_session)
