@@ -125,6 +125,27 @@ The validation service holds only the methods a guard calls. Business services n
 validate payloads this way, and access control, such as whether the caller may change
 a row, stays in the business service that loads the row.
 
+### Rows a long-running route needs
+
+A row that a long-running route needs, such as the persona a generation writes as, is
+loaded by a dependency on its own short session, closed before the route runs. The
+route passes the loaded `Result` to the service. Never load it on the request's
+session: that session would sit idle inside an open transaction while the route waits
+on the LLM.
+
+```python
+# apps/api/domains/generate_text/dependencies.py
+async def get_generate_text_persona(
+    request: Request,
+    dto: GenerateBlogPostDto,
+    auth_user: AuthUserDep,
+) -> FindUserPersonaResult:
+    db_session_factory = request.app.state.db_session_factory
+    async with db_session_factory() as db_session:
+        persona_service = PersonaService(db_session=db_session)
+        return await persona_service.find_user_persona(dto.persona_identity, auth_user)
+```
+
 A provider gets its own lib when it has its own HTTP surface: `libs/google_auth/` sits
 beside `libs/auth/` because signing in with Google has routes, a domain and a callback
 of its own. A provider that is only an implementation of another lib's contract has no
@@ -454,7 +475,8 @@ application code uses the database.
 - The engine is created once in `lifespan`, and the session factory once from it with
   `create_db_session_factory(db_engine)`. Never build an `async_sessionmaker` by hand;
   the factory carries the session options and the soft-delete rule. Db sessions are
-  per-request.
+  per-request. The one exception is a row a long-running route needs (Services › Rows
+  a long-running route needs).
 - A service may import any Orm it needs; the domain boundary applies to services, not
   tables.
 - Python code handles aware UTC datetimes only: `datetime.now(UTC)`
@@ -641,29 +663,46 @@ constants. Never use an `Enum` to group unrelated constants.
 
 ### Prompts
 
-LLM prompts live in a `Prompt` class per prompt set, in `libs/<domain>/prompts.py`.
-Every prompt is a method returning `str`.
+Every LLM call takes a system prompt and a user prompt, and one `Prompt` class builds
+both for one step. A domain whose steps share a shape declares an abstract
+`Base<Domain>Prompt`, and each step extends it. The classes live in the domain's
+`prompts.py`, or in a graph variant's (`libs/<domain>/graphs/<variant>/prompts.py`).
 
 ```python
-# libs/humanizer/prompts.py
-class HumanizerPrompt:
-    @staticmethod
-    def build_system_prompt() -> str:
-        return REWRITE_SYSTEM_TEMPLATE.format(rules=AI_TELL_RULES)
+# libs/generate_text/graphs/blog_post/prompts.py
+class BlogPostDraftPrompt(BaseGenerateTextPrompt):
+    def build_generate_prompt(self, state: GenerateTextState) -> BuildPromptResult:
+        user_prompt = DRAFT_USER_TEMPLATE.format(
+            outline_text=state.latest_output(), prompt_text=state.prompt_text
+        ) + self._build_additional_context_section(state.additional_context)
+        return BuildPromptResult(
+            system_prompt=self._build_system_prompt(state), user_prompt=user_prompt
+        )
 
-    @staticmethod
-    def build_user_prompt(draft_text: str, persona_style: str) -> str:
-        return REWRITE_USER_TEMPLATE.format(draft=draft_text, style=persona_style)
+    def _build_system_prompt(self, state: GenerateTextState) -> str:
+        persona_section = self._build_persona_section(
+            state.build_persona(), ["name", "bio", "writing_style", "sample_writing"]
+        )
+        tone_and_audience_section = self._build_tone_and_audience_section(
+            state.tone, state.target_audience
+        )
+        return DRAFT_SYSTEM_PROMPT + persona_section + tone_and_audience_section
 ```
 
-- Method names are `build_<what>_prompt`. Never a bare `prompt()`.
-- `@staticmethod` when the prompt is a pure function of its arguments. A prompt set
-  needing configuration is a normal class constructed with those values, like a
-  service.
+- The system prompt says what the model is expected to do, then who it is doing it
+  as. The user prompt carries the material for this call.
+- A rewrite is a method on its step's class, not a class of its own, so it shares the
+  step's system prompt.
+- Each class chooses which inputs it uses and where they go. Formatting shared by
+  several steps is a protected helper on the base class; the subclass still decides
+  what to pass it and which prompt it lands in.
+- Method names are `build_<what>_prompt`. Never a bare `prompt()`. Every one returns a
+  `BuildPromptResult` holding `system_prompt` and `user_prompt`.
+- A prompt class holds no state. One needing configuration takes it through
+  `__init__`, like a service.
 - Template text is an `UPPER_SNAKE` constant, in `constants.py` or at the top of
   `prompts.py`. Never inline in the method.
-- One `Prompt` class per prompt set, not per domain; several can share `prompts.py`.
-- A service never builds a prompt string inline.
+- A service or node never builds a prompt string inline.
 
 ## Errors
 

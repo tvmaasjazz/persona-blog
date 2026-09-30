@@ -90,7 +90,7 @@ backend/tests/
 | Source                               | Test file                              | Required cases |
 | ------------------------------------ | -------------------------------------- | -------------- |
 | `libs/<d>/services.py`, or each module in `libs/<d>/services/` | `tests/libs/<d>/test_services.py`, or `test_<service>.py` | For each public method: happy path, each branch, each exception it raises, each collaborator failure it handles. With a database, also persisted state, not found, constraint violations, related rows loaded (§2, §3) |
-| `libs/<d>/prompts.py`                | `tests/libs/<d>/test_prompts.py`       | Each builder: the arguments appear in the output (§1) |
+| `libs/<d>/prompts.py`, or a graph variant's `libs/<d>/graphs/<v>/prompts.py` | `tests/libs/<d>/test_prompts.py`, or `tests/libs/<d>/graphs/<v>/test_prompts.py` | Each builder: the inputs land in the prompt they belong in (§1) |
 | `libs/<d>/utils/*.py`, `libs/core/utils/*.py` | `tests/libs/<d>/test_<utils>.py` | Every branch of every static method (§1, §2). A `Utils` class whose only output is a wall-clock measurement, like `DateTimeUtils`, gets no file: its effect is asserted through the service |
 | `libs/<d>/inputs.py`, `results.py`   | `tests/libs/<d>/test_inputs.py`, `test_results.py` | Only models with a validator or declared constraint: accepted and rejected values (§1) |
 | `libs/<d>/states.py`                 | `tests/libs/<d>/test_states.py`        | Only a method that does more than group stored fields; otherwise the graph and service tests cover it |
@@ -220,6 +220,7 @@ Use stubs, never mocks.
 | Collaborator                        | Double                                                        |
 | ----------------------------------- | ------------------------------------------------------------- |
 | One of our services                 | Hand-written `<Class>Stub` in `tests/stubs/<domain>.py`       |
+| A `Prompt` handed to a generic node or service | Hand-written `<Name>PromptStub` returning a fixed `BuildPromptResult`, placed and named like a service stub |
 | Third-party HTTP API                | The real SDK client over `httpx.MockTransport` (§4)           |
 | Postgres, Redis                     | The real thing                                                |
 | A `Utils` class                     | Nothing. It is pure, so call the real one                     |
@@ -397,21 +398,20 @@ dispatch maps, and DTO mappers that contain logic.
 
 | Situation                          | Pattern |
 | ---------------------------------- | ------- |
-| Prompt builder                     | Call it with distinctive argument values and assert each one appears. Never snapshot the whole prompt |
+| Prompt builder                     | Call it with distinctive input values and assert each one appears in the prompt it belongs in, system or user. Never snapshot the whole prompt |
 | Template placeholder never filled  | Calling every builder once covers it, because `.format()` raises `KeyError` |
 | Validator or `Field` constraint    | One parametrized test of accepted values, one of rejected values raising `ValidationError` |
 | Enum dispatch map                  | Parametrize over every member and assert each has a handler. The only allowed read of a `_private` attribute |
 | DTO mapper with logic              | Build the DTO, call the mapper, compare the whole returned model |
 
 ```python
-# tests/libs/forecast_digest/test_prompts.py
-def test_build_user_prompt_includes_station_name() -> None:
-    user_prompt = ForecastDigestPrompt.build_user_prompt(
-        station_name="pier-17",
-        region_type=RegionType.COASTAL,
-    )
+# tests/libs/generate_text/graphs/blog_post/test_prompts.py
+def test_build_generate_prompt_puts_persona_name_in_system_prompt() -> None:
+    state = build_generate_text_state(persona_name="Marta Quill")
 
-    assert "pier-17" in user_prompt
+    build_prompt_result = BlogPostDraftPrompt().build_generate_prompt(state)
+
+    assert "Marta Quill" in build_prompt_result.system_prompt
 ```
 
 ## §2 Service tests

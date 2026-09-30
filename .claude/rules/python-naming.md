@@ -19,7 +19,7 @@ Every class ends in the suffix for what it is:
 | ------------ | -------------------------------------------- | -------------------------------- |
 | `Type`       | Enums                                        | `TextType.BLOG_POST`             |
 | `Settings`   | Config models: the root `AppSettings` (`BaseSettings`) and each domain's frozen `BaseModel` | `HumanizerSettings` |
-| `Prompt`     | A grouped set of LLM prompt builders         | `HumanizerPrompt`                |
+| `Prompt`     | Builds one step's system and user prompt     | `BlogPostDraftPrompt`            |
 | `Input`      | A service method's payload (`libs/` only)    | `CreateUserInput`                |
 | `Result`     | A function's return shape                    | `FindUserByEmailResult`          |
 | `Router`     | FastAPI `APIRouter` modules                  | `account_router` (an `APIRouter` instance) |
