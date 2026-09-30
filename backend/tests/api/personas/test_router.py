@@ -84,12 +84,91 @@ async def test_create_persona_is_public_true_persists_is_public(
     assert persona_record.is_public is True
 
 
+async def test_create_persona_surrounding_whitespace_persists_stripped_name_and_bio(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    create_persona_response = await api_client.post(
+        "/personas", json={"name": "  Ada the Essayist  ", "bio": "\tWrites essays.\n"}
+    )
+
+    response_body = create_persona_response.json()
+    persona_query = select(PersonaOrm).where(PersonaOrm.identity == response_body["identity"])
+    persona_record = await db_session.scalar(persona_query)
+    assert create_persona_response.status_code == 201
+    assert persona_record.name == "Ada the Essayist"
+    assert persona_record.bio == "Writes essays."
+
+
+async def test_create_persona_name_and_bio_at_maximum_length_persists_row(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    create_persona_response = await api_client.post(
+        "/personas", json={"name": "n" * 80, "bio": "b" * 500}
+    )
+
+    response_body = create_persona_response.json()
+    persona_query = select(PersonaOrm).where(PersonaOrm.identity == response_body["identity"])
+    persona_record = await db_session.scalar(persona_query)
+    assert create_persona_response.status_code == 201
+    assert persona_record.name == "n" * 80
+    assert persona_record.bio == "b" * 500
+
+
 @pytest.mark.usefixtures("signed_in_user")
 @pytest.mark.parametrize(
     ("request_body", "expected_error_location"),
     [
         pytest.param({"bio": "Writes essays."}, ["body", "name"], id="missing_name"),
         pytest.param({"name": "Ada the Essayist"}, ["body", "bio"], id="missing_bio"),
+        pytest.param({"name": "", "bio": "Writes essays."}, ["body", "name"], id="empty_name"),
+        pytest.param(
+            {"name": "   ", "bio": "Writes essays."}, ["body", "name"], id="whitespace_only_name"
+        ),
+        pytest.param(
+            {"name": "x" * 81, "bio": "Writes essays."}, ["body", "name"], id="name_too_long"
+        ),
+        pytest.param({"name": "Ada the Essayist", "bio": ""}, ["body", "bio"], id="empty_bio"),
+        pytest.param(
+            {"name": "Ada the Essayist", "bio": "x" * 501}, ["body", "bio"], id="bio_too_long"
+        ),
+        pytest.param(
+            {
+                "name": "Ada the Essayist",
+                "bio": "Writes essays.",
+                "avatar_url": "javascript:alert(1)",
+            },
+            ["body", "avatar_url"],
+            id="avatar_url_javascript_scheme",
+        ),
+        pytest.param(
+            {"name": "Ada the Essayist", "bio": "Writes essays.", "avatar_url": "ftp://x"},
+            ["body", "avatar_url"],
+            id="avatar_url_ftp_scheme",
+        ),
+        pytest.param(
+            {
+                "name": "Ada the Essayist",
+                "bio": "Writes essays.",
+                "avatar_url": "https://example.com/" + "x" * 2040,
+            },
+            ["body", "avatar_url"],
+            id="avatar_url_too_long",
+        ),
+        pytest.param(
+            {"name": "Ada the Essayist", "bio": "Writes essays.", "background": "x" * 2001},
+            ["body", "background"],
+            id="background_too_long",
+        ),
+        pytest.param(
+            {"name": "Ada the Essayist", "bio": "Writes essays.", "default_tone": "x" * 201},
+            ["body", "default_tone"],
+            id="default_tone_too_long",
+        ),
+        pytest.param(
+            {"name": "Ada the Essayist", "bio": "Writes essays.", "sample_writing": "x" * 10001},
+            ["body", "sample_writing"],
+            id="sample_writing_too_long",
+        ),
     ],
 )
 async def test_create_persona_invalid_body_returns_422(
@@ -417,6 +496,24 @@ async def test_update_persona_keeping_its_own_name_returns_200(api_client: Async
 
 
 @pytest.mark.usefixtures("signed_in_user")
+async def test_update_persona_own_name_with_surrounding_whitespace_returns_200(
+    api_client: AsyncClient,
+) -> None:
+    create_response = await api_client.post(
+        "/personas", json={"name": "Ada the Essayist", "bio": "Writes essays."}
+    )
+    persona_identity = create_response.json()["identity"]
+
+    update_persona_response = await api_client.put(
+        f"/personas/{persona_identity}",
+        json={"name": "  Ada the Essayist  ", "bio": "Writes essays."},
+    )
+
+    assert update_persona_response.status_code == 200
+    assert update_persona_response.json() == {}
+
+
+@pytest.mark.usefixtures("signed_in_user")
 async def test_update_persona_duplicate_name_returns_409(api_client: AsyncClient) -> None:
     await api_client.post("/personas", json={"name": "First Persona", "bio": "Bio one."})
     second_create_response = await api_client.post(
@@ -438,6 +535,7 @@ async def test_update_persona_duplicate_name_returns_409(api_client: AsyncClient
     [
         pytest.param({"bio": "Writes essays."}, ["body", "name"], id="missing_name"),
         pytest.param({"name": "Ada the Essayist"}, ["body", "bio"], id="missing_bio"),
+        pytest.param({"name": "", "bio": "Writes essays."}, ["body", "name"], id="empty_name"),
     ],
 )
 async def test_update_persona_invalid_body_returns_422(
