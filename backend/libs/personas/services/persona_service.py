@@ -11,6 +11,7 @@ from libs.personas.inputs import PersonaInput
 from libs.personas.results import (
     CreatePersonaResult,
     FindUserPersonaListResult,
+    FindUserPersonaResult,
     PersonaDetailResult,
 )
 
@@ -62,6 +63,22 @@ class PersonaService:
                 for persona_record in persona_records
             ]
         )
+
+    async def find_user_persona(
+        self, persona_identity: UUID, auth_user: AuthUser
+    ) -> FindUserPersonaResult:
+        """The caller's own live persona only. Anyone else's persona, public or
+        private, is not found here, so a caller can only generate text as their own."""
+        persona_query = select(PersonaOrm).where(
+            PersonaOrm.identity == persona_identity,
+            PersonaOrm.created_by_id == auth_user.id,
+        )
+        persona_query_result = await self._db_session.execute(persona_query)
+        persona_record = persona_query_result.scalar_one_or_none()
+
+        if persona_record is None:
+            raise NotFoundException("Persona not found")
+        return FindUserPersonaResult.model_validate(persona_record, from_attributes=True)
 
     async def update_persona(
         self, persona_identity: UUID, persona_input: PersonaInput, auth_user: AuthUser

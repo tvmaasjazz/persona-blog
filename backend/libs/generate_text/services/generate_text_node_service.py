@@ -4,6 +4,7 @@ from typing import Any
 from langgraph.types import interrupt
 
 from libs.generate_text.inputs import ResumeGenerateTextInput
+from libs.generate_text.prompts import BaseGenerateTextPrompt
 from libs.generate_text.states import GenerateTextState
 from libs.generate_text.types import GenerateTextNodeType, HumanDecisionType
 from libs.llm.inputs import LlmCompletionInput
@@ -11,14 +12,12 @@ from libs.llm.services import LlmService
 from libs.llm.types import LlmType
 
 GenerateTextNode = Callable[[GenerateTextState], Awaitable[dict[str, Any]]]
-BuildGeneratePromptFn = Callable[[GenerateTextState], str]
-BuildRewritePromptFn = Callable[[GenerateTextState, str, str], str]
 
 
 class GenerateTextNodeService:
     """Holds the nodes every text type's graph is built from. A node is generic: a
-    text type supplies the node type it records under, the LLM tier, and a prompt
-    builder, through the three builders below, rather than this service knowing any
+    text type supplies the node type it records under, the LLM tier, and its step's
+    Prompt, through the three builders below, rather than this service knowing any
     text type's steps by name."""
 
     def __init__(self, llm_service: LlmService) -> None:
@@ -28,15 +27,15 @@ class GenerateTextNodeService:
         self,
         node_type: GenerateTextNodeType,
         llm_type: LlmType,
-        build_user_prompt: BuildGeneratePromptFn,
+        prompt: BaseGenerateTextPrompt,
     ) -> GenerateTextNode:
         async def generate_node(state: GenerateTextState) -> dict[str, Any]:
-            user_prompt = build_user_prompt(state)
+            build_prompt_result = prompt.build_generate_prompt(state)
             llm_completion_input = LlmCompletionInput(
                 llm_type=llm_type,
                 purpose=node_type.value,
-                system_prompt=None,
-                user_prompt=user_prompt,
+                system_prompt=build_prompt_result.system_prompt,
+                user_prompt=build_prompt_result.user_prompt,
                 run_id=state.generate_text_run_id,
                 step_id=state.current_step_id,
             )
@@ -55,17 +54,17 @@ class GenerateTextNodeService:
         node_type: GenerateTextNodeType,
         llm_type: LlmType,
         reviewed_node_type: GenerateTextNodeType,
-        build_user_prompt: BuildRewritePromptFn,
+        prompt: BaseGenerateTextPrompt,
     ) -> GenerateTextNode:
         async def rewrite_node(state: GenerateTextState) -> dict[str, Any]:
             previous_output = state.latest_output()
             feedback_text = state.step_feedback.get(reviewed_node_type.value, "")
-            user_prompt = build_user_prompt(state, previous_output, feedback_text)
+            build_prompt_result = prompt.build_rewrite_prompt(state, previous_output, feedback_text)
             llm_completion_input = LlmCompletionInput(
                 llm_type=llm_type,
                 purpose=node_type.value,
-                system_prompt=None,
-                user_prompt=user_prompt,
+                system_prompt=build_prompt_result.system_prompt,
+                user_prompt=build_prompt_result.user_prompt,
                 run_id=state.generate_text_run_id,
                 step_id=state.current_step_id,
             )

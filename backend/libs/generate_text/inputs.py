@@ -13,7 +13,8 @@ class StepOptionInput(BaseModel):
 class GenerateTextInput[OptionsT: BaseModel](BaseModel):
     text_type: TextType
     prompt_text: str
-    persona_info: str | None = None
+    tone: str | None = None
+    target_audience: str | None = None
     additional_context: str | None = None
     options: OptionsT
 
@@ -28,7 +29,9 @@ class CreateGenerateTextRunInput(BaseModel):
     graph_name: str
     graph_version: str
     prompt_text: str
-    persona_info: str | None
+    persona_id: int
+    tone: str | None
+    target_audience: str | None
     additional_context: str | None
     options: dict[str, Any]
 
@@ -37,3 +40,15 @@ class CreateGenerateTextStepInput(BaseModel):
     run_id: int
     step_name: str
     input: dict[str, Any] | None
+
+
+class GenerateTextPersonaInput(BaseModel):
+    """The persona fields a prompt may draw on, grouped back from the state's plain
+    dict by GenerateTextState.build_persona()."""
+
+    name: str
+    bio: str
+    background: str | None = None
+    expertise: str | None = None
+    writing_style: str | None = None
+    sample_writing: str | None = None

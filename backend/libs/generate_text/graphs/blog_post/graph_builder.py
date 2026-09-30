@@ -8,7 +8,11 @@ from pydantic import ValidationError
 from libs.generate_text.exceptions import GenerateTextOptionsInvalidException
 from libs.generate_text.graphs.base_generate_text_graph_builder import BaseGenerateTextGraphBuilder
 from libs.generate_text.graphs.blog_post.inputs import BlogPostOptionsInput
-from libs.generate_text.graphs.blog_post.prompts import BlogPostPrompt
+from libs.generate_text.graphs.blog_post.prompts import (
+    BlogPostDraftPrompt,
+    BlogPostHumanizePrompt,
+    BlogPostOutlinePrompt,
+)
 from libs.generate_text.states import GenerateTextState
 from libs.generate_text.types import GenerateTextNodeType, HumanDecisionType
 from libs.llm.types import LlmType
@@ -24,7 +28,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
     """
 
     graph_name = "blog_post"
-    graph_version = "2026-09-24.1"
+    graph_version = "2026-09-30.1"
 
     def build_graph(
         self, options: dict[str, Any], checkpointer: BaseCheckpointSaver
@@ -37,6 +41,10 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
             raise GenerateTextOptionsInvalidException(
                 "These options are not valid for a blog post"
             ) from validation_error
+
+        outline_prompt = BlogPostOutlinePrompt()
+        draft_prompt = BlogPostDraftPrompt()
+        humanize_prompt = BlogPostHumanizePrompt()
 
         outline_options = blog_post_options.outline
         humanize_options = blog_post_options.humanize
@@ -58,11 +66,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
         # Outline: a cheap pass at the shape of the post, before anything writes prose.
         if outline_options is not None and outline_options.is_enabled:
             outline_node = self._node_service.build_generate_node(
-                GenerateTextNodeType.GENERATE_OUTLINE,
-                LlmType.FAST,
-                lambda state: BlogPostPrompt.build_outline_prompt(
-                    state.prompt_text, state.persona_info, state.additional_context
-                ),
+                GenerateTextNodeType.GENERATE_OUTLINE, LlmType.FAST, outline_prompt
             )
             state_graph.add_node(
                 GenerateTextNodeType.GENERATE_OUTLINE,
@@ -89,14 +93,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
                     GenerateTextNodeType.REWRITE_OUTLINE,
                     LlmType.FAST,
                     GenerateTextNodeType.REVIEW_OUTLINE,
-                    lambda state, previous_output, feedback_text: (
-                        BlogPostPrompt.build_rewrite_outline_prompt(
-                            previous_output,
-                            feedback_text,
-                            state.persona_info,
-                            state.additional_context,
-                        )
-                    ),
+                    outline_prompt,
                 )
                 state_graph.add_node(
                     GenerateTextNodeType.REWRITE_OUTLINE,
@@ -126,14 +123,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
 
         # Draft: always runs. A blog post without a draft isn't one.
         draft_node = self._node_service.build_generate_node(
-            GenerateTextNodeType.GENERATE_DRAFT,
-            LlmType.STRONG,
-            lambda state: BlogPostPrompt.build_draft_prompt(
-                state.prompt_text,
-                state.latest_output(),
-                state.persona_info,
-                state.additional_context,
-            ),
+            GenerateTextNodeType.GENERATE_DRAFT, LlmType.STRONG, draft_prompt
         )
         state_graph.add_node(
             GenerateTextNodeType.GENERATE_DRAFT,
@@ -158,14 +148,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
                 GenerateTextNodeType.REWRITE_DRAFT,
                 LlmType.STRONG,
                 GenerateTextNodeType.REVIEW_DRAFT,
-                lambda state, previous_output, feedback_text: (
-                    BlogPostPrompt.build_rewrite_draft_prompt(
-                        previous_output,
-                        feedback_text,
-                        state.persona_info,
-                        state.additional_context,
-                    )
-                ),
+                draft_prompt,
             )
             state_graph.add_node(
                 GenerateTextNodeType.REWRITE_DRAFT,
@@ -196,11 +179,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
         # Humanize: a last pass over the draft, when the caller asked for one.
         if humanize_options is not None and humanize_options.is_enabled:
             humanize_node = self._node_service.build_generate_node(
-                GenerateTextNodeType.HUMANIZE,
-                LlmType.STRONG,
-                lambda state: BlogPostPrompt.build_humanize_prompt(
-                    state.latest_output(), state.persona_info, state.additional_context
-                ),
+                GenerateTextNodeType.HUMANIZE, LlmType.STRONG, humanize_prompt
             )
             state_graph.add_node(
                 GenerateTextNodeType.HUMANIZE,
@@ -225,14 +204,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
                     GenerateTextNodeType.REWRITE_HUMANIZE,
                     LlmType.STRONG,
                     GenerateTextNodeType.REVIEW_HUMANIZE,
-                    lambda state, previous_output, feedback_text: (
-                        BlogPostPrompt.build_rewrite_humanize_prompt(
-                            previous_output,
-                            feedback_text,
-                            state.persona_info,
-                            state.additional_context,
-                        )
-                    ),
+                    humanize_prompt,
                 )
                 state_graph.add_node(
                     GenerateTextNodeType.REWRITE_HUMANIZE,

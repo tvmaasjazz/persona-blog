@@ -1,135 +1,294 @@
-from libs.generate_text.graphs.blog_post.prompts import BlogPostPrompt
+from libs.generate_text.graphs.blog_post.prompts import (
+    BlogPostDraftPrompt,
+    BlogPostHumanizePrompt,
+    BlogPostOutlinePrompt,
+)
+from tests.factories.generate_text import build_generate_text_state
+
+# --- BlogPostOutlinePrompt ---------------------------------------------------------
 
 
-def test_build_outline_prompt_includes_prompt_text() -> None:
-    outline_prompt = BlogPostPrompt.build_outline_prompt(
-        "Write about sourdough starters.", persona_info=None, additional_context=None
+def test_outline_build_generate_prompt_puts_used_persona_fields_in_system_prompt() -> None:
+    state = build_generate_text_state(
+        persona_name="Marta Quill",
+        persona_bio="Writes about sourdough.",
+        persona_background="Former baker.",
+        persona_expertise="Fermentation.",
     )
 
-    assert "Write about sourdough starters." in outline_prompt
+    build_prompt_result = BlogPostOutlinePrompt().build_generate_prompt(state)
+
+    assert "Marta Quill" in build_prompt_result.system_prompt
+    assert "Writes about sourdough." in build_prompt_result.system_prompt
+    assert "Former baker." in build_prompt_result.system_prompt
+    assert "Fermentation." in build_prompt_result.system_prompt
 
 
-def test_build_outline_prompt_includes_persona_info_and_additional_context() -> None:
-    outline_prompt = BlogPostPrompt.build_outline_prompt(
-        "Write about sourdough starters.",
-        persona_info="Writes plainly, bakes at home.",
-        additional_context="Reference: https://example.com/starter-guide",
+def test_outline_build_generate_prompt_omits_field_the_step_does_not_use() -> None:
+    state = build_generate_text_state(
+        persona_writing_style="Short punchy sentences.",
+        persona_sample_writing="The starter bubbled all night.",
     )
 
-    assert "Writes plainly, bakes at home." in outline_prompt
-    assert "Reference: https://example.com/starter-guide" in outline_prompt
+    build_prompt_result = BlogPostOutlinePrompt().build_generate_prompt(state)
+
+    assert "Short punchy sentences." not in build_prompt_result.system_prompt
+    assert "The starter bubbled all night." not in build_prompt_result.system_prompt
 
 
-def test_build_draft_prompt_includes_prompt_text_and_outline() -> None:
-    draft_prompt = BlogPostPrompt.build_draft_prompt(
-        "Write about sourdough starters.",
-        "I. Intro II. Feeding schedule",
-        persona_info=None,
-        additional_context=None,
+def test_outline_build_generate_prompt_puts_tone_and_target_audience_in_system_prompt() -> None:
+    state = build_generate_text_state(tone="Playful", target_audience="Home bakers")
+
+    build_prompt_result = BlogPostOutlinePrompt().build_generate_prompt(state)
+
+    assert "Playful" in build_prompt_result.system_prompt
+    assert "Home bakers" in build_prompt_result.system_prompt
+
+
+def test_outline_build_generate_prompt_omits_empty_tone_and_target_audience() -> None:
+    state = build_generate_text_state(tone=None, target_audience=None)
+
+    build_prompt_result = BlogPostOutlinePrompt().build_generate_prompt(state)
+
+    assert "Tone:" not in build_prompt_result.system_prompt
+    assert "Target audience:" not in build_prompt_result.system_prompt
+
+
+def test_outline_build_generate_prompt_puts_prompt_text_in_user_prompt() -> None:
+    state = build_generate_text_state(prompt_text="Write about sourdough starters.")
+
+    build_prompt_result = BlogPostOutlinePrompt().build_generate_prompt(state)
+
+    assert "Write about sourdough starters." in build_prompt_result.user_prompt
+
+
+def test_outline_build_generate_prompt_puts_additional_context_in_user_prompt() -> None:
+    state = build_generate_text_state(additional_context="Reference: https://example.com/guide")
+
+    build_prompt_result = BlogPostOutlinePrompt().build_generate_prompt(state)
+
+    assert "Reference: https://example.com/guide" in build_prompt_result.user_prompt
+
+
+def test_outline_build_generate_prompt_omits_empty_additional_context() -> None:
+    state = build_generate_text_state(additional_context=None)
+
+    build_prompt_result = BlogPostOutlinePrompt().build_generate_prompt(state)
+
+    assert "Additional context:" not in build_prompt_result.user_prompt
+
+
+def test_outline_build_rewrite_prompt_puts_brief_output_and_feedback_in_user_prompt() -> None:
+    state = build_generate_text_state(prompt_text="Write about sourdough starters.")
+
+    build_prompt_result = BlogPostOutlinePrompt().build_rewrite_prompt(
+        state, "I. Intro II. Feeding schedule", "Add a section on hydration ratios."
     )
 
-    assert "Write about sourdough starters." in draft_prompt
-    assert "I. Intro II. Feeding schedule" in draft_prompt
+    assert "Write about sourdough starters." in build_prompt_result.user_prompt
+    assert "I. Intro II. Feeding schedule" in build_prompt_result.user_prompt
+    assert "Add a section on hydration ratios." in build_prompt_result.user_prompt
 
 
-def test_build_draft_prompt_includes_persona_info_and_additional_context() -> None:
-    draft_prompt = BlogPostPrompt.build_draft_prompt(
-        "Write about sourdough starters.",
-        "I. Intro",
-        persona_info="Writes plainly.",
-        additional_context="Reference: https://example.com",
+def test_outline_build_rewrite_prompt_shares_generate_prompts_system_prompt() -> None:
+    state = build_generate_text_state(persona_name="Marta Quill")
+
+    generate_result = BlogPostOutlinePrompt().build_generate_prompt(state)
+    rewrite_result = BlogPostOutlinePrompt().build_rewrite_prompt(state, "outline", "feedback")
+
+    assert rewrite_result.system_prompt == generate_result.system_prompt
+
+
+# --- BlogPostDraftPrompt ------------------------------------------------------------
+
+
+def test_draft_build_generate_prompt_puts_persona_fields_in_system_prompt() -> None:
+    state = build_generate_text_state(
+        persona_name="Marta Quill",
+        persona_bio="Writes about sourdough.",
+        persona_background="Former baker.",
+        persona_expertise="Fermentation.",
+        persona_writing_style="Short punchy sentences.",
+        persona_sample_writing="The starter bubbled all night.",
     )
 
-    assert "Writes plainly." in draft_prompt
-    assert "Reference: https://example.com" in draft_prompt
+    build_prompt_result = BlogPostDraftPrompt().build_generate_prompt(state)
+
+    assert "Marta Quill" in build_prompt_result.system_prompt
+    assert "Writes about sourdough." in build_prompt_result.system_prompt
+    assert "Former baker." in build_prompt_result.system_prompt
+    assert "Fermentation." in build_prompt_result.system_prompt
+    assert "Short punchy sentences." in build_prompt_result.system_prompt
+    assert "The starter bubbled all night." in build_prompt_result.system_prompt
 
 
-def test_build_humanize_prompt_includes_draft_text() -> None:
-    humanize_prompt = BlogPostPrompt.build_humanize_prompt(
-        "A full draft about sourdough.", persona_info=None, additional_context=None
+def test_draft_build_generate_prompt_puts_tone_and_target_audience_in_system_prompt() -> None:
+    state = build_generate_text_state(tone="Playful", target_audience="Home bakers")
+
+    build_prompt_result = BlogPostDraftPrompt().build_generate_prompt(state)
+
+    assert "Playful" in build_prompt_result.system_prompt
+    assert "Home bakers" in build_prompt_result.system_prompt
+
+
+def test_draft_build_generate_prompt_omits_empty_tone_and_target_audience() -> None:
+    state = build_generate_text_state(tone=None, target_audience=None)
+
+    build_prompt_result = BlogPostDraftPrompt().build_generate_prompt(state)
+
+    assert "Tone:" not in build_prompt_result.system_prompt
+    assert "Target audience:" not in build_prompt_result.system_prompt
+
+
+def test_draft_build_generate_prompt_puts_prompt_text_and_outline_in_user_prompt() -> None:
+    state = build_generate_text_state(
+        prompt_text="Write about sourdough starters.",
+        step_outputs={"GENERATE_OUTLINE": "I. Intro II. Feeding schedule"},
     )
 
-    assert "A full draft about sourdough." in humanize_prompt
+    build_prompt_result = BlogPostDraftPrompt().build_generate_prompt(state)
+
+    assert "Write about sourdough starters." in build_prompt_result.user_prompt
+    assert "I. Intro II. Feeding schedule" in build_prompt_result.user_prompt
 
 
-def test_build_humanize_prompt_includes_persona_info_and_additional_context() -> None:
-    humanize_prompt = BlogPostPrompt.build_humanize_prompt(
-        "A full draft about sourdough.",
-        persona_info="Writes plainly.",
-        additional_context="Reference: https://example.com",
+def test_draft_build_generate_prompt_puts_additional_context_in_user_prompt() -> None:
+    state = build_generate_text_state(additional_context="Reference: https://example.com/guide")
+
+    build_prompt_result = BlogPostDraftPrompt().build_generate_prompt(state)
+
+    assert "Reference: https://example.com/guide" in build_prompt_result.user_prompt
+
+
+def test_draft_build_generate_prompt_omits_empty_additional_context() -> None:
+    state = build_generate_text_state(additional_context=None)
+
+    build_prompt_result = BlogPostDraftPrompt().build_generate_prompt(state)
+
+    assert "Additional context:" not in build_prompt_result.user_prompt
+
+
+def test_draft_build_rewrite_prompt_puts_brief_output_and_feedback_in_user_prompt() -> None:
+    state = build_generate_text_state(prompt_text="Write about sourdough starters.")
+
+    build_prompt_result = BlogPostDraftPrompt().build_rewrite_prompt(
+        state, "A full draft about sourdough.", "Make it shorter."
     )
 
-    assert "Writes plainly." in humanize_prompt
-    assert "Reference: https://example.com" in humanize_prompt
+    assert "Write about sourdough starters." in build_prompt_result.user_prompt
+    assert "A full draft about sourdough." in build_prompt_result.user_prompt
+    assert "Make it shorter." in build_prompt_result.user_prompt
 
 
-def test_build_rewrite_outline_prompt_includes_previous_output_and_feedback() -> None:
-    rewrite_outline_prompt = BlogPostPrompt.build_rewrite_outline_prompt(
-        "I. Intro II. Feeding schedule",
-        "Add a section on hydration ratios.",
-        persona_info=None,
-        additional_context=None,
+def test_draft_build_rewrite_prompt_shares_generate_prompts_system_prompt() -> None:
+    state = build_generate_text_state(persona_name="Marta Quill")
+
+    generate_result = BlogPostDraftPrompt().build_generate_prompt(state)
+    rewrite_result = BlogPostDraftPrompt().build_rewrite_prompt(state, "draft", "feedback")
+
+    assert rewrite_result.system_prompt == generate_result.system_prompt
+
+
+# --- BlogPostHumanizePrompt ----------------------------------------------------------
+
+
+def test_humanize_build_generate_prompt_puts_used_persona_fields_in_system_prompt() -> None:
+    state = build_generate_text_state(
+        persona_name="Marta Quill",
+        persona_writing_style="Short punchy sentences.",
+        persona_sample_writing="The starter bubbled all night.",
     )
 
-    assert "I. Intro II. Feeding schedule" in rewrite_outline_prompt
-    assert "Add a section on hydration ratios." in rewrite_outline_prompt
+    build_prompt_result = BlogPostHumanizePrompt().build_generate_prompt(state)
+
+    assert "Marta Quill" in build_prompt_result.system_prompt
+    assert "Short punchy sentences." in build_prompt_result.system_prompt
+    assert "The starter bubbled all night." in build_prompt_result.system_prompt
 
 
-def test_build_rewrite_outline_prompt_includes_persona_info_and_additional_context() -> None:
-    rewrite_outline_prompt = BlogPostPrompt.build_rewrite_outline_prompt(
-        "I. Intro",
-        "Add hydration ratios.",
-        persona_info="Writes plainly.",
-        additional_context="Reference: https://example.com",
+def test_humanize_build_generate_prompt_omits_fields_the_step_does_not_use() -> None:
+    state = build_generate_text_state(
+        persona_bio="Writes about sourdough.",
+        persona_background="Former baker.",
+        persona_expertise="Fermentation.",
     )
 
-    assert "Writes plainly." in rewrite_outline_prompt
-    assert "Reference: https://example.com" in rewrite_outline_prompt
+    build_prompt_result = BlogPostHumanizePrompt().build_generate_prompt(state)
+
+    assert "Writes about sourdough." not in build_prompt_result.system_prompt
+    assert "Former baker." not in build_prompt_result.system_prompt
+    assert "Fermentation." not in build_prompt_result.system_prompt
 
 
-def test_build_rewrite_draft_prompt_includes_previous_output_and_feedback() -> None:
-    rewrite_draft_prompt = BlogPostPrompt.build_rewrite_draft_prompt(
-        "A full draft about sourdough.",
-        "Make it shorter.",
-        persona_info=None,
-        additional_context=None,
+def test_humanize_build_generate_prompt_puts_tone_and_target_audience_in_system_prompt() -> None:
+    state = build_generate_text_state(tone="Playful", target_audience="Home bakers")
+
+    build_prompt_result = BlogPostHumanizePrompt().build_generate_prompt(state)
+
+    assert "Playful" in build_prompt_result.system_prompt
+    assert "Home bakers" in build_prompt_result.system_prompt
+
+
+def test_humanize_build_generate_prompt_omits_empty_tone_and_target_audience() -> None:
+    state = build_generate_text_state(tone=None, target_audience=None)
+
+    build_prompt_result = BlogPostHumanizePrompt().build_generate_prompt(state)
+
+    assert "Tone:" not in build_prompt_result.system_prompt
+    assert "Target audience:" not in build_prompt_result.system_prompt
+
+
+def test_humanize_build_generate_prompt_puts_draft_in_user_prompt() -> None:
+    state = build_generate_text_state(
+        step_outputs={"GENERATE_DRAFT": "A full draft about sourdough."}
     )
 
-    assert "A full draft about sourdough." in rewrite_draft_prompt
-    assert "Make it shorter." in rewrite_draft_prompt
+    build_prompt_result = BlogPostHumanizePrompt().build_generate_prompt(state)
+
+    assert "A full draft about sourdough." in build_prompt_result.user_prompt
 
 
-def test_build_rewrite_draft_prompt_includes_persona_info_and_additional_context() -> None:
-    rewrite_draft_prompt = BlogPostPrompt.build_rewrite_draft_prompt(
-        "A full draft.",
-        "Make it shorter.",
-        persona_info="Writes plainly.",
-        additional_context="Reference: https://example.com",
+def test_humanize_build_generate_prompt_puts_additional_context_in_user_prompt() -> None:
+    state = build_generate_text_state(additional_context="Reference: https://example.com/guide")
+
+    build_prompt_result = BlogPostHumanizePrompt().build_generate_prompt(state)
+
+    assert "Reference: https://example.com/guide" in build_prompt_result.user_prompt
+
+
+def test_humanize_build_generate_prompt_omits_empty_additional_context() -> None:
+    state = build_generate_text_state(additional_context=None)
+
+    build_prompt_result = BlogPostHumanizePrompt().build_generate_prompt(state)
+
+    assert "Additional context:" not in build_prompt_result.user_prompt
+
+
+def test_humanize_build_rewrite_prompt_puts_previous_output_and_feedback_in_user_prompt() -> None:
+    state = build_generate_text_state(prompt_text="Write about sourdough starters.")
+
+    build_prompt_result = BlogPostHumanizePrompt().build_rewrite_prompt(
+        state, "A humanized draft.", "Sound less robotic."
     )
 
-    assert "Writes plainly." in rewrite_draft_prompt
-    assert "Reference: https://example.com" in rewrite_draft_prompt
+    assert "A humanized draft." in build_prompt_result.user_prompt
+    assert "Sound less robotic." in build_prompt_result.user_prompt
 
 
-def test_build_rewrite_humanize_prompt_includes_previous_output_and_feedback() -> None:
-    rewrite_humanize_prompt = BlogPostPrompt.build_rewrite_humanize_prompt(
-        "A humanized draft.",
-        "Sound less robotic.",
-        persona_info=None,
-        additional_context=None,
+def test_humanize_build_rewrite_prompt_omits_the_brief() -> None:
+    state = build_generate_text_state(prompt_text="Write about sourdough starters.")
+
+    build_prompt_result = BlogPostHumanizePrompt().build_rewrite_prompt(
+        state, "A humanized draft.", "Sound less robotic."
     )
 
-    assert "A humanized draft." in rewrite_humanize_prompt
-    assert "Sound less robotic." in rewrite_humanize_prompt
+    assert "Write about sourdough starters." not in build_prompt_result.user_prompt
 
 
-def test_build_rewrite_humanize_prompt_includes_persona_info_and_additional_context() -> None:
-    rewrite_humanize_prompt = BlogPostPrompt.build_rewrite_humanize_prompt(
-        "A humanized draft.",
-        "Sound less robotic.",
-        persona_info="Writes plainly.",
-        additional_context="Reference: https://example.com",
-    )
+def test_humanize_build_rewrite_prompt_shares_generate_prompts_system_prompt() -> None:
+    state = build_generate_text_state(persona_name="Marta Quill")
 
-    assert "Writes plainly." in rewrite_humanize_prompt
-    assert "Reference: https://example.com" in rewrite_humanize_prompt
+    generate_result = BlogPostHumanizePrompt().build_generate_prompt(state)
+    rewrite_result = BlogPostHumanizePrompt().build_rewrite_prompt(state, "draft", "feedback")
+
+    assert rewrite_result.system_prompt == generate_result.system_prompt

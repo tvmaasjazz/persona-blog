@@ -37,7 +37,9 @@ class BlogPostOptionsDto(BaseModel):
 
 class GenerateBlogPostDto(BaseModel):
     prompt_text: str
-    persona_info: str | None = None
+    persona_identity: UUID
+    tone: str | None = None
+    target_audience: str | None = None
     additional_context: str | None = None
     options: BlogPostOptionsDto
 
@@ -45,7 +47,8 @@ class GenerateBlogPostDto(BaseModel):
         return GenerateTextInput[BlogPostOptionsInput](
             text_type=TextType.BLOG_POST,
             prompt_text=self.prompt_text,
-            persona_info=self.persona_info,
+            tone=self.tone,
+            target_audience=self.target_audience,
             additional_context=self.additional_context,
             options=self.options.to_input(),
         )

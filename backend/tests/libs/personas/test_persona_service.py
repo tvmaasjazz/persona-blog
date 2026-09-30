@@ -11,6 +11,7 @@ from libs.database.orm import PersonaOrm
 from libs.personas.results import (
     CreatePersonaResult,
     FindUserPersonaListResult,
+    FindUserPersonaResult,
     PersonaDetailResult,
 )
 from libs.personas.services import PersonaService
@@ -291,6 +292,95 @@ async def test_find_user_persona_list_no_personas_returns_empty_list(
     find_user_persona_list_result = await persona_service.find_user_persona_list(auth_user)
 
     assert find_user_persona_list_result == FindUserPersonaListResult(personas=[])
+
+
+async def test_find_user_persona_own_persona_returns_result_with_id(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_record = await insert_persona_row(
+        db_session,
+        created_by_id=user_record.id,
+        name="Ada the Essayist",
+        bio="Writes long-form essays.",
+    )
+    persona_service = PersonaService(db_session=db_session)
+
+    find_user_persona_result = await persona_service.find_user_persona(
+        persona_record.identity, auth_user
+    )
+
+    assert find_user_persona_result == FindUserPersonaResult(
+        id=persona_record.id,
+        identity=persona_record.identity,
+        name="Ada the Essayist",
+        bio="Writes long-form essays.",
+        background=None,
+        expertise=None,
+        writing_style=None,
+        sample_writing=None,
+    )
+
+
+async def test_find_user_persona_another_users_public_persona_raises_not_found_exception(
+    db_session: AsyncSession,
+) -> None:
+    owner_record = await insert_user_row(db_session)
+    other_user_record = await insert_user_row(db_session)
+    other_auth_user = build_auth_user(
+        user_id=other_user_record.id, user_identity=other_user_record.identity
+    )
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=owner_record.id, is_public=True
+    )
+    persona_service = PersonaService(db_session=db_session)
+
+    with pytest.raises(NotFoundException):
+        await persona_service.find_user_persona(persona_record.identity, other_auth_user)
+
+
+async def test_find_user_persona_another_users_private_persona_raises_not_found_exception(
+    db_session: AsyncSession,
+) -> None:
+    owner_record = await insert_user_row(db_session)
+    other_user_record = await insert_user_row(db_session)
+    other_auth_user = build_auth_user(
+        user_id=other_user_record.id, user_identity=other_user_record.identity
+    )
+    persona_record = await insert_persona_row(db_session, created_by_id=owner_record.id)
+    persona_service = PersonaService(db_session=db_session)
+
+    with pytest.raises(NotFoundException):
+        await persona_service.find_user_persona(persona_record.identity, other_auth_user)
+
+
+async def test_find_user_persona_soft_deleted_raises_not_found_exception(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    deleted_at = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+    persona_record = await insert_persona_row(
+        db_session,
+        created_by_id=user_record.id,
+        deleted_at=deleted_at,
+        deleted_by_id=user_record.id,
+    )
+    persona_service = PersonaService(db_session=db_session)
+
+    with pytest.raises(NotFoundException):
+        await persona_service.find_user_persona(persona_record.identity, auth_user)
+
+
+async def test_find_user_persona_never_inserted_raises_not_found_exception(
+    db_session: AsyncSession,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    persona_service = PersonaService(db_session=db_session)
+
+    with pytest.raises(NotFoundException):
+        await persona_service.find_user_persona(uuid4(), auth_user)
 
 
 async def test_update_persona_replaces_fields(db_session: AsyncSession) -> None:

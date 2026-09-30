@@ -7,7 +7,34 @@ from libs.generate_text.graphs.base_generate_text_graph_builder import BaseGener
 from libs.generate_text.graphs.generate_text_graph_builder_registry import (
     GenerateTextGraphBuilderRegistry,
 )
+from libs.generate_text.prompts import BaseGenerateTextPrompt
+from libs.generate_text.results import BuildPromptResult
+from libs.generate_text.states import GenerateTextState
 from libs.generate_text.types import TextType
+
+
+class GenerateTextPromptStub(BaseGenerateTextPrompt):
+    """A Prompt double that returns fixed BuildPromptResults, so a test can assert a
+    node service passes them through to the llm without depending on any real step's
+    template text."""
+
+    def __init__(self) -> None:
+        self.build_generate_prompt_result = BuildPromptResult(
+            system_prompt="Stub generate system prompt.",
+            user_prompt="Stub generate user prompt.",
+        )
+        self.build_rewrite_prompt_result = BuildPromptResult(
+            system_prompt="Stub rewrite system prompt.",
+            user_prompt="Stub rewrite user prompt.",
+        )
+
+    def build_generate_prompt(self, state: GenerateTextState) -> BuildPromptResult:
+        return self.build_generate_prompt_result
+
+    def build_rewrite_prompt(
+        self, state: GenerateTextState, previous_output: str, feedback_text: str
+    ) -> BuildPromptResult:
+        return self.build_rewrite_prompt_result
 
 
 class GenerateTextGraphStub(CompiledStateGraph):

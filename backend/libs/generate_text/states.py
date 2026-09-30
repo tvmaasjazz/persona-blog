@@ -3,6 +3,7 @@ from uuid import UUID
 from pydantic import BaseModel, field_validator
 
 from libs.auth.results import AuthUser
+from libs.generate_text.inputs import GenerateTextPersonaInput
 
 
 class GenerateTextState(BaseModel):
@@ -21,7 +22,9 @@ class GenerateTextState(BaseModel):
     graph_version: str
     text_type: str
     prompt_text: str
-    persona_info: str | None = None
+    persona: dict[str, str | None] = {}
+    tone: str | None = None
+    target_audience: str | None = None
     additional_context: str | None = None
     step_outputs: dict[str, str] = {}
     step_decisions: dict[str, str] = {}
@@ -39,6 +42,10 @@ class GenerateTextState(BaseModel):
     def build_auth_user(self) -> AuthUser:
         """Groups the stored primitives back into the shape LlmService takes."""
         return AuthUser(id=self.auth_user_id, identity=self.auth_user_identity)
+
+    def build_persona(self) -> GenerateTextPersonaInput:
+        """Groups the stored persona dict back into the shape a Prompt takes."""
+        return GenerateTextPersonaInput.model_validate(self.persona)
 
     def latest_output(self) -> str:
         """The most recently written step output, or "" before any step has run."""

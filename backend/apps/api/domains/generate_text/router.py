@@ -3,7 +3,10 @@ from uuid import UUID
 from fastapi import APIRouter
 
 from apps.api.core.dependencies import AuthUserDep
-from apps.api.domains.generate_text.dependencies import GenerateTextServiceDep
+from apps.api.domains.generate_text.dependencies import (
+    GenerateTextPersonaDep,
+    GenerateTextServiceDep,
+)
 from apps.api.domains.generate_text.dtos import (
     GenerateBlogPostDto,
     GenerateTextRunResponseDto,
@@ -16,10 +19,13 @@ generate_text_router = APIRouter(prefix="/generate-text", tags=["generate-text"]
 @generate_text_router.post("/blog-post")
 async def generate_blog_post(
     dto: GenerateBlogPostDto,
+    find_user_persona_result: GenerateTextPersonaDep,
     auth_user: AuthUserDep,
     generate_text_service: GenerateTextServiceDep,
 ) -> GenerateTextRunResponseDto:
-    generate_text_result = await generate_text_service.generate_text(dto.to_input(), auth_user)
+    generate_text_result = await generate_text_service.generate_text(
+        dto.to_input(), find_user_persona_result, auth_user
+    )
     return GenerateTextRunResponseDto.from_result(generate_text_result)
 
 

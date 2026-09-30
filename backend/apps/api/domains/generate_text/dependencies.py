@@ -3,7 +3,8 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from apps.api.core.config import AppSettings
-from apps.api.core.dependencies import LlmServiceDep
+from apps.api.core.dependencies import AuthUserDep, LlmServiceDep
+from apps.api.domains.generate_text.dtos import GenerateBlogPostDto
 from libs.core.exceptions import ServiceUnavailableException
 from libs.generate_text.graphs.generate_text_graph_builder_registry import (
     GenerateTextGraphBuilderRegistry,
@@ -15,6 +16,8 @@ from libs.generate_text.services import (
     GenerateTextService,
     GenerateTextStepService,
 )
+from libs.personas.results import FindUserPersonaResult
+from libs.personas.services import PersonaService
 
 
 def get_generate_text_service(request: Request, llm_service: LlmServiceDep) -> GenerateTextService:
@@ -45,3 +48,20 @@ def get_generate_text_service(request: Request, llm_service: LlmServiceDep) -> G
 
 
 GenerateTextServiceDep = Annotated[GenerateTextService, Depends(get_generate_text_service)]
+
+
+async def get_generate_text_persona(
+    request: Request,
+    dto: GenerateBlogPostDto,
+    auth_user: AuthUserDep,
+) -> FindUserPersonaResult:
+    """Loads the persona on its own short session, closed before the route runs, so no
+    connection sits idle inside a transaction while the graph waits on the LLM. Generating
+    as a persona is creator-only, even for a public one."""
+    db_session_factory = request.app.state.db_session_factory
+    async with db_session_factory() as db_session:
+        persona_service = PersonaService(db_session=db_session)
+        return await persona_service.find_user_persona(dto.persona_identity, auth_user)
+
+
+GenerateTextPersonaDep = Annotated[FindUserPersonaResult, Depends(get_generate_text_persona)]
