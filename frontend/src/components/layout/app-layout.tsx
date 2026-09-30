@@ -1,10 +1,11 @@
-import { Home, PenSquare, Plus, Sparkles } from 'lucide-react'
-import { Link, Outlet } from 'react-router'
+import { Home, Plus, Sparkles, Users } from 'lucide-react'
+import { NavLink, Outlet } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { useCurrentUser } from '@/features/auth/api/current-user-query'
 import { SignInCard } from '@/features/auth/components/sign-in-card'
 import { UserMenu } from '@/features/auth/components/user-menu'
+import { cn } from '@/lib/utils'
 
 export function AppLayout() {
   const { data: user, isPending } = useCurrentUser()
@@ -15,22 +16,33 @@ export function AppLayout() {
         <Sparkles aria-hidden className="mb-4 size-6 self-center text-primary-text md:self-start" />
         <ul className="flex flex-col gap-1">
           <li>
-            <Link
+            <NavLink
               to="/"
-              className="flex h-12 items-center justify-center gap-3 rounded-xl px-2 hover:bg-accent md:justify-start"
+              end
+              className={({ isActive }) =>
+                cn(
+                  'flex h-12 items-center justify-center gap-3 rounded-xl px-2 hover:bg-accent md:justify-start',
+                  isActive && 'bg-accent font-semibold',
+                )
+              }
             >
               <Home aria-hidden className="size-5" />
               <span className="hidden md:inline">Home</span>
-            </Link>
+            </NavLink>
           </li>
           <li>
-            <span
-              title="Writing arrives with the generator"
-              className="flex h-12 items-center justify-center gap-3 rounded-xl px-2 text-muted-foreground opacity-50 md:justify-start"
+            <NavLink
+              to="/personas"
+              className={({ isActive }) =>
+                cn(
+                  'flex h-12 items-center justify-center gap-3 rounded-xl px-2 hover:bg-accent md:justify-start',
+                  isActive && 'bg-accent font-semibold',
+                )
+              }
             >
-              <PenSquare aria-hidden className="size-5" />
-              <span className="hidden md:inline">Write</span>
-            </span>
+              <Users aria-hidden className="size-5" />
+              <span className="hidden md:inline">My Personas</span>
+            </NavLink>
           </li>
         </ul>
         <Button disabled className="mt-3 w-full px-0 md:px-4">

@@ -89,10 +89,135 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/personas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Find User Persona List */
+        get: operations["find_user_persona_list_personas_get"];
+        put?: never;
+        /** Create Persona */
+        post: operations["create_persona_personas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/personas/{persona_identity}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Find Persona */
+        get: operations["find_persona_personas__persona_identity__get"];
+        /** Update Persona */
+        put: operations["update_persona_personas__persona_identity__put"];
+        post?: never;
+        /** Delete Persona */
+        delete: operations["delete_persona_personas__persona_identity__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/generate-text/blog-post": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate Blog Post */
+        post: operations["generate_blog_post_generate_text_blog_post_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/generate-text/runs/{run_identity}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Find Generate Text Run */
+        get: operations["find_generate_text_run_generate_text_runs__run_identity__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/generate-text/runs/{run_identity}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Generate Text */
+        post: operations["resume_generate_text_generate_text_runs__run_identity__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/llm/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Llm */
+        post: operations["complete_llm_dev_llm_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BlogPostOptionsDto */
+        BlogPostOptionsDto: {
+            outline?: components["schemas"]["StepOptionDto"] | null;
+            /**
+             * @default {
+             *       "is_enabled": true,
+             *       "is_auto_approved": true
+             *     }
+             */
+            draft: components["schemas"]["StepOptionDto"];
+            humanize?: components["schemas"]["StepOptionDto"] | null;
+        };
+        /** CompleteLlmDto */
+        CompleteLlmDto: {
+            llm_type: components["schemas"]["LlmType"];
+            /** System Prompt */
+            system_prompt: string | null;
+            /** User Prompt */
+            user_prompt: string;
+        };
         /** EmptyResponseDto */
         EmptyResponseDto: Record<string, never>;
         /**
@@ -100,6 +225,54 @@ export interface components {
          * @enum {string}
          */
         EnvironmentType: "DEVELOPMENT" | "TEST" | "PRODUCTION";
+        /** GenerateBlogPostDto */
+        GenerateBlogPostDto: {
+            /** Prompt Text */
+            prompt_text: string;
+            /** Persona Info */
+            persona_info?: string | null;
+            /** Additional Context */
+            additional_context?: string | null;
+            options: components["schemas"]["BlogPostOptionsDto"];
+        };
+        /** GenerateTextRunResponseDto */
+        GenerateTextRunResponseDto: {
+            /**
+             * Run Identity
+             * Format: uuid
+             */
+            run_identity: string;
+            text_type: components["schemas"]["TextType"];
+            status: components["schemas"]["GenerateTextRunStatusType"];
+            /** Last Step */
+            last_step: string | null;
+            /** Graph Name */
+            graph_name: string;
+            /** Graph Version */
+            graph_version: string;
+            /** Content */
+            content: string;
+            /** Character Count */
+            character_count: number;
+            /** Llm Call Count */
+            llm_call_count: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Cost Usd */
+            cost_usd: string;
+            /** Started At */
+            started_at: string | null;
+            /** Finished At */
+            finished_at: string | null;
+        };
+        /**
+         * GenerateTextRunStatusType
+         * @description Where a run is. AWAITING_REVIEW means a review node is holding it.
+         * @enum {string}
+         */
+        GenerateTextRunStatusType: "PENDING" | "RUNNING" | "AWAITING_REVIEW" | "COMPLETED" | "FAILED" | "CANCELLED";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -117,6 +290,128 @@ export interface components {
          * @enum {string}
          */
         HealthStatusType: "OK";
+        /** IdentityResponseDto */
+        IdentityResponseDto: {
+            /**
+             * Identity
+             * Format: uuid
+             */
+            identity: string;
+        };
+        /** LlmCompletionResponseDto */
+        LlmCompletionResponseDto: {
+            /**
+             * Llm Call Identity
+             * Format: uuid
+             */
+            llm_call_identity: string;
+            /** Content */
+            content: string;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+        };
+        /**
+         * LlmType
+         * @description What a call needs, not which model runs it. LlmSettings maps each tier to a model.
+         * @enum {string}
+         */
+        LlmType: "FAST" | "STRONG" | "THINKING";
+        /** PersonaDto */
+        PersonaDto: {
+            /** Name */
+            name: string;
+            /** Bio */
+            bio: string;
+            /** Avatar Url */
+            avatar_url?: string | null;
+            /** Background */
+            background?: string | null;
+            /** Expertise */
+            expertise?: string | null;
+            /** Writing Style */
+            writing_style?: string | null;
+            /** Default Tone */
+            default_tone?: string | null;
+            /** Default Target Audience */
+            default_target_audience?: string | null;
+            /** Sample Writing */
+            sample_writing?: string | null;
+            /**
+             * Is Public
+             * @default false
+             */
+            is_public: boolean;
+        };
+        /** PersonaListResponseDto */
+        PersonaListResponseDto: {
+            /** Personas */
+            personas: components["schemas"]["PersonaResponseDto"][];
+        };
+        /** PersonaResponseDto */
+        PersonaResponseDto: {
+            /**
+             * Identity
+             * Format: uuid
+             */
+            identity: string;
+            /** Name */
+            name: string;
+            /** Bio */
+            bio: string;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Background */
+            background: string | null;
+            /** Expertise */
+            expertise: string | null;
+            /** Writing Style */
+            writing_style: string | null;
+            /** Default Tone */
+            default_tone: string | null;
+            /** Default Target Audience */
+            default_target_audience: string | null;
+            /** Sample Writing */
+            sample_writing: string | null;
+            /** Is Public */
+            is_public: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ResumeGenerateTextDto */
+        ResumeGenerateTextDto: {
+            /** Is Approved */
+            is_approved: boolean;
+            /** Feedback Text */
+            feedback_text?: string | null;
+        };
+        /** StepOptionDto */
+        StepOptionDto: {
+            /**
+             * Is Enabled
+             * @default true
+             */
+            is_enabled: boolean;
+            /**
+             * Is Auto Approved
+             * @default true
+             */
+            is_auto_approved: boolean;
+        };
+        /**
+         * TextType
+         * @enum {string}
+         */
+        TextType: "BLOG_POST";
         /** UserResponseDto */
         UserResponseDto: {
             /**
@@ -272,6 +567,288 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserResponseDto"];
+                };
+            };
+        };
+    };
+    find_user_persona_list_personas_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonaListResponseDto"];
+                };
+            };
+        };
+    };
+    create_persona_personas_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonaDto"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_persona_personas__persona_identity__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                persona_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonaResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_persona_personas__persona_identity__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                persona_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonaDto"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_persona_personas__persona_identity__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                persona_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_blog_post_generate_text_blog_post_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateBlogPostDto"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateTextRunResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_generate_text_run_generate_text_runs__run_identity__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateTextRunResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_generate_text_generate_text_runs__run_identity__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeGenerateTextDto"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateTextRunResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_llm_dev_llm_complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteLlmDto"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmCompletionResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
