@@ -1,6 +1,6 @@
 ---
 name: fastapi-coder
-description: Writes backend Python to this project's settled FastAPI conventions — services (including a <Domain>ValidationService), Utils classes, LangGraph states, node services and graphs, Input/Result models, settings, constants, prompts, DTOs, dependency factories, validation guard dependencies, thin routers, and domain wiring in AppSettings, app_factory.py, core/dependencies.py and lifespan.py. Use once the design is decided and any tables it needs exist. It does not see this conversation, so pass the domain, entities and fields, and service method signatures. Doesn't write Orm classes, migrations, or tests.
+description: Writes backend Python to this project's settled FastAPI conventions — services (including a <Domain>ValidationService), Utils classes, LangGraph states, node services and graphs, Input/Result models, settings, constants, prompts, DTOs with their field-constraint aliases, dependency factories, validation guard dependencies, thin routers, and domain wiring in AppSettings, app_factory.py, core/dependencies.py and lifespan.py. Use once the design is decided and any tables it needs exist. It does not see this conversation, so pass the domain, entities and fields, and service method signatures. Doesn't write Orm classes, migrations, or tests.
 tools: Read, Write, Edit, Glob, Grep
 model: sonnet
 effort: low
@@ -39,7 +39,9 @@ The rules files say where each of these lives and how it is shaped.
 - **LangGraph workflow files**, for a domain whose work is a graph: the layout and what
   belongs in each file are `fastapi-structure.md` › LangGraph workflows. A new graph for
   a domain that already has one is a folder under its `graphs/`, not a domain of its own
-- **HTTP layer** — DTOs, dependency factories with their `Annotated` aliases,
+- **HTTP layer** — DTOs, including request field limits as `StringConstraints`
+  aliases (`fastapi-structure.md` › DTOs › Inbound), dependency factories with their
+  `Annotated` aliases,
   `validate_<what>` guard dependencies, thin routers
 - **Wiring a domain in** — add its settings field to `AppSettings` and register its
   router in `app_factory.py`. In those two files, add the domain's line and nothing

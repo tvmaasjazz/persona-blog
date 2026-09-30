@@ -99,8 +99,8 @@ Split a lib by what it is about, not by how big it gets.
 
 ### Validation guards
 
-When checking an incoming payload needs a database read or more involved logic than a
-DTO field constraint, the route gets a validation guard: a dependency in the domain's
+When checking an incoming payload needs a database read or compares more than one
+field (DTOs › Inbound), the route gets a validation guard: a dependency in the domain's
 `dependencies.py`, named `validate_<what>` and attached with
 `dependencies=[Depends(...)]`. The guard calls a method on the lib's
 `<Domain>ValidationService`, named `validate_<condition>()`, which returns nothing and
@@ -255,6 +255,22 @@ validates the body, with filters grouped in a nested filter object. Bind it as
 `Annotated[BlogPostFetchAllQueryDto, Query()]`. Pagination and filter conventions
 are not settled yet — decide them with the first feature that needs them and record
 them here.
+
+A limit on a request field, such as required, length or format, is part of the API
+contract, so it is declared on the `Dto` field. It then reaches the OpenAPI schema
+the frontend is generated from. Declare it as an
+`Annotated[str, StringConstraints(...)]` alias at the top of `dtos.py`, named for
+what it holds, and strip whitespace on required text so `"  "` fails `min_length=1`:
+
+```python
+# apps/api/domains/personas/dtos.py
+PersonaNameStr = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
+]
+```
+
+A check that needs the database, or more than one field, is a validation guard
+(Services › Validation guards).
 
 ### Outbound
 
@@ -541,8 +557,9 @@ carries meaning never appears inline in domain code.
 | ------------ | ----------------------------- | ------------------------------------ |
 | **Setting**  | Tunable                       | A settings model, defaults in code   |
 | **Constant** | Overriding it would be a bug  | Module-level `UPPER_SNAKE`           |
+| **Request field limit** | Part of the API contract | An `Annotated` alias in the domain's `dtos.py` (DTOs › Inbound) |
 
-When in doubt, make it a setting.
+When in doubt, make it a setting, unless it is a request field's limit.
 
 ### Settings
 
@@ -636,8 +653,9 @@ EMAIL_NORMALIZE_PATTERN = re.compile(r"\+[^@]*@")
 CACHE_KEY_PREFIX = "users:"
 ```
 
-Timeouts, limits, retry counts, model names, and feature flags are settings, not
-constants. Never use an `Enum` to group unrelated constants.
+Timeouts, operational limits (rate limits, batch sizes, retry counts), model names,
+and feature flags are settings, not constants. A request field's limit is neither; it
+belongs on the DTO (DTOs › Inbound). Never use an `Enum` to group unrelated constants.
 
 ### Prompts
 

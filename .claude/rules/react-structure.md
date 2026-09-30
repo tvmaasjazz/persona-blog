@@ -17,6 +17,8 @@ way the backend is organized by domain. No global `hooks/` or `api/` folder.
 | API client    | `openapi-fetch`, one instance in `src/lib/api-client.ts`       |
 | Components    | shadcn/ui (Radix), source in `src/components/ui/`              |
 | Icons         | `lucide-react`                                                 |
+| Toasts        | `sonner`, through shadcn's `Toaster`: see › Toasts             |
+| Forms         | TanStack Form, validated with Zod: see › Forms                 |
 | Styling       | Tailwind v4 with design tokens: see `react-styling.md`         |
 
 Ask before adding a dependency, and before any global client state library
@@ -28,31 +30,31 @@ frontend/src/
 ├── main.tsx                   # createRoot, renders <AppProviders> + <RouterProvider>
 ├── index.css                  # Tailwind entry and design tokens
 ├── app/
-│   ├── providers.tsx          # AppProviders: QueryClientProvider, ...
+│   ├── providers.tsx          # AppProviders: QueryClientProvider, Toaster
 │   ├── query-client.ts        # the one QueryClient and its defaults
 │   └── router.tsx             # the route tree
 ├── routes/                    # one file per page, composed from features
 │   ├── home-page.tsx          # HomePage
-│   └── write-page.tsx         # WritePage
+│   └── personas-page.tsx      # PersonasPage
 ├── features/
-│   └── auth/                  # a feature: one area of the product
+│   └── auth/                  # a feature: one area of the product, like personas/
 │       ├── api/
 │       │   ├── current-user-query.ts   # currentUserQueryOptions, useCurrentUser
 │       │   └── use-sign-out.ts         # useSignOut mutation
 │       ├── components/
 │       │   ├── require-auth.tsx        # RequireAuth route guard
-│       │   └── sign-in-button.tsx      # SignInButton
+│       │   └── sign-in-card.tsx        # SignInCard
 │       └── hooks/             # hooks with no API call, if the feature has any
 ├── components/
 │   ├── ui/                    # shadcn/ui, added with the CLI, never hand-created
-│   └── layout/                # app-wide shell: AppLayout, NavRail, ...
+│   ├── form/                  # the form layer: useAppForm, field components
+│   └── layout/                # app-wide shell: AppLayout
 └── lib/
     ├── api-client.ts          # apiClient: the openapi-fetch instance
+    ├── api-error.ts           # ApiError, createApiError, apiErrorMessage
     ├── api-schema.gen.ts      # generated from /openapi.json, never hand-edited
     └── utils.ts               # cn(), from shadcn
 ```
-
-`App.tsx` is the step 4 placeholder. Step 11 replaces it with `app/` and `routes/`.
 
 ## Features
 
@@ -115,6 +117,9 @@ export function useCurrentUser() {
 - Query keys start with the backend resource path, split on `/`: `GET /users/me` is
   `['users', 'me']`, `GET /blog-posts/{identity}` is
   `['blog-posts', blogPostIdentity]`.
+- A failed request throws `createApiError(error, response)` from `lib/api-error.ts`:
+  an `ApiError` carrying the HTTP `status` and the body's `detail`, so a caller can
+  tell a 409 from anything else. The one exception is the 401 below.
 - A 401 from `/users/me` means signed out. Its query function returns `null` rather
   than throwing, so `useCurrentUser()` gives the user or `null`, never an error state.
 - Never copy query data into `useState` or context. Read it from the hook wherever
@@ -127,11 +132,93 @@ One hook per mutation, named `use` + the action: `useSignOut`, `useGenerateText`
 It updates or invalidates every query key the change affects in `onSuccess`, so
 callers never refetch by hand.
 
+The hook owns the cache and nothing else: it never toasts, navigates, or sets form
+state. The component that calls `mutate` does those, in the second argument, because
+the same mutation can need different feedback in different places. A form does the
+same in its `onSubmit`, around `mutateAsync` (› Forms).
+
+```tsx
+createPersona.mutate(persona, {
+  onSuccess: (personaIdentity) => {
+    toast.success('Persona created')
+    navigate(`/personas/${personaIdentity}`)
+  },
+  onError: (error) => toast.error(apiErrorMessage(error)),
+})
+```
+
+### Toasts
+
+A toast confirms something the user did, or reports a failure that has nowhere better
+to show. It uses `sonner`, through `toast` imported from `'sonner'`. The one
+`<Toaster />` is mounted in `AppProviders`, and no other file mounts one.
+
+- **Success:** `toast.success` after a create, save, or delete, especially when the
+  page then navigates away. A short past-tense phrase: "Persona saved".
+- **Error:** an error that belongs to a field shows under that field, not in a toast,
+  like a 409 name clash under Name. Anything else goes to `toast.error` with
+  `apiErrorMessage(error)` from `lib/api-error.ts`.
+- **Queries don't toast.** A failed query renders an error state where its data
+  would be.
+- **No toast for what is already on screen**, such as a dialog that closes or a list
+  that updates in place with nothing else to confirm.
+
 ### Sign-in
 
 Google sign-in is a full-page navigation, not a request: an `<a href>` to
 `/api/auth/google/login`. The backend redirects to Google, Google redirects to the
 callback, and the callback sets the cookie and redirects back to the app.
+
+## Forms
+
+Forms use TanStack Form, validated with a Zod schema. The app's form layer is in
+`components/form/`:
+
+- `use-app-form.ts` builds `useAppForm` and `withForm` with `createFormHook`. It
+  registers the field components (`TextField`, `TextareaField`, `SwitchField`) and the
+  form components (`SubmitButton`).
+- Each field component renders its control through `FormField`. `FormField` owns the
+  label, description, error, and the ids that tie them together, so a form never
+  wires those by hand.
+
+A feature's form has three parts. `features/personas/` is the example:
+
+- **`<entity>-form-schema.ts`**, at the feature root beside `api/` and `components/`,
+  holds the Zod schema, the empty values, and the shared
+  `formOptions`. The schema's limits mirror the backend DTO, with a comment naming
+  it. Parsing the form values gives the request body, because the trimming and the
+  blank-to-`null` transforms live in the schema.
+- **`<entity>-form.tsx`** holds the fields and buttons, built with `withForm` from the
+  shared options. It has no behaviour of its own.
+- **One component per action**, such as `create-persona-form.tsx` and
+  `edit-persona-form.tsx`. Each calls `useAppForm` with the shared options and an
+  `onSubmit` that:
+  - parses the values
+  - awaits the mutation's `mutateAsync`, so the submit button stays disabled while
+    the request runs
+  - then toasts and navigates
+
+Validation:
+
+- `validationLogic: revalidateLogic()`, with the schema as `validators.onDynamic`.
+  Nothing is flagged until the first submit; after that, fields recheck as the user
+  types.
+- `onSubmitInvalid: focusFirstInvalidField`, so a failed submit lands on the first
+  error.
+- An API error about one field goes on that field, with
+  `setFieldServerError(formApi, '<field>', message)`. `FormField` clears it when the
+  user edits the field. Any other API error is a toast (› Toasts).
+
+A new kind of control, such as a select or date picker, is a new field component in
+`components/form/`, registered in `use-app-form.ts`. For a form shape the app doesn't
+have yet, such as array fields, fields that depend on each other, or async
+validation:
+
+1. Read TanStack Form's guides first, starting from
+   https://tanstack.com/form/latest/docs/framework/react/guides/basic-concepts, then
+   Form Composition, Validation, Linked Fields, and Arrays.
+2. Add what's reusable to `components/form/`.
+3. Record the pattern here.
 
 ## Routing
 
@@ -144,17 +231,16 @@ a loading state while the current user loads. Pages don't check auth themselves.
 
 | Kind                 | File                     | Name                        |
 | -------------------- | ------------------------ | --------------------------- |
-| Component            | `sign-in-button.tsx`     | `SignInButton`              |
+| Component            | `sign-in-card.tsx`       | `SignInCard`                |
 | Page                 | `home-page.tsx`          | `HomePage`                  |
 | Hook                 | `use-sign-out.ts`        | `useSignOut`                |
 | Query                | `current-user-query.ts`  | `currentUserQueryOptions`, `useCurrentUser` |
-| Props type           | same file as component   | `SignInButtonProps`         |
+| Props type           | same file as component   | `SignInCardProps`           |
 | Module constant      | any                      | `SESSION_REFRESH_MS`        |
 
 - Every file name is kebab-case, matching shadcn's.
 - Named exports only. No `export default`, except where a tool requires it
-  (`vite.config.ts`). The step 4 `App.tsx` placeholder still has one until step 11
-  replaces it.
+  (`vite.config.ts`).
 - Names say what the thing is without context, as in `python-naming.md`: no bare
   `data`, `item`, `info`, `helper`, `utils`. The exception is `lib/utils.ts`, which
   shadcn owns.

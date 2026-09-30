@@ -93,6 +93,18 @@ Substack's sizes and a `link` variant that uses `primary-text`. Change the varia
 the file rather than overriding it with `className` at every call site. A `className`
 passed at the call site is for layout (`w-full`, margins), not for restyling.
 
+`alert-dialog.tsx` is edited the same way: its content takes the dialog shape from
+Shape and type (`rounded-2xl`, `bg-popover`), and its title takes the dialog title
+style (`text-xl font-extrabold`).
+
+`sonner.tsx` is edited for a different reason. shadcn's version reads the theme from
+`next-themes`, which the app doesn't use. It pins `theme="dark"` instead. When light
+mode lands, replace the pinned value with one read from the class toggle.
+
+Re-running `npx shadcn@latest add` for an edited file overwrites the edit. When
+another component pulls one in as a dependency, the CLI asks before overwriting:
+answer no.
+
 Build app components from `components/ui/` parts. Don't use a raw `<button>` or
 `<input>` where a shadcn one exists.
 

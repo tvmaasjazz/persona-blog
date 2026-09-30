@@ -40,7 +40,7 @@ finding, even if the two copies agree today, because they will drift.
 
 | Topic | Owner |
 | ----- | ----- |
-| Frontend layout, feature folders, API client, queries and mutations, routing, naming, TypeScript | `.claude/rules/react-structure.md` |
+| Frontend layout, feature folders, API client, queries and mutations, toasts, forms, routing, naming, TypeScript | `.claude/rules/react-structure.md` |
 | Design tokens and what each is for, shape and type, layout, shadcn components, icons | `.claude/rules/react-styling.md` |
 | Token values | `frontend/src/index.css`; the rules describe tokens, they don't copy values |
 | An agent's role, reading list, scope, allowed commands, report shape | `.claude/agents/<name>.md`, not conventions |
@@ -64,7 +64,7 @@ duplication.
    imports. When an example and its rule disagree, the rule text is presumed right.
 3. **Stale references.** Check each one against the repository with Glob and Grep:
    - file paths presented as existing under `frontend/`. Examples that show the
-     target shape of future code (`features/auth/` before step 11) are fine when the
+     target shape of future code (a feature the plan hasn't built yet) are fine when the
      file says so or the plan schedules them.
    - npm scripts: every `npm run <script>` must exist in `frontend/package.json`, or be
      scheduled by the plan
