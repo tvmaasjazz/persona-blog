@@ -7,9 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from libs.auth.results import AuthUser
 from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.database.orm import PersonaOrm
-from libs.personas.exceptions import PersonaNameTakenException
 from libs.personas.inputs import PersonaInput
-from libs.personas.results import CreatePersonaResult, ListPersonasResult, PersonaDetailResult
+from libs.personas.results import (
+    CreatePersonaResult,
+    FindUserPersonaListResult,
+    PersonaDetailResult,
+)
 
 
 class PersonaService:
@@ -41,10 +44,10 @@ class PersonaService:
     async def find_persona(
         self, persona_identity: UUID, auth_user: AuthUser
     ) -> PersonaDetailResult:
-        persona_record = await self._find_visible_persona_record(persona_identity, auth_user)
+        persona_record = await self._find_accessible_persona_record(persona_identity, auth_user)
         return PersonaDetailResult.model_validate(persona_record, from_attributes=True)
 
-    async def list_personas(self, auth_user: AuthUser) -> ListPersonasResult:
+    async def find_user_persona_list(self, auth_user: AuthUser) -> FindUserPersonaListResult:
         persona_query = (
             select(PersonaOrm)
             .where(PersonaOrm.created_by_id == auth_user.id)
@@ -53,7 +56,7 @@ class PersonaService:
         persona_query_result = await self._db_session.execute(persona_query)
         persona_records = persona_query_result.scalars().all()
 
-        return ListPersonasResult(
+        return FindUserPersonaListResult(
             personas=[
                 PersonaDetailResult.model_validate(persona_record, from_attributes=True)
                 for persona_record in persona_records
@@ -83,23 +86,7 @@ class PersonaService:
         persona_record.deleted_by_id = auth_user.id
         await self._db_session.flush()
 
-    async def ensure_persona_name_available(
-        self, persona_name: str, auth_user: AuthUser, persona_identity: UUID | None = None
-    ) -> None:
-        """Raises PersonaNameTakenException when the caller already has a live persona with
-        this name. persona_identity is the persona being renamed, which keeps its own name."""
-        persona_query = select(PersonaOrm.id).where(
-            PersonaOrm.created_by_id == auth_user.id,
-            PersonaOrm.name == persona_name,
-        )
-        if persona_identity is not None:
-            persona_query = persona_query.where(PersonaOrm.identity != persona_identity)
-        persona_query_result = await self._db_session.execute(persona_query)
-
-        if persona_query_result.first() is not None:
-            raise PersonaNameTakenException("You already have a persona with this name")
-
-    async def _find_visible_persona_record(
+    async def _find_accessible_persona_record(
         self, persona_identity: UUID, auth_user: AuthUser
     ) -> PersonaOrm:
         """The caller's own persona, or anyone's public one. A private persona of someone
@@ -120,7 +107,7 @@ class PersonaService:
     ) -> PersonaOrm:
         """Only the creator may change a persona. Someone who can see a public persona
         but didn't create it is forbidden."""
-        persona_record = await self._find_visible_persona_record(persona_identity, auth_user)
+        persona_record = await self._find_accessible_persona_record(persona_identity, auth_user)
         if persona_record.created_by_id != auth_user.id:
             raise ForbiddenException("Only the persona's creator can change it")
         return persona_record

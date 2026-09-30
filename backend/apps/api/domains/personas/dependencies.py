@@ -5,7 +5,7 @@ from fastapi import Depends
 
 from apps.api.core.dependencies import AuthUserDep, DbTransactionDep
 from apps.api.domains.personas.dtos import PersonaDto
-from libs.personas.services import PersonaService
+from libs.personas.services import PersonaService, PersonaValidationService
 
 
 def get_persona_service(db_session: DbTransactionDep) -> PersonaService:
@@ -15,18 +15,29 @@ def get_persona_service(db_session: DbTransactionDep) -> PersonaService:
 PersonaServiceDep = Annotated[PersonaService, Depends(get_persona_service)]
 
 
-async def ensure_new_persona_name_available(
+def get_persona_validation_service(db_session: DbTransactionDep) -> PersonaValidationService:
+    return PersonaValidationService(db_session=db_session)
+
+
+PersonaValidationServiceDep = Annotated[
+    PersonaValidationService, Depends(get_persona_validation_service)
+]
+
+
+async def validate_new_persona_name(
     dto: PersonaDto,
     auth_user: AuthUserDep,
-    persona_service: PersonaServiceDep,
+    persona_validation_service: PersonaValidationServiceDep,
 ) -> None:
-    await persona_service.ensure_persona_name_available(dto.name, auth_user)
+    await persona_validation_service.validate_persona_name_available(dto.name, auth_user)
 
 
-async def ensure_renamed_persona_name_available(
+async def validate_renamed_persona_name(
     persona_identity: UUID,
     dto: PersonaDto,
     auth_user: AuthUserDep,
-    persona_service: PersonaServiceDep,
+    persona_validation_service: PersonaValidationServiceDep,
 ) -> None:
-    await persona_service.ensure_persona_name_available(dto.name, auth_user, persona_identity)
+    await persona_validation_service.validate_persona_name_available(
+        dto.name, auth_user, persona_identity
+    )

@@ -9,10 +9,6 @@ class CreatePersonaResult(BaseModel):
 
 
 class PersonaDetailResult(BaseModel):
-    """What a persona looks like to a caller, whether just read or listed.
-
-    Shared by find_persona and list_personas."""
-
     identity: UUID
     name: str
     bio: str
@@ -28,5 +24,5 @@ class PersonaDetailResult(BaseModel):
     updated_at: datetime
 
 
-class ListPersonasResult(BaseModel):
+class FindUserPersonaListResult(BaseModel):
     personas: list[PersonaDetailResult]

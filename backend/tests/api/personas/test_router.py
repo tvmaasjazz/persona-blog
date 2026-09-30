@@ -123,7 +123,7 @@ async def test_create_persona_signed_out_returns_401(api_client: AsyncClient) ->
     assert create_persona_response.status_code == 401
 
 
-async def test_list_personas_returns_only_signed_in_users_live_personas_newest_first(
+async def test_find_user_persona_list_returns_only_signed_in_users_live_personas_newest_first(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     db_session: AsyncSession,
@@ -157,10 +157,10 @@ async def test_list_personas_returns_only_signed_in_users_live_personas_newest_f
         json={"name": "Other User Public Persona", "bio": "Writes essays.", "is_public": True},
     )
 
-    list_personas_response = await api_client.get("/personas")
+    find_user_persona_list_response = await api_client.get("/personas")
 
-    assert list_personas_response.status_code == 200
-    assert list_personas_response.json() == {
+    assert find_user_persona_list_response.status_code == 200
+    assert find_user_persona_list_response.json() == {
         "personas": [
             {
                 "identity": str(newest_persona_record.identity),
@@ -196,10 +196,10 @@ async def test_list_personas_returns_only_signed_in_users_live_personas_newest_f
     }
 
 
-async def test_list_personas_signed_out_returns_401(api_client: AsyncClient) -> None:
-    list_personas_response = await api_client.get("/personas")
+async def test_find_user_persona_list_signed_out_returns_401(api_client: AsyncClient) -> None:
+    find_user_persona_list_response = await api_client.get("/personas")
 
-    assert list_personas_response.status_code == 401
+    assert find_user_persona_list_response.status_code == 401
 
 
 async def test_find_persona_returns_persona_response(

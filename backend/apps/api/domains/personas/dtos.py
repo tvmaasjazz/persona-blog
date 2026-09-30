@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from libs.personas.inputs import PersonaInput
-from libs.personas.results import ListPersonasResult, PersonaDetailResult
+from libs.personas.results import FindUserPersonaListResult, PersonaDetailResult
 
 
 class PersonaDto(BaseModel):
@@ -68,14 +68,16 @@ class PersonaResponseDto(BaseModel):
         )
 
 
-class ListPersonasResponseDto(BaseModel):
+class PersonaListResponseDto(BaseModel):
     personas: list[PersonaResponseDto]
 
     @classmethod
-    def from_result(cls, list_personas_result: ListPersonasResult) -> ListPersonasResponseDto:
+    def from_result(
+        cls, find_user_persona_list_result: FindUserPersonaListResult
+    ) -> PersonaListResponseDto:
         return cls(
             personas=[
                 PersonaResponseDto.from_result(persona_detail_result)
-                for persona_detail_result in list_personas_result.personas
+                for persona_detail_result in find_user_persona_list_result.personas
             ]
         )

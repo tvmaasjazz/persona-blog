@@ -8,8 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from libs.auth.results import AuthUser
 from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.database.orm import PersonaOrm
-from libs.personas.exceptions import PersonaNameTakenException
-from libs.personas.results import CreatePersonaResult, ListPersonasResult, PersonaDetailResult
+from libs.personas.results import (
+    CreatePersonaResult,
+    FindUserPersonaListResult,
+    PersonaDetailResult,
+)
 from libs.personas.services import PersonaService
 from tests.factories.auth import build_auth_user
 from tests.factories.personas import build_persona_input, insert_persona_row
@@ -231,7 +234,7 @@ async def test_find_persona_another_users_public_persona_returns_persona_detail_
     )
 
 
-async def test_list_personas_returns_only_live_personas_newest_first(
+async def test_find_user_persona_list_returns_only_live_personas_newest_first(
     db_session: AsyncSession,
 ) -> None:
     user_record = await insert_user_row(db_session)
@@ -268,9 +271,9 @@ async def test_list_personas_returns_only_live_personas_newest_first(
     )
     persona_service = PersonaService(db_session=db_session)
 
-    list_personas_result = await persona_service.list_personas(auth_user)
+    find_user_persona_list_result = await persona_service.find_user_persona_list(auth_user)
 
-    assert list_personas_result == ListPersonasResult(
+    assert find_user_persona_list_result == FindUserPersonaListResult(
         personas=[
             PersonaDetailResult.model_validate(newest_persona_record, from_attributes=True),
             PersonaDetailResult.model_validate(middle_persona_record, from_attributes=True),
@@ -279,13 +282,15 @@ async def test_list_personas_returns_only_live_personas_newest_first(
     )
 
 
-async def test_list_personas_no_personas_returns_empty_list(db_session: AsyncSession) -> None:
+async def test_find_user_persona_list_no_personas_returns_empty_list(
+    db_session: AsyncSession,
+) -> None:
     auth_user = await _insert_auth_user(db_session)
     persona_service = PersonaService(db_session=db_session)
 
-    list_personas_result = await persona_service.list_personas(auth_user)
+    find_user_persona_list_result = await persona_service.find_user_persona_list(auth_user)
 
-    assert list_personas_result == ListPersonasResult(personas=[])
+    assert find_user_persona_list_result == FindUserPersonaListResult(personas=[])
 
 
 async def test_update_persona_replaces_fields(db_session: AsyncSession) -> None:
@@ -426,106 +431,3 @@ async def test_delete_persona_another_users_public_persona_raises_forbidden_exce
 
     with pytest.raises(ForbiddenException):
         await persona_service.delete_persona(persona_record.identity, other_auth_user)
-
-
-async def test_ensure_persona_name_available_taken_name_raises_persona_name_taken_exception(
-    db_session: AsyncSession,
-) -> None:
-    user_record = await insert_user_row(db_session)
-    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
-    await insert_persona_row(db_session, created_by_id=user_record.id, name="Ada the Essayist")
-    await db_session.commit()
-    persona_service = PersonaService(db_session=db_session)
-
-    with pytest.raises(PersonaNameTakenException):
-        await persona_service.ensure_persona_name_available("Ada the Essayist", auth_user)
-
-
-async def test_ensure_persona_name_available_free_name_returns_none(
-    db_session: AsyncSession,
-) -> None:
-    auth_user = await _insert_auth_user(db_session)
-    persona_service = PersonaService(db_session=db_session)
-
-    ensure_persona_name_available_result = await persona_service.ensure_persona_name_available(
-        "Ada the Essayist", auth_user
-    )
-
-    assert ensure_persona_name_available_result is None
-
-
-async def test_ensure_persona_name_available_same_name_different_user_returns_none(
-    db_session: AsyncSession,
-) -> None:
-    owner_record = await insert_user_row(db_session)
-    other_user_record = await insert_user_row(db_session)
-    other_auth_user = build_auth_user(
-        user_id=other_user_record.id, user_identity=other_user_record.identity
-    )
-    await insert_persona_row(db_session, created_by_id=owner_record.id, name="Ada the Essayist")
-    await db_session.commit()
-    persona_service = PersonaService(db_session=db_session)
-
-    ensure_persona_name_available_result = await persona_service.ensure_persona_name_available(
-        "Ada the Essayist", other_auth_user
-    )
-
-    assert ensure_persona_name_available_result is None
-
-
-async def test_ensure_persona_name_available_same_name_soft_deleted_persona_returns_none(
-    db_session: AsyncSession,
-) -> None:
-    user_record = await insert_user_row(db_session)
-    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
-    await insert_persona_row(
-        db_session,
-        created_by_id=user_record.id,
-        name="Ada the Essayist",
-        deleted_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
-        deleted_by_id=user_record.id,
-    )
-    await db_session.commit()
-    persona_service = PersonaService(db_session=db_session)
-
-    ensure_persona_name_available_result = await persona_service.ensure_persona_name_available(
-        "Ada the Essayist", auth_user
-    )
-
-    assert ensure_persona_name_available_result is None
-
-
-async def test_ensure_persona_name_available_persona_identity_owns_name_returns_none(
-    db_session: AsyncSession,
-) -> None:
-    user_record = await insert_user_row(db_session)
-    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
-    persona_record = await insert_persona_row(
-        db_session, created_by_id=user_record.id, name="Ada the Essayist"
-    )
-    await db_session.commit()
-    persona_service = PersonaService(db_session=db_session)
-
-    ensure_persona_name_available_result = await persona_service.ensure_persona_name_available(
-        "Ada the Essayist", auth_user, persona_record.identity
-    )
-
-    assert ensure_persona_name_available_result is None
-
-
-async def test_ensure_persona_name_available_taken_by_other_raises_persona_name_taken_exception(
-    db_session: AsyncSession,
-) -> None:
-    user_record = await insert_user_row(db_session)
-    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
-    await insert_persona_row(db_session, created_by_id=user_record.id, name="Ada the Essayist")
-    other_persona_record = await insert_persona_row(
-        db_session, created_by_id=user_record.id, name="Second Persona"
-    )
-    await db_session.commit()
-    persona_service = PersonaService(db_session=db_session)
-
-    with pytest.raises(PersonaNameTakenException):
-        await persona_service.ensure_persona_name_available(
-            "Ada the Essayist", auth_user, other_persona_record.identity
-        )
