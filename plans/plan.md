@@ -47,3 +47,51 @@ Access:
   private one is still a 404.
 - **List** — your own only, returned as `{"personas": [...]}`. No pagination yet.
   Browsing other users' public personas waits for persona search.
+
+## Step 2a — Persona in generate text
+
+The request names a persona; every step's prompt builds its own system and user prompt
+from that persona's fields.
+
+**Request.** `GenerateBlogPostDto` drops `persona_info` and gains:
+
+| Field              | Type             | Notes                                                  |
+| ------------------ | ---------------- | ------------------------------------------------------ |
+| `persona_identity` | UUID, required   | One of the caller's own personas; anyone else's is 404 |
+| `tone`             | text, nullable   | The frontend prefills it from `default_tone`           |
+| `target_audience`  | text, nullable   | Prefilled from `default_target_audience`               |
+
+**Before the graph.** A dependency, `get_generate_text_persona`, loads the persona on
+its own short session and closes it before the route runs, so no connection sits idle
+in a transaction while the graph waits on the LLM. The route passes the loaded persona
+to `GenerateTextService.generate_text`. Generating as a persona is creator-only, even
+for a public one: anyone else's is a 404.
+
+**State.** The graph state holds primitives only, so the persona's fields go in flat
+(`persona_name`, `persona_bio`, ...), and `state.build_persona()` groups them back into
+a `GenerateTextPersonaInput`, the way `build_auth_user()` does. `tone` and `target_audience` go in beside
+`prompt_text`.
+
+**Prompts.** One class per step, extending `BaseGenerateTextPrompt`:
+`BlogPostOutlinePrompt`, `BlogPostDraftPrompt`, `BlogPostHumanizePrompt`. Each has
+`build_generate_prompt(state)` and `build_rewrite_prompt(state, previous_output,
+feedback_text)`, both returning `BuildPromptResult(system_prompt, user_prompt)`. A
+rewrite shares its step's system prompt, and the outline and draft rewrites carry the
+brief too.
+
+- The system prompt carries what the model is expected to do, then who it's doing it as:
+  the persona fields the step chooses, plus tone and target audience.
+- Each prompt class picks which persona fields it uses and where they go, so a later
+  step such as a persona voice check can put them in the user prompt instead. The base
+  class offers a helper that formats whichever fields a subclass asks for, so the
+  formatting isn't repeated.
+- The node service takes a step's prompt object in place of the two prompt lambdas.
+
+**Run record.** `pb_generate_text_run` drops `persona_info` and gains `persona_id`
+(FK to `pb_persona`, nullable only for runs made before this step), `tone` and
+`target_audience`. No persona snapshot: `pb_llm_call` already stores every system and
+user prompt as sent. Persona revisions are a later concern.
+
+**Rules.** `fastapi-structure.md` › Prompts and the `Prompt` row in `python-naming.md`
+change to one class per step extending `Base<Domain>Prompt`, returning a
+`BuildPromptResult`.

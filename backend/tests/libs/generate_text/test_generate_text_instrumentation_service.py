@@ -26,6 +26,7 @@ from tests.factories.generate_text import (
     build_generate_text_state,
 )
 from tests.factories.llm import insert_llm_call_row
+from tests.factories.personas import insert_persona_row
 from tests.factories.users import insert_user_row
 
 
@@ -33,6 +34,12 @@ async def _insert_auth_user(db_session: AsyncSession) -> AuthUser:
     user_record = await insert_user_row(db_session)
     await db_session.commit()
     return build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+
+
+async def _insert_persona_id(db_session: AsyncSession, *, created_by_id: int) -> int:
+    persona_record = await insert_persona_row(db_session, created_by_id=created_by_id)
+    await db_session.commit()
+    return persona_record.id
 
 
 def _build_instrumentation_service(
@@ -50,9 +57,10 @@ async def test_instrument_writes_completed_step_with_step_name_and_rollup(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     run_service, instrumentation_service = _build_instrumentation_service(db_session_factory)
     create_run_result = await run_service.create_run(
-        build_create_generate_text_run_input(), auth_user
+        build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
     generate_text_state = build_generate_text_state(
         auth_user_id=auth_user.id,
@@ -108,9 +116,10 @@ async def test_instrument_node_raises_leaves_failed_step_and_failed_run(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     run_service, instrumentation_service = _build_instrumentation_service(db_session_factory)
     create_run_result = await run_service.create_run(
-        build_create_generate_text_run_input(), auth_user
+        build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
     generate_text_state = build_generate_text_state(
         auth_user_id=auth_user.id,
@@ -149,9 +158,10 @@ async def test_instrument_node_raises_graph_bubble_up_records_awaiting_review_an
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     run_service, instrumentation_service = _build_instrumentation_service(db_session_factory)
     create_run_result = await run_service.create_run(
-        build_create_generate_text_run_input(), auth_user
+        build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
     generate_text_state = build_generate_text_state(
         auth_user_id=auth_user.id,

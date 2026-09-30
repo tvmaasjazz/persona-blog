@@ -60,3 +60,8 @@ class FindLatestGenerateTextStepResult(BaseModel):
 
     step_name: str
     content: str
+
+
+class BuildPromptResult(BaseModel):
+    system_prompt: str
+    user_prompt: str

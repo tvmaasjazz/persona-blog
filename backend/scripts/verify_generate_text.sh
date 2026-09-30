@@ -10,11 +10,15 @@
 set -euo pipefail
 
 API_URL="${API_URL:-http://localhost:8000}"
+RUN_SUFFIX="$(date +%H%M%S)"
 PROMPT_TEXT="${PROMPT_TEXT:-Why sourdough starter needs a feeding schedule}"
 FEEDBACK_TEXT="${FEEDBACK_TEXT:-Too general. Give concrete timings and temperatures.}"
 # Exported so the json_body python below can read them from os.environ.
-PERSONA_INFO="${PERSONA_INFO:-Writes plainly, bakes at home, distrusts jargon.}"
-export PROMPT_TEXT FEEDBACK_TEXT PERSONA_INFO
+PERSONA_NAME="Sourdough Sam $RUN_SUFFIX"
+PERSONA_BIO="Writes plainly, bakes at home, distrusts jargon."
+TONE="warm, practical"
+TARGET_AUDIENCE="home bakers new to sourdough"
+export PROMPT_TEXT FEEDBACK_TEXT PERSONA_NAME PERSONA_BIO TONE TARGET_AUDIENCE
 
 step() { printf '\n\033[1m── %s\033[0m\n' "$1"; }
 fail() { printf '\033[31mFAIL\033[0m %s\n' "$1"; exit 1; }
@@ -85,22 +89,30 @@ PY
 )"
 pass "session ready"
 
-step "1. Generate a blog post — outline auto-approved, draft held for review"
+step "1. Creating a persona to generate as"
+PERSONA_RESPONSE="$(curl -sf -X POST "$API_URL/personas" \
+  -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
+  -d "$(json_body name=@PERSONA_NAME bio=@PERSONA_BIO is_public=false)")"
+PERSONA_IDENTITY="$(echo "$PERSONA_RESPONSE" | read_json_field identity)"
+export PERSONA_IDENTITY
+pass "persona $PERSONA_IDENTITY ready"
+
+step "2. Generate a blog post — outline auto-approved, draft held for review"
 GENERATE_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/blog-post" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
-  -d "$(json_body prompt_text=@PROMPT_TEXT persona_info=@PERSONA_INFO \
-        additional_context=null \
+  -d "$(json_body prompt_text=@PROMPT_TEXT persona_identity=@PERSONA_IDENTITY \
+        tone=@TONE target_audience=@TARGET_AUDIENCE additional_context=null \
         options='{"outline": {"is_enabled": true, "is_auto_approved": true}, "draft": {"is_auto_approved": false}, "humanize": {"is_enabled": true, "is_auto_approved": true}}')")"
 echo "$GENERATE_RESPONSE" | print_json
 RUN_IDENTITY="$(echo "$GENERATE_RESPONSE" | read_json_field run_identity)"
 [ "$(echo "$GENERATE_RESPONSE" | read_json_field status)" = "AWAITING_REVIEW" ] || fail "expected AWAITING_REVIEW"
 pass "run $RUN_IDENTITY paused after $(echo "$GENERATE_RESPONSE" | read_json_field last_step)"
 
-step "2. Read the run back"
+step "3. Read the run back"
 curl -sf -b "sid=$SESSION_ID" "$API_URL/generate-text/runs/$RUN_IDENTITY" | print_json
 pass "the run reports its own cost and token counts"
 
-step "3. Reject the draft with direction — expect a rewrite, paused again"
+step "4. Reject the draft with direction — expect a rewrite, paused again"
 REJECT_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/runs/$RUN_IDENTITY/resume" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
   -d "$(json_body is_approved=false feedback_text=@FEEDBACK_TEXT)")"
@@ -110,7 +122,7 @@ echo "$REJECT_RESPONSE" | print_json
   || fail "the rewrite returned the same draft"
 pass "the draft changed after feedback"
 
-step "4. Approve — the run finishes through humanize"
+step "5. Approve — the run finishes through humanize"
 APPROVE_RESPONSE="$(curl -sf -X POST "$API_URL/generate-text/runs/$RUN_IDENTITY/resume" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
   -d "$(json_body is_approved=true feedback_text=null)")"
@@ -126,7 +138,7 @@ check_status() {
   pass "$description → $expected"
 }
 
-step "5. The error paths"
+step "6. The error paths"
 check_status 409 "resuming a finished run" \
   -X POST "$API_URL/generate-text/runs/$RUN_IDENTITY/resume" \
   -H 'Content-Type: application/json' -b "sid=$SESSION_ID" \
@@ -138,9 +150,10 @@ check_status 422 "a malformed run identity" \
 check_status 401 "generating while signed out" \
   -X POST "$API_URL/generate-text/blog-post" \
   -H 'Content-Type: application/json' \
-  -d '{"prompt_text": "anything", "persona_info": null, "additional_context": null, "options": {"draft": {"is_auto_approved": true}}}'
+  -d "$(json_body prompt_text=@PROMPT_TEXT persona_identity=@PERSONA_IDENTITY \
+        additional_context=null options='{"draft": {"is_auto_approved": true}}')"
 
-step "6. What the run recorded"
+step "7. What the run recorded"
 docker compose exec -T postgres psql -U pb -d pb_local -c \
   "SELECT status, error_code, graph_version, llm_call_count, input_tokens, output_tokens, cost_usd
    FROM pb_generate_text_run WHERE identity = '$RUN_IDENTITY';"

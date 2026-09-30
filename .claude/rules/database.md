@@ -62,8 +62,15 @@ class never redeclares them.
 `pb_user` is the one exception: its `created_by_id` and `updated_by_id` are nullable,
 since a person signing up has no creator. `UserOrm` redeclares both.
 
-Audit foreign keys use the default `ON DELETE NO ACTION`. Rows are soft-deleted, so a
-real delete is rare and should fail loudly rather than lose history.
+A foreign key has no `ON DELETE` clause, in the SQL or as `ondelete=` in the Orm.
+Postgres then blocks deleting a referenced row. Rows are soft-deleted, so a real delete
+is rare and should fail loudly rather than quietly remove or unlink data. Add a clause
+only for one of these reasons:
+
+- `CASCADE` on a child that only exists as part of its parent:
+  `pb_generate_text_step.run_id`, `pb_user_auth_provider.user_id`.
+- `SET NULL` on a log that must outlive what it references: `pb_llm_call.run_id` and
+  `step_id`.
 
 ### Table shape
 
@@ -90,7 +97,7 @@ CREATE INDEX pb_persona_created_by_id_created_at_idx
 
 - Table-specific columns go between `identity` and `created_at`.
 - A constraint on a single column is written inline and unnamed: `PRIMARY KEY`,
-  `UNIQUE`, `REFERENCES pb_user (id) ON DELETE CASCADE`, `CHECK (...)`. Postgres names
+  `UNIQUE`, `REFERENCES pb_user (id)`, `CHECK (...)`. Postgres names
   it `<table>_pkey`, `<table>_<column>_key`, or `<table>_<column>_fkey`, which is the
   naming convention, and the drift check confirms the names match.
 - A constraint spanning several columns goes at table level, named:

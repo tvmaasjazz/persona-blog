@@ -1,10 +1,11 @@
 from datetime import datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.database.orm import PersonaOrm
 from libs.personas.inputs import PersonaInput
+from libs.personas.results import FindUserPersonaResult
 
 
 def build_persona_input(
@@ -73,6 +74,29 @@ async def insert_persona_row(
     db_session.add(persona_record)
     await db_session.flush()
     return persona_record
+
+
+def build_find_user_persona_result(
+    *,
+    id: int = 1,
+    identity: UUID | None = None,
+    name: str = "Marta Quill",
+    bio: str = "Writes about slow mornings and stronger coffee.",
+    background: str | None = None,
+    expertise: str | None = None,
+    writing_style: str | None = None,
+    sample_writing: str | None = None,
+) -> FindUserPersonaResult:
+    return FindUserPersonaResult(
+        id=id,
+        identity=identity or uuid4(),
+        name=name,
+        bio=bio,
+        background=background,
+        expertise=expertise,
+        writing_style=writing_style,
+        sample_writing=sample_writing,
+    )
 
 
 def _build_unique_name() -> str:

@@ -24,6 +24,7 @@ from tests.factories.generate_text import (
     build_generate_text_state,
 )
 from tests.factories.llm import build_llm_completion_result
+from tests.factories.personas import insert_persona_row
 from tests.factories.users import insert_user_row
 from tests.stubs.llm import LlmServiceStub
 
@@ -57,8 +58,10 @@ def _build_graph_builder(
 async def _seed_state(
     db_session: AsyncSession, run_service: GenerateTextRunService, auth_user: AuthUser
 ) -> GenerateTextState:
+    persona_record = await insert_persona_row(db_session, created_by_id=auth_user.id)
+    await db_session.commit()
     create_generate_text_run_input = build_create_generate_text_run_input(
-        prompt_text="Write about sourdough starters."
+        prompt_text="Write about sourdough starters.", persona_id=persona_record.id
     )
     create_run_result = await run_service.create_run(create_generate_text_run_input, auth_user)
     return build_generate_text_state(
