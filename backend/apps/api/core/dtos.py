@@ -1,8 +1,10 @@
+from uuid import UUID
+
 from pydantic import BaseModel
 
 
 class IdentityResponseDto(BaseModel):
-    identity: str
+    identity: UUID
 
 
 class EmptyResponseDto(BaseModel):
