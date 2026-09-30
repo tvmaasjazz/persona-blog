@@ -2,20 +2,15 @@ from unittest.mock import ANY
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-from redis.asyncio import Redis
+from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.api.core.config import AppSettings
-from libs.auth.services import AuthSessionService
 from libs.database.orm import UserOrm
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.generate_text.types import GenerateTextRunStatusType
 from tests.factories.generate_text import insert_generate_text_run_row
 from tests.factories.llm import build_llm_completion_result
-from tests.factories.users import insert_user_row
 from tests.stubs.llm import LlmServiceStub
 
 
@@ -31,22 +26,6 @@ async def _create_review_pending_run(
         },
     )
     return generate_blog_post_response.json()["run_identity"]
-
-
-async def _open_other_user_client(
-    fastapi_app: FastAPI, db_session: AsyncSession, redis_client: Redis, app_settings: AppSettings
-) -> AsyncClient:
-    other_user_record = await insert_user_row(db_session)
-    auth_session_service = AuthSessionService(
-        redis_client=redis_client, auth_settings=app_settings.auth
-    )
-    other_session_id = await auth_session_service.create_session(
-        user_id=other_user_record.id, user_identity=other_user_record.identity
-    )
-    other_api_transport = ASGITransport(app=fastapi_app)
-    return AsyncClient(
-        transport=other_api_transport, base_url="https://test", cookies={"sid": other_session_id}
-    )
 
 
 async def test_generate_blog_post_default_options_returns_completed(
@@ -222,19 +201,13 @@ async def test_find_generate_text_run_another_users_run_returns_404(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    fastapi_app: FastAPI,
-    db_session: AsyncSession,
-    redis_client: Redis,
-    app_settings: AppSettings,
+    other_user_client: AsyncClient,
 ) -> None:
     run_identity = await _create_review_pending_run(api_client, llm_service_stub)
 
-    async with await _open_other_user_client(
-        fastapi_app, db_session, redis_client, app_settings
-    ) as other_api_client:
-        find_generate_text_run_response = await other_api_client.get(
-            f"/generate-text/runs/{run_identity}"
-        )
+    find_generate_text_run_response = await other_user_client.get(
+        f"/generate-text/runs/{run_identity}"
+    )
 
     assert find_generate_text_run_response.status_code == 404
 
@@ -337,20 +310,14 @@ async def test_resume_generate_text_another_users_run_returns_404(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    fastapi_app: FastAPI,
-    db_session: AsyncSession,
-    redis_client: Redis,
-    app_settings: AppSettings,
+    other_user_client: AsyncClient,
 ) -> None:
     run_identity = await _create_review_pending_run(api_client, llm_service_stub)
 
-    async with await _open_other_user_client(
-        fastapi_app, db_session, redis_client, app_settings
-    ) as other_api_client:
-        resume_generate_text_response = await other_api_client.post(
-            f"/generate-text/runs/{run_identity}/resume",
-            json={"is_approved": True, "feedback_text": None},
-        )
+    resume_generate_text_response = await other_user_client.post(
+        f"/generate-text/runs/{run_identity}/resume",
+        json={"is_approved": True, "feedback_text": None},
+    )
 
     assert resume_generate_text_response.status_code == 404
 
