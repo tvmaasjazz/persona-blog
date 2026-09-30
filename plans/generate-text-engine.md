@@ -1,6 +1,6 @@
 # Generate-text engine
 
-The step after `plan.md`'s step 13, going off that plan's script. Step 13 proved one
+The step after step 13 of the original build plan (in `plan.md`'s git history before the persona outline), going off that plan's script. Step 13 proved one
 hardcoded graph. This makes the graph a function of what the caller asked for, records
 every run and step in Postgres, and sets the shape a second text type will follow.
 

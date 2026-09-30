@@ -1,6 +1,6 @@
 # User tables — schema proposal
 
-For step 7 of `plan.md`. This is the design to review before any SQL is written.
+For step 7 of the original build plan (in `plan.md`'s git history before the persona outline). This is the design to review before any SQL is written.
 
 ## Standards every table follows
 
