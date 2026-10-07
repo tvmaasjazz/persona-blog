@@ -248,7 +248,8 @@ How to write a stub:
   - `<method>_inputs`: every input received, in order
   - `<method>_result`: the value to return
   - `<method>_results`: values popped in order, for when calls must differ (such as a
-    rewrite loop)
+    rewrite loop). When it's set it wins over `<method>_result`, and running out
+    raises, so a test that makes more calls than it scripted fails
   - `<method>_error`: an exception to raise instead
 
 ```python
