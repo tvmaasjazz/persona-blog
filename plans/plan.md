@@ -141,7 +141,7 @@ content; the writing lives on the type's table.
 | `persona_id`   | BIGINT, NOT NULL, FK `pb_persona`  | Must be the caller's own persona       |
 | `content_type` | enum `pb_content_type` (`BLOG_POST`) | Its own enum, not `pb_text_type`     |
 | `is_public`    | bool, default false                | Only allowed when the persona is public |
-| `published_at` | timestamp, nullable                | Null means draft                       |
+| `published_at` | timestamp, nullable                | Null is a draft; past is published; future is scheduled |
 
 **`pb_blog_post`**:
 
@@ -150,7 +150,7 @@ content; the writing lives on the type's table.
 | `content_item_id` | BIGINT, NOT NULL, UNIQUE, FK `pb_content_item` ON DELETE CASCADE | Exists only as part of its content item |
 | `title`           | text, required                                             |          |
 | `subtitle`        | text, nullable                                             |          |
-| `body`            | text, required                                             | Markdown |
+| `body`            | text, required                                             | Markdown, without the title and subtitle |
 
 **`pb_generate_text_run`** gains `content_item_id` (nullable FK, indexed). The run
 points at the content item because one post will be shaped by several runs over time.
@@ -161,10 +161,26 @@ create, access, visibility, publishing, soft delete. `BlogPostService`
 `__init__`. The `/blog-posts` router calls only `BlogPostService`. A cross-type feed
 later gets its own `content_items` router.
 
-**Saving from a run.** `POST /blog-posts` takes an optional
-`generate_text_run_identity`; the run must be the caller's, finished, and written as the
-same persona, and gets linked. The frontend prefills title and body from the run.
+**Routes.** `GET /blog-posts` lists the caller's own posts, newest first, filtered by an
+optional `persona_identity` through `BlogPostFetchAllQueryDto` (no pagination yet).
+`GET /blog-posts/{identity}`, `POST`, `PUT` (full replacement), `DELETE` (soft deletes
+both rows). A post's persona never changes after create.
+
+**Publishing.** `published_at` is in the create/update DTO. Publish now sends the
+current time, schedule sends a future one, unpublish sends null. Reads compare it to
+now, so a scheduled post appears when its time passes with no job.
+
+**Saving from a run.** Only `POST /blog-posts` takes `generate_text_run_identity`; the
+run must be the caller's, finished, written as the same persona, and not already linked
+(409). The frontend prefills title, subtitle and body from the run's output, split the
+same way `MarkdownUtils.split_post()` does: either on the frontend or as fields on the
+run response, decided in step 4.
+
+**Body checks.** A validation guard checks the body on create and update: no H1, only
+`##`/`###` without skipped levels, no raw HTML, no images (422). The frontend's editor
+writes Markdown and offers only what the format allows, so users never see Markdown.
 
 **Visibility.** A validation guard rejects `is_public` on a private persona's content.
-Reads compute it: others see a post only when it's public, published, and its persona
-is public, so a persona turning private hides its posts without a cascading write.
+Reads compute it: others see a post only when it's public, published
+(`published_at <= now`), and its persona is public, so a persona turning private hides
+its posts without a cascading write. A public post on a private persona is a 422.
