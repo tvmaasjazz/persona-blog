@@ -29,7 +29,9 @@ backend/
 │       └── main.py            # app = create_app()
 ├── libs/
 │   ├── core/
-│   │   └── exceptions.py      # standard exceptions: NotFoundException, ...
+│   │   ├── exceptions.py      # standard exceptions: NotFoundException, ...
+│   │   ├── results.py         # Results returned by the domain-free Utils below
+│   │   └── utils/             # domain-free Utils: DateTimeUtils, MarkdownUtils
 │   ├── database/              # tables, Orm classes: see database.md
 │   │   ├── base.py            # BaseOrm: shared columns every table inherits
 │   │   ├── column_types.py    # UtcDateTime
@@ -160,7 +162,8 @@ Functions that build or map values — no db session, no client, no state — li
 `Utils` class in `libs/<domain>/utils/`, one module per class, with `__init__.py`
 re-exporting each one (`python-naming.md` › Class suffixes). A service keeps
 orchestration; the shaping of what it passes and returns moves out. Utilities with no
-domain at all, like `DateTimeUtils`, live in `libs/core/utils/`.
+domain at all, like `DateTimeUtils`, live in `libs/core/utils/`, and a `Result` one of
+them returns lives in `libs/core/results.py`.
 
 ### LangGraph workflows
 
