@@ -7,6 +7,8 @@ from libs.generate_text.results import ValidateOutputResult
 BLOG_POST_BODY_FORMAT_RULES = (
     "Write the post body in Markdown. Start with a single `# Title` line and nothing "
     "before it: no preamble, no restated instructions. Use exactly one H1, the title. "
+    "An optional one-line subtitle may follow the title as a single italic line, e.g. "
+    "`*A one-line subtitle.*`, and nothing else goes between the title and the body. "
     "Below it, use `##` and `###` headings only, and never skip a level (an H1 is "
     "followed by `##`, never straight to `###`). Paragraphs, bold and italic, lists, "
     "blockquotes, links, and code are all fine. Never use raw HTML, and never include "
@@ -19,6 +21,7 @@ NO_LEADING_TITLE_MESSAGE = (
     "The document must start with a single '# Title' heading, with nothing before it."
 )
 MULTIPLE_H1_MESSAGE = "The document must have exactly one H1 heading."
+EMPTY_BODY_MESSAGE = "The post must have a body after the title and subtitle."
 RAW_HTML_MESSAGE = "The document must not contain raw HTML."
 IMAGE_MESSAGE = "The document must not contain images."
 HEADING_TOO_DEEP_MESSAGE = "Headings below the title must be '##' or '###', never deeper."
@@ -35,8 +38,11 @@ class BlogPostBodyOutputFormat(BaseGenerateTextOutputFormat):
     def validate_output(self, output_text: str) -> ValidateOutputResult:
         error_messages: list[str] = []
 
-        if MarkdownUtils.find_title(output_text) is None:
+        split_markdown_post_result = MarkdownUtils.split_post(output_text)
+        if split_markdown_post_result.title is None:
             error_messages.append(NO_LEADING_TITLE_MESSAGE)
+        elif not split_markdown_post_result.body:
+            error_messages.append(EMPTY_BODY_MESSAGE)
 
         heading_levels = MarkdownUtils.find_heading_levels(output_text)
         if heading_levels.count(1) != 1:
