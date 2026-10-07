@@ -123,7 +123,8 @@ async def validate_new_persona_name(
 
 The validation service holds only the methods a guard calls. Business services never
 validate payloads this way, and access control, such as whether the caller may change
-a row, stays in the business service that loads the row.
+a row, stays in the business service that loads the row. A validation method is `async`
+only if it awaits something; a guard may call a sync one directly.
 
 ### Rows a long-running route needs
 
@@ -282,7 +283,7 @@ A route takes a `Dto` only when a body or a query model is sent.
 
 | Route                                  | Inbound                                                    |
 | -------------------------------------- | ---------------------------------------------------------- |
-| `POST` create / `PUT` update           | `<Entity>Dto` body, **one class shared by both**: `BlogPostDto` |
+| `POST` create / `PUT` update           | `<Entity>Dto` body, **one class shared by both**: `PersonaDto`. Create gets its own `Create<Entity>Dto` only when it carries fields an update must never change (see Input models) |
 | `GET /{identity}` / `DELETE /{identity}` | None — the entity's `identity` is a plain `UUID` path parameter |
 | `GET` list                             | `<Entity>FetchAllQueryDto` query model: `BlogPostFetchAllQueryDto` |
 | Non-CRUD action (`POST /generate-text`) | `<Verb><Entity>Dto` body: `GenerateTextDto`                |
@@ -341,8 +342,14 @@ A service method taking a structured payload takes a Pydantic `Input` model from
 `libs/<domain>/inputs.py`. Scalar identifiers stay plain parameters —
 `find_user(user_identity: UUID)` gets no wrapper. Create and update share the one
 `Input` their shared `Dto` maps to:
-`create_blog_post(blog_post_input: BlogPostInput, auth_user: AuthUser)` and
-`update_blog_post(blog_post_identity: UUID, blog_post_input: BlogPostInput, auth_user: AuthUser)`.
+`create_persona(persona_input: PersonaInput, auth_user: AuthUser)` and
+`update_persona(persona_identity: UUID, persona_input: PersonaInput, auth_user: AuthUser)`.
+
+When create carries fields an update must never change, such as the owning persona or a
+source run, create gets its own `Create<Entity>Dto` and `Create<Entity>Input`, and
+update keeps `<Entity>Dto` with an `Update<Entity>Input`:
+`create_blog_post(create_blog_post_input: CreateBlogPostInput, auth_user: AuthUser)` and
+`update_blog_post(blog_post_identity: UUID, update_blog_post_input: UpdateBlogPostInput, auth_user: AuthUser)`.
 
 ### The acting user
 
@@ -373,8 +380,8 @@ class BlogPostDto(BaseModel):
     title: str
     body: str
 
-    def to_input(self) -> BlogPostInput:
-        return BlogPostInput(title=self.title, body=self.body)
+    def to_input(self) -> UpdateBlogPostInput:
+        return UpdateBlogPostInput(title=self.title, body=self.body)
 
 
 class BlogPostResponseDto(BaseModel):
@@ -452,7 +459,7 @@ async def find_blog_post(
 
 @blog_post_router.post("", status_code=201)
 async def create_blog_post(
-    dto: BlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
+    dto: CreateBlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> IdentityResponseDto:
     create_blog_post_result = await blog_post_service.create_blog_post(
         dto.to_input(), auth_user
