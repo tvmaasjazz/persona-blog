@@ -121,17 +121,3 @@ def test_has_image_without_image_returns_false() -> None:
     markdown_text = "# Title\n\nJust plain text."
 
     assert MarkdownUtils.has_image(markdown_text) is False
-
-
-def test_find_first_block_type_returns_first_token_type() -> None:
-    markdown_text = "# Title\n\nBody text."
-
-    first_block_type = MarkdownUtils.find_first_block_type(markdown_text)
-
-    assert first_block_type == "heading_open"
-
-
-def test_find_first_block_type_empty_document_returns_none() -> None:
-    first_block_type = MarkdownUtils.find_first_block_type("")
-
-    assert first_block_type is None

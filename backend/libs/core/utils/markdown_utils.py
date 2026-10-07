@@ -1,6 +1,24 @@
+"""Reads Markdown through markdown-it, which parses a document into a flat list of tokens
+rather than a tree.
+
+Each top-level block becomes a run of tokens: a heading is `heading_open` (its `tag` is
+"h1".."h6"), then an `inline` token holding the heading's text, then `heading_close`. A
+paragraph is `paragraph_open`, `inline`, `paragraph_close`. Anything inside a line of
+text, such as an image or a `<span>`, is not in that list at all: it sits among the
+`inline` token's `children`. A fenced code block is a single `fence` token whose `info` is
+the language after the opening backticks and whose `content` is the code inside.
+"""
+
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
+FENCE_TOKEN_TYPE = "fence"
+HEADING_OPEN_TOKEN_TYPE = "heading_open"
+INLINE_TOKEN_TYPE = "inline"
+HTML_TOKEN_TYPES = ("html_block", "html_inline")
+IMAGE_TOKEN_TYPE = "image"
+
+TITLE_HEADING_LEVEL = 1
 ALLOWED_FENCE_INFO_STRINGS = ("", "markdown", "md")
 
 
@@ -12,7 +30,7 @@ class MarkdownUtils:
         is left alone."""
         trimmed_text = markdown_text.strip()
         tokens = MarkdownUtils._parse(trimmed_text)
-        if len(tokens) != 1 or tokens[0].type != "fence":
+        if len(tokens) != 1 or tokens[0].type != FENCE_TOKEN_TYPE:
             return markdown_text
 
         fence_token = tokens[0]
@@ -24,61 +42,56 @@ class MarkdownUtils:
 
     @staticmethod
     def find_title(markdown_text: str) -> str | None:
+        """The text of the H1 the document opens with. None when it opens with anything
+        else, or the H1 is empty."""
         tokens = MarkdownUtils._parse(markdown_text)
-        first_heading_level = MarkdownUtils._find_first_block_heading_level(tokens)
-        if first_heading_level != 1:
+        if not tokens or tokens[0].type != HEADING_OPEN_TOKEN_TYPE:
             return None
-        title_text = MarkdownUtils._find_heading_inline_text(tokens, index=0)
-        if title_text is None or not title_text.strip():
+        if MarkdownUtils._find_heading_level(tokens[0]) != TITLE_HEADING_LEVEL:
             return None
-        return title_text.strip()
+
+        # The heading's text is in the inline token right after heading_open.
+        title_token = tokens[1]
+        title_text = title_token.content.strip()
+        return title_text or None
 
     @staticmethod
     def find_heading_levels(markdown_text: str) -> list[int]:
         tokens = MarkdownUtils._parse(markdown_text)
-        return [int(token.tag[1:]) for token in tokens if token.type == "heading_open"]
+        return [
+            MarkdownUtils._find_heading_level(token)
+            for token in tokens
+            if token.type == HEADING_OPEN_TOKEN_TYPE
+        ]
 
     @staticmethod
     def has_raw_html(markdown_text: str) -> bool:
-        """Inline HTML sits among an inline token's children, not at the top level."""
         token_types = MarkdownUtils._find_all_token_types(markdown_text)
-        return "html_block" in token_types or "html_inline" in token_types
+        return any(html_token_type in token_types for html_token_type in HTML_TOKEN_TYPES)
 
     @staticmethod
     def has_image(markdown_text: str) -> bool:
         token_types = MarkdownUtils._find_all_token_types(markdown_text)
-        return "image" in token_types
+        return IMAGE_TOKEN_TYPE in token_types
 
     @staticmethod
-    def find_first_block_type(markdown_text: str) -> str | None:
-        tokens = MarkdownUtils._parse(markdown_text)
-        if not tokens:
-            return None
-        return tokens[0].type
-
-    @staticmethod
-    def _find_first_block_heading_level(tokens: list[Token]) -> int | None:
-        if not tokens or tokens[0].type != "heading_open":
-            return None
-        return int(tokens[0].tag[1:])
-
-    @staticmethod
-    def _find_heading_inline_text(tokens: list[Token], index: int) -> str | None:
-        inline_token = tokens[index + 1]
-        if inline_token.type != "inline":
-            return None
-        return inline_token.content
+    def _find_heading_level(heading_open_token: Token) -> int:
+        # The tag is "h1".."h6"; the digit is the level.
+        return int(heading_open_token.tag[1:])
 
     @staticmethod
     def _find_all_token_types(markdown_text: str) -> set[str]:
+        """Includes the children of inline tokens, where images and inline HTML live."""
         tokens = MarkdownUtils._parse(markdown_text)
         token_types = {token.type for token in tokens}
         for token in tokens:
-            child_tokens = token.children or []
-            token_types.update(child_token.type for child_token in child_tokens)
+            if token.type == INLINE_TOKEN_TYPE and token.children:
+                token_types.update(child_token.type for child_token in token.children)
         return token_types
 
     @staticmethod
     def _parse(markdown_text: str) -> list[Token]:
+        # html on, so raw HTML parses into html_block / html_inline tokens to be caught,
+        # rather than being treated as text.
         markdown_parser = MarkdownIt("commonmark", {"html": True})
         return markdown_parser.parse(markdown_text)

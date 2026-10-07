@@ -35,8 +35,7 @@ class BlogPostBodyOutputFormat(BaseGenerateTextOutputFormat):
     def validate_output(self, output_text: str) -> ValidateOutputResult:
         error_messages: list[str] = []
 
-        first_block_type = MarkdownUtils.find_first_block_type(output_text)
-        if first_block_type != "heading_open" or MarkdownUtils.find_title(output_text) is None:
+        if MarkdownUtils.find_title(output_text) is None:
             error_messages.append(NO_LEADING_TITLE_MESSAGE)
 
         heading_levels = MarkdownUtils.find_heading_levels(output_text)
