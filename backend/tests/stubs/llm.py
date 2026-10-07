@@ -44,6 +44,7 @@ class LlmServiceStub(LlmService):
     def __init__(self) -> None:
         self.complete_inputs: list[LlmCompletionInput] = []
         self.complete_result = build_llm_completion_result()
+        self.complete_results: list[LlmCompletionResult] | None = None
         self.complete_error: Exception | None = None
         self.complete_structured_inputs: list[LlmCompletionInput] = []
         self.complete_structured_result: LlmStructuredCompletionResult[Any] | None = None
@@ -55,6 +56,8 @@ class LlmServiceStub(LlmService):
         self.complete_inputs.append(llm_completion_input)
         if self.complete_error is not None:
             raise self.complete_error
+        if self.complete_results is not None:
+            return self.complete_results.pop(0)
         return self.complete_result
 
     async def complete_structured[T: BaseModel](

@@ -1,3 +1,6 @@
+from libs.generate_text.graphs.blog_post.blog_post_body_output_format import (
+    BLOG_POST_BODY_FORMAT_RULES,
+)
 from libs.generate_text.prompts import BaseGenerateTextPrompt
 from libs.generate_text.results import BuildPromptResult
 from libs.generate_text.states import GenerateTextState
@@ -5,7 +8,7 @@ from libs.generate_text.states import GenerateTextState
 HUMANIZE_SYSTEM_TEMPLATE = (
     "Rewrite the given blog post draft so it reads like a person wrote it: vary "
     "sentence rhythm, cut filler and hedging, and remove anything that reads as "
-    "AI-generated, while keeping the meaning and structure intact."
+    "AI-generated, while keeping the meaning and structure intact.\n\n{format_rules}"
     "{persona_prompt_section}{tone_and_audience_prompt_section}"
 )
 
@@ -50,6 +53,7 @@ class BlogPostHumanizePrompt(BaseGenerateTextPrompt):
             state.tone, state.target_audience
         )
         return HUMANIZE_SYSTEM_TEMPLATE.format(
+            format_rules=BLOG_POST_BODY_FORMAT_RULES,
             persona_prompt_section=persona_prompt_section,
             tone_and_audience_prompt_section=tone_and_audience_prompt_section,
         )
