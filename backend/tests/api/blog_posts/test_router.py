@@ -3,12 +3,10 @@ from unittest.mock import ANY
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.api.core.dependencies import get_llm_service
 from libs.database.orm import BlogPostOrm, ContentItemOrm, UserOrm
 from libs.generate_text.types import GenerateTextRunStatusType
 from tests.factories.blog_posts import VALID_BLOG_POST_BODY, insert_blog_post_row
@@ -20,11 +18,9 @@ from tests.stubs.llm import LlmServiceStub
 
 
 async def _create_other_users_completed_run(
-    fastapi_app: FastAPI, other_user_client: AsyncClient, persona_identity: str
+    llm_service_stub: LlmServiceStub, other_user_client: AsyncClient, persona_identity: str
 ) -> str:
-    llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
-    fastapi_app.dependency_overrides[get_llm_service] = lambda: llm_service_stub
     generate_blog_post_response = await other_user_client.post(
         "/generate-text/blog-post",
         json={
@@ -325,7 +321,7 @@ async def test_create_blog_post_another_users_generate_text_run_returns_404(
     signed_in_user: UserOrm,
     other_user_client: AsyncClient,
     db_session: AsyncSession,
-    fastapi_app: FastAPI,
+    llm_service_stub: LlmServiceStub,
 ) -> None:
     persona_record = await insert_persona_row(db_session, created_by_id=signed_in_user.id)
     await db_session.commit()
@@ -334,7 +330,7 @@ async def test_create_blog_post_another_users_generate_text_run_returns_404(
     )
     other_persona_identity = other_create_persona_response.json()["identity"]
     other_run_identity = await _create_other_users_completed_run(
-        fastapi_app, other_user_client, other_persona_identity
+        llm_service_stub, other_user_client, other_persona_identity
     )
 
     create_blog_post_response = await api_client.post(

@@ -9,9 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from apps.api.app_factory import create_app
 from apps.api.core.config import AppSettings
+from apps.api.core.dependencies import get_llm_service
 from libs.auth.services import AuthSessionService
 from libs.database.orm import UserOrm
 from tests.factories.users import insert_user_row
+from tests.stubs.llm import LlmServiceStub
 
 
 @pytest.fixture
@@ -71,3 +73,10 @@ async def other_user_client(
         transport=other_api_transport, base_url="https://test", cookies={"sid": other_session_id}
     ) as other_api_client:
         yield other_api_client
+
+
+@pytest.fixture
+def llm_service_stub(fastapi_app: FastAPI) -> LlmServiceStub:
+    llm_service_stub = LlmServiceStub()
+    fastapi_app.dependency_overrides[get_llm_service] = lambda: llm_service_stub
+    return llm_service_stub

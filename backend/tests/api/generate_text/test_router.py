@@ -13,6 +13,8 @@ from tests.factories.generate_text import insert_generate_text_run_row
 from tests.factories.llm import build_llm_completion_result
 from tests.stubs.llm import LlmServiceStub
 
+pytestmark = pytest.mark.usefixtures("llm_service_stub")
+
 
 async def _create_persona(api_client: AsyncClient) -> str:
     create_persona_response = await api_client.post(
