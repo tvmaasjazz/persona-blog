@@ -120,6 +120,9 @@ backend/tests/
   - `test_create_user_returns_created_user`
   - `test_create_user_email_taken_raises_user_email_taken_exception`
   - `test_build_digest_unknown_region_type_returns_422`
+- When a full exception class name would push a test name past the line limit,
+  shorten `<outcome>` to the exception's distinguishing words:
+  `..._raises_persona_private_exception`, not the whole class name.
 - No test classes. Group tests by file and by the `<unit>` prefix.
 - A fixture is a noun, named exactly like the production object it stands for:
   `db_session`, `redis_client`, `app_settings`, `fastapi_app`, `api_client`. Never a
@@ -157,7 +160,9 @@ default.
   `unittest.mock`. It works inside a plain dict or JSON comparison; a Pydantic model
   rejects it at validation, so assert those fields individually instead.
 - Assert exceptions with `with pytest.raises(UserEmailTakenException):`. Add `match=`
-  only when the message is part of the contract, such as user-facing text.
+  only when the message is part of the contract, such as user-facing text. When the
+  behaviour under test is that one message lists several problems, check each problem
+  with `in`, never the exact full string.
 - Compare floats with `pytest.approx`.
 - Don't assert on log wording, exception messages, or FastAPI's validation `msg`.
 
@@ -195,6 +200,11 @@ calls.
   - the root `environment_variables` fixture
   - a domain conftest's override of a third-party boundary, so no test in that
     folder can reach the real API
+- A third-party override that several domains' route tests need, such as the LLM
+  stub, is an opt-in fixture in `tests/api/conftest.py`, never autouse there: an
+  app-level autouse fixture pulls in whichever `fastapi_app` a domain overrides. A
+  module opts in with `pytestmark = pytest.mark.usefixtures("llm_service_stub")`, or a
+  test requests it by name to configure it.
 - When a fixture is only needed for its side effect, request it with
   `@pytest.mark.usefixtures("signed_in_user")`, not as an unused argument.
 - Test data is not a fixture. Build any value a test asserts on inside that test,
@@ -420,7 +430,8 @@ def test_build_generate_prompt_puts_persona_name_in_system_prompt() -> None:
 
 Build the service directly with stubs and an explicit settings object. No app, no
 HTTP. If construction takes a client stack, move it into a fixture in the domain's
-`conftest.py`.
+`conftest.py`. A test of a sync method that never touches a collaborator may pass
+`None` for it, rather than a stub written only to satisfy `__init__`.
 
 | Situation                         | Pattern |
 | --------------------------------- | ------- |
