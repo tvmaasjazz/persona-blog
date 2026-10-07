@@ -101,10 +101,16 @@ Split a lib by what it is about, not by how big it gets.
 
 ### Validation guards
 
-When checking an incoming payload needs a database read or more involved logic than a
-DTO field constraint, the route gets a validation guard: a dependency in the domain's
-`dependencies.py`, named `validate_<what>` and attached with
-`dependencies=[Depends(...)]`. The guard calls a method on the lib's
+A check that needs only a field's own value, however involved, is a DTO
+`field_validator` that calls a pure `<Domain>ValidationUtils` in the lib and raises
+`ValueError` with the problems it returns. FastAPI turns that into a 422 that names
+the field. `BlogPostValidationUtils.find_body_problems(body)` checks a post's Markdown
+this way. The name says what it validates, never `Dto`: `libs/` doesn't know DTOs exist,
+and a service may run the same check.
+
+When checking an incoming payload needs a database read, the route gets a validation
+guard: a dependency in the domain's `dependencies.py`, named `validate_<what>` and
+attached with `dependencies=[Depends(...)]`. The guard calls a method on the lib's
 `<Domain>ValidationService`, named `validate_<condition>()`, which returns nothing and
 raises a lib exception when the payload is invalid.
 
@@ -125,8 +131,7 @@ async def validate_new_persona_name(
 
 The validation service holds only the methods a guard calls. Business services never
 validate payloads this way, and access control, such as whether the caller may change
-a row, stays in the business service that loads the row. A validation method is `async`
-only if it awaits something; a guard may call a sync one directly.
+a row, stays in the business service that loads the row.
 
 ### Rows a long-running route needs
 
@@ -557,6 +562,12 @@ A record becomes a `Result` through `model_validate(<entity>_record, from_attrib
 which copies only the fields the `Result` declares, including nested `Result`s. The
 flag goes on the call; a `Result` class never sets `model_config`, so it stays a plain
 shape.
+
+A `Result` that spans related rows is built the same way, from a record whose
+relationships were loaded up front: `contains_eager` when the query already joins them
+(such as for an access filter), `selectinload` otherwise, which also covers a list of
+related rows. A labelled multi-column `select()` read through `.mappings()` is only for
+flat projections and aggregates.
 
 `scalar_one_or_none()` then raise `NotFoundException` for a single row,
 `scalars().all()` for a list, which is empty rather than an error when nothing

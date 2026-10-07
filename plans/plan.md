@@ -176,11 +176,18 @@ run must be the caller's, finished, written as the same persona, and not already
 same way `MarkdownUtils.split_post()` does: either on the frontend or as fields on the
 run response, decided in step 4.
 
-**Body checks.** A validation guard checks the body on create and update: no H1, only
-`##`/`###` without skipped levels, no raw HTML, no images (422). The frontend's editor
+**Body checks.** The create and update DTOs check the body with
+`BlogPostValidationUtils`: no H1, only `##`/`###` without skipped levels, no raw HTML,
+no images (a 422 naming the `body` field). The frontend's editor
 writes Markdown and offers only what the format allows, so users never see Markdown.
 
 **Visibility.** A validation guard rejects `is_public` on a private persona's content.
 Reads compute it: others see a post only when it's public, published
 (`published_at <= now`), and its persona is public, so a persona turning private hides
 its posts without a cascading write. A public post on a private persona is a 422.
+
+**Deferred.** Revising a post with a generate-text run: the run starts already pointing
+at the content item, with the current post in its prompt, and on approval writes back
+through the update or an "apply run" action. `pb_generate_text_run.content_item_id`
+isn't unique, so a content item can already have many runs; only creating a post
+from a finished run is limited to one link.
