@@ -204,6 +204,22 @@ LangGraph signals an interrupt by raising it, so a generic handler turns every r
 pause into a recorded failure. Catch the control-flow exception first, record the pause
 for what it is, and let it through.
 
+**A step whose output must follow a format gets an `OutputFormat`**, passed to its
+node builder beside its `Prompt`. `Base<Domain>OutputFormat` has `normalize_output()`,
+which fixes in code only what can't change the meaning (a fence wrapping the whole
+output, surrounding whitespace), and `validate_output()`, which returns the problems
+left. The node normalizes, then validates; on problems it retries the LLM call with
+them added to the user prompt, up to a settings limit, then raises. Checking is code,
+never another LLM call. The format's rules text lives in the same module as the
+`OutputFormat`, and the step's system template uses it, so the instructions and the
+check can't drift apart. Parsing goes through a domain-free `Utils` class, such as
+`MarkdownUtils`. The domain's `Base<Domain>OutputFormat` lives in `output_formats.py`,
+beside `prompts.py`. A graph variant's `OutputFormat` gets its own module directly in the
+variant's folder, beside its builder and its `prompts/` package. When retries run out,
+the node raises a lib exception under `ServiceUnavailableException`: the model, not the
+caller, produced the unusable output, so the caller gets the same 503 as a provider
+failure.
+
 The service owns the graph's lifecycle, not its shape: it asks the registry for the
 builder, calls `build_graph`, runs it, reads the snapshot, and maps it to a `Result`.
 
@@ -727,7 +743,8 @@ class BlogPostDraftPrompt(BaseGenerateTextPrompt):
 - A prompt class holds no state. One needing configuration takes it through
   `__init__`, like a service.
 - Template text is an `UPPER_SNAKE` constant at the top of the module that uses it.
-  Never inline in the method.
+  Never inline in the method. Prompt text that belongs to no single step, such as a
+  node's retry instructions, follows the same rule in the module that uses it.
 - A service or node never builds a prompt string inline.
 
 ## Errors

@@ -91,6 +91,7 @@ backend/tests/
 | ------------------------------------ | -------------------------------------- | -------------- |
 | `libs/<d>/services.py`, or each module in `libs/<d>/services/` | `tests/libs/<d>/test_services.py`, or `test_<service>.py` | For each public method: happy path, each branch, each exception it raises, each collaborator failure it handles. With a database, also persisted state, not found, constraint violations, related rows loaded (§2, §3) |
 | `prompts.py`, or each module in a `prompts/` package, in a lib or a graph variant | The mirrored `test_prompts.py`, or `prompts/test_<prompt>.py` | Each builder: the inputs land in the prompt they belong in (§1) |
+| A graph variant's `<variant>_<what>_output_format.py` | The mirrored `test_<module>.py` | `normalize_output`: each fix it makes and what it leaves alone. `validate_output`: each problem on its own, and a valid document with none (§1) |
 | `libs/<d>/utils/*.py`, `libs/core/utils/*.py` | `tests/libs/<d>/test_<utils>.py` | Every branch of every static method (§1, §2). A `Utils` class whose only output is a wall-clock measurement, like `DateTimeUtils`, gets no file: its effect is asserted through the service |
 | `libs/<d>/inputs.py`, `results.py`   | `tests/libs/<d>/test_inputs.py`, `test_results.py` | Only models with a validator or declared constraint: accepted and rejected values (§1) |
 | `libs/<d>/states.py`                 | `tests/libs/<d>/test_states.py`        | Only a method that does more than group stored fields; otherwise the graph and service tests cover it |

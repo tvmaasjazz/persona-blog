@@ -49,7 +49,8 @@ for the files the domain needs from this list:
   - `exceptions.py` — only if the domain needs exceptions callers must tell apart
   - `states.py`, a `graphs/` package and a `<Domain>NodeService` in `services/` — only
     if the domain's work is a graph, laid out as `fastapi-structure.md` › LangGraph
-    workflows describes. A second graph for an existing domain is a folder under that
+    workflows describes, including `output_formats.py` when a step's output must follow
+    a format. A second graph for an existing domain is a folder under that
     domain's `graphs/`, and needs no new domain at all
 - `apps/api/domains/$1/`
   - `dtos.py`, `dependencies.py`, and `router.py`. Validation guard functions
