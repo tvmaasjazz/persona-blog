@@ -197,6 +197,9 @@ class GenerateTextStepOrm(BaseOrm):
   strings, with one exception: `ForeignKey("pb_user.id")` on `BaseOrm`'s audit columns and
   `UserOrm`'s own overrides of them, because `UserOrm` extends `BaseOrm` and can't be
   imported there.
+- Add a relationship only in the direction a query uses. A one-way relationship takes
+  no `back_populates` and no quoted class name: `BlogPostOrm.content_item:
+  Mapped[ContentItemOrm] = relationship()`.
 - A quoted class name in `relationship()` or `Mapped[...]` is allowed on **one** side
   of a mutual relationship only. Put the forward reference on the parent
   (`GenerateTextRunOrm.steps`) and the concrete import on the child.

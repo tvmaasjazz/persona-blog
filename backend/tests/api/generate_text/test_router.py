@@ -13,6 +13,8 @@ from tests.factories.generate_text import insert_generate_text_run_row
 from tests.factories.llm import build_llm_completion_result
 from tests.stubs.llm import LlmServiceStub
 
+pytestmark = pytest.mark.usefixtures("llm_service_stub")
+
 
 async def _create_persona(api_client: AsyncClient) -> str:
     create_persona_response = await api_client.post(
@@ -61,7 +63,7 @@ async def test_generate_blog_post_default_options_returns_completed(
         "status": "COMPLETED",
         "last_step": "GENERATE_DRAFT",
         "graph_name": "blog_post",
-        "graph_version": "2026-10-07.1",
+        "graph_version": "2026-10-07.2",
         "content": "# Finished\n\nA finished blog post.",
         "character_count": 33,
         "llm_call_count": 0,
@@ -131,7 +133,7 @@ async def test_generate_blog_post_step_not_auto_approved_returns_awaiting_review
         "status": "AWAITING_REVIEW",
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
-        "graph_version": "2026-10-07.1",
+        "graph_version": "2026-10-07.2",
         "content": "# Draft\n\nA draft.",
         "character_count": 17,
         "llm_call_count": 0,
@@ -298,7 +300,7 @@ async def test_find_generate_text_run_returns_run_response(
         "status": "AWAITING_REVIEW",
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
-        "graph_version": "2026-10-07.1",
+        "graph_version": "2026-10-07.2",
         "content": "# Draft\n\nA draft.",
         "character_count": 17,
         "llm_call_count": 0,
@@ -361,7 +363,7 @@ async def test_resume_generate_text_approval_returns_completed(
         "status": "COMPLETED",
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
-        "graph_version": "2026-10-07.1",
+        "graph_version": "2026-10-07.2",
         "content": "# Draft\n\nA draft.",
         "character_count": 17,
         "llm_call_count": 0,
@@ -394,7 +396,7 @@ async def test_resume_generate_text_rejection_rewrites_and_returns_awaiting_revi
         "status": "AWAITING_REVIEW",
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
-        "graph_version": "2026-10-07.1",
+        "graph_version": "2026-10-07.2",
         "content": "# Draft\n\nA revised draft.",
         "character_count": 25,
         "llm_call_count": 0,

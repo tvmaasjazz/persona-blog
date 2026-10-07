@@ -1,0 +1,13 @@
+from libs.core.exceptions import ConflictException, UnprocessableException
+
+
+class ContentItemPersonaPrivateException(UnprocessableException): ...
+
+
+class ContentItemGenerateTextRunNotCompletedException(ConflictException): ...
+
+
+class ContentItemGenerateTextRunPersonaMismatchException(UnprocessableException): ...
+
+
+class ContentItemGenerateTextRunAlreadySavedException(ConflictException): ...

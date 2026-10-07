@@ -29,7 +29,9 @@ backend/
 │       └── main.py            # app = create_app()
 ├── libs/
 │   ├── core/
-│   │   └── exceptions.py      # standard exceptions: NotFoundException, ...
+│   │   ├── exceptions.py      # standard exceptions: NotFoundException, ...
+│   │   ├── results.py         # Results returned by the domain-free Utils below
+│   │   └── utils/             # domain-free Utils: DateTimeUtils, MarkdownUtils
 │   ├── database/              # tables, Orm classes: see database.md
 │   │   ├── base.py            # BaseOrm: shared columns every table inherits
 │   │   ├── column_types.py    # UtcDateTime
@@ -99,10 +101,16 @@ Split a lib by what it is about, not by how big it gets.
 
 ### Validation guards
 
-When checking an incoming payload needs a database read or more involved logic than a
-DTO field constraint, the route gets a validation guard: a dependency in the domain's
-`dependencies.py`, named `validate_<what>` and attached with
-`dependencies=[Depends(...)]`. The guard calls a method on the lib's
+A check that needs only a field's own value, however involved, is a DTO
+`field_validator` that calls a pure `<Domain>ValidationUtils` in the lib and raises
+`ValueError` with the problems it returns. FastAPI turns that into a 422 that names
+the field. `BlogPostValidationUtils.find_body_problems(body)` checks a post's Markdown
+this way. The name says what it validates, never `Dto`: `libs/` doesn't know DTOs exist,
+and a service may run the same check.
+
+When checking an incoming payload needs a database read, the route gets a validation
+guard: a dependency in the domain's `dependencies.py`, named `validate_<what>` and
+attached with `dependencies=[Depends(...)]`. The guard calls a method on the lib's
 `<Domain>ValidationService`, named `validate_<condition>()`, which returns nothing and
 raises a lib exception when the payload is invalid.
 
@@ -159,7 +167,8 @@ Functions that build or map values — no db session, no client, no state — li
 `Utils` class in `libs/<domain>/utils/`, one module per class, with `__init__.py`
 re-exporting each one (`python-naming.md` › Class suffixes). A service keeps
 orchestration; the shaping of what it passes and returns moves out. Utilities with no
-domain at all, like `DateTimeUtils`, live in `libs/core/utils/`.
+domain at all, like `DateTimeUtils`, live in `libs/core/utils/`, and a `Result` one of
+them returns lives in `libs/core/results.py`.
 
 ### LangGraph workflows
 
@@ -282,7 +291,7 @@ A route takes a `Dto` only when a body or a query model is sent.
 
 | Route                                  | Inbound                                                    |
 | -------------------------------------- | ---------------------------------------------------------- |
-| `POST` create / `PUT` update           | `<Entity>Dto` body, **one class shared by both**: `BlogPostDto` |
+| `POST` create / `PUT` update           | `<Entity>Dto` body, **one class shared by both**: `PersonaDto`. Create gets its own `Create<Entity>Dto` only when it carries fields an update must never change (see Input models) |
 | `GET /{identity}` / `DELETE /{identity}` | None — the entity's `identity` is a plain `UUID` path parameter |
 | `GET` list                             | `<Entity>FetchAllQueryDto` query model: `BlogPostFetchAllQueryDto` |
 | Non-CRUD action (`POST /generate-text`) | `<Verb><Entity>Dto` body: `GenerateTextDto`                |
@@ -341,8 +350,14 @@ A service method taking a structured payload takes a Pydantic `Input` model from
 `libs/<domain>/inputs.py`. Scalar identifiers stay plain parameters —
 `find_user(user_identity: UUID)` gets no wrapper. Create and update share the one
 `Input` their shared `Dto` maps to:
-`create_blog_post(blog_post_input: BlogPostInput, auth_user: AuthUser)` and
-`update_blog_post(blog_post_identity: UUID, blog_post_input: BlogPostInput, auth_user: AuthUser)`.
+`create_persona(persona_input: PersonaInput, auth_user: AuthUser)` and
+`update_persona(persona_identity: UUID, persona_input: PersonaInput, auth_user: AuthUser)`.
+
+When create carries fields an update must never change, such as the owning persona or a
+source run, create gets its own `Create<Entity>Dto` and `Create<Entity>Input`, and
+update keeps `<Entity>Dto` with an `Update<Entity>Input`:
+`create_blog_post(create_blog_post_input: CreateBlogPostInput, auth_user: AuthUser)` and
+`update_blog_post(blog_post_identity: UUID, update_blog_post_input: UpdateBlogPostInput, auth_user: AuthUser)`.
 
 ### The acting user
 
@@ -373,8 +388,8 @@ class BlogPostDto(BaseModel):
     title: str
     body: str
 
-    def to_input(self) -> BlogPostInput:
-        return BlogPostInput(title=self.title, body=self.body)
+    def to_input(self) -> UpdateBlogPostInput:
+        return UpdateBlogPostInput(title=self.title, body=self.body)
 
 
 class BlogPostResponseDto(BaseModel):
@@ -452,7 +467,7 @@ async def find_blog_post(
 
 @blog_post_router.post("", status_code=201)
 async def create_blog_post(
-    dto: BlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
+    dto: CreateBlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> IdentityResponseDto:
     create_blog_post_result = await blog_post_service.create_blog_post(
         dto.to_input(), auth_user
@@ -547,6 +562,12 @@ A record becomes a `Result` through `model_validate(<entity>_record, from_attrib
 which copies only the fields the `Result` declares, including nested `Result`s. The
 flag goes on the call; a `Result` class never sets `model_config`, so it stays a plain
 shape.
+
+A `Result` that spans related rows is built the same way, from a record whose
+relationships were loaded up front: `contains_eager` when the query already joins them
+(such as for an access filter), `selectinload` otherwise, which also covers a list of
+related rows. A labelled multi-column `select()` read through `.mappings()` is only for
+flat projections and aggregates.
 
 `scalar_one_or_none()` then raise `NotFoundException` for a single row,
 `scalars().all()` for a list, which is empty rather than an error when nothing

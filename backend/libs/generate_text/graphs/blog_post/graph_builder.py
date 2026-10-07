@@ -31,7 +31,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
     """
 
     graph_name = "blog_post"
-    graph_version = "2026-10-07.1"
+    graph_version = "2026-10-07.2"
 
     def build_graph(
         self, options: dict[str, Any], checkpointer: BaseCheckpointSaver

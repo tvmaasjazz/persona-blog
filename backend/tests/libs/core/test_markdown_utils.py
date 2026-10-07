@@ -1,5 +1,6 @@
 import pytest
 
+from libs.core.results import SplitMarkdownPostResult
 from libs.core.utils.markdown_utils import MarkdownUtils
 
 
@@ -121,3 +122,121 @@ def test_has_image_without_image_returns_false() -> None:
     markdown_text = "# Title\n\nJust plain text."
 
     assert MarkdownUtils.has_image(markdown_text) is False
+
+
+def test_split_post_title_subtitle_and_body_returns_each_part() -> None:
+    markdown_text = "# Sourdough Starters\n\n*A one-line subtitle.*\n\n## Feeding\n\nFeed it daily."
+
+    split_markdown_post_result = MarkdownUtils.split_post(markdown_text)
+
+    assert split_markdown_post_result == SplitMarkdownPostResult(
+        title="Sourdough Starters",
+        subtitle="A one-line subtitle.",
+        body="## Feeding\n\nFeed it daily.",
+    )
+
+
+def test_split_post_subtitle_on_next_line_returns_subtitle() -> None:
+    markdown_text = "# Sourdough Starters\n*A one-line subtitle.*\n\nBody paragraph."
+
+    split_markdown_post_result = MarkdownUtils.split_post(markdown_text)
+
+    assert split_markdown_post_result == SplitMarkdownPostResult(
+        title="Sourdough Starters",
+        subtitle="A one-line subtitle.",
+        body="Body paragraph.",
+    )
+
+
+def test_split_post_subtitle_after_blank_line_returns_subtitle() -> None:
+    markdown_text = "# Sourdough Starters\n\n*A one-line subtitle.*\n\nBody paragraph."
+
+    split_markdown_post_result = MarkdownUtils.split_post(markdown_text)
+
+    assert split_markdown_post_result == SplitMarkdownPostResult(
+        title="Sourdough Starters",
+        subtitle="A one-line subtitle.",
+        body="Body paragraph.",
+    )
+
+
+def test_split_post_underscore_italics_returns_subtitle() -> None:
+    markdown_text = "# Sourdough Starters\n\n_A one-line subtitle._\n\nBody paragraph."
+
+    split_markdown_post_result = MarkdownUtils.split_post(markdown_text)
+
+    assert split_markdown_post_result == SplitMarkdownPostResult(
+        title="Sourdough Starters",
+        subtitle="A one-line subtitle.",
+        body="Body paragraph.",
+    )
+
+
+def test_split_post_no_subtitle_returns_subtitle_none() -> None:
+    markdown_text = "# Sourdough Starters\n\nJust a paragraph, no subtitle.\n\n## Section"
+
+    split_markdown_post_result = MarkdownUtils.split_post(markdown_text)
+
+    assert split_markdown_post_result == SplitMarkdownPostResult(
+        title="Sourdough Starters",
+        subtitle=None,
+        body="Just a paragraph, no subtitle.\n\n## Section",
+    )
+
+
+def test_split_post_paragraph_only_partly_italic_stays_in_body() -> None:
+    markdown_text = "# Sourdough Starters\n\n*Partly* italic and more text.\n\nBody paragraph."
+
+    split_markdown_post_result = MarkdownUtils.split_post(markdown_text)
+
+    assert split_markdown_post_result == SplitMarkdownPostResult(
+        title="Sourdough Starters",
+        subtitle=None,
+        body="*Partly* italic and more text.\n\nBody paragraph.",
+    )
+
+
+def test_split_post_bold_only_line_stays_in_body() -> None:
+    markdown_text = "# Sourdough Starters\n\n**Bold only.**\n\nBody paragraph."
+
+    split_markdown_post_result = MarkdownUtils.split_post(markdown_text)
+
+    assert split_markdown_post_result == SplitMarkdownPostResult(
+        title="Sourdough Starters",
+        subtitle=None,
+        body="**Bold only.**\n\nBody paragraph.",
+    )
+
+
+def test_split_post_no_leading_h1_returns_title_and_subtitle_none_and_body_whole_text() -> None:
+    markdown_text = "## Section\n\nJust text, no title."
+
+    split_markdown_post_result = MarkdownUtils.split_post(markdown_text)
+
+    assert split_markdown_post_result == SplitMarkdownPostResult(
+        title=None, subtitle=None, body="## Section\n\nJust text, no title."
+    )
+
+
+def test_split_post_title_only_returns_empty_body() -> None:
+    markdown_text = "# Sourdough Starters"
+
+    split_markdown_post_result = MarkdownUtils.split_post(markdown_text)
+
+    assert split_markdown_post_result == SplitMarkdownPostResult(
+        title="Sourdough Starters", subtitle=None, body=""
+    )
+
+
+def test_split_post_body_markdown_untouched() -> None:
+    markdown_text = (
+        "# Sourdough Starters\n\nBody has **bold** text and a [link](http://example.com) in it."
+    )
+
+    split_markdown_post_result = MarkdownUtils.split_post(markdown_text)
+
+    assert split_markdown_post_result == SplitMarkdownPostResult(
+        title="Sourdough Starters",
+        subtitle=None,
+        body="Body has **bold** text and a [link](http://example.com) in it.",
+    )

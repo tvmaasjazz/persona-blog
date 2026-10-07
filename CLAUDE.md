@@ -45,8 +45,9 @@ npm run build                # type-check and build to dist/
 npx shadcn@latest add <name> # add a shadcn/ui component to src/components/ui/
 ```
 
-Before proposing a commit, run `ruff check` and `pytest` for backend changes, and
-`npm run fmt:check`, `npm run lint` and `npm run build` for frontend changes.
+Before committing, run `ruff check` for backend changes, and `npm run fmt:check`,
+`npm run lint` and `npm run build` for frontend changes. `pytest` must pass before
+the PR is ready to merge (see Pull requests).
 
 ### Commands for Tyler to run
 
@@ -86,9 +87,9 @@ written. They are expected to grow.
   and `.claude/commands/` for anything that scopes work by file type, and propose
   matching edits to their descriptions and scope lists.
 - Propose the edit; don't apply it unless asked.
-- Before proposing a commit that changes `.claude/rules/`, `.claude/agents/`, or
-  `.claude/commands/`, run the auditor for each side the change touches on the
-  changed files: `be-docs-auditor` for the backend, `fe-docs-auditor` for the
+- Before a PR that changes `.claude/rules/`, `.claude/agents/`, or
+  `.claude/commands/` is ready to merge, run the auditor for each side the change
+  touches on the changed files: `be-docs-auditor` for the backend, `fe-docs-auditor` for the
   frontend. Pass each one only its own side's files; they skip the other side's
   silently, so a file in neither list goes unaudited. Fix what each finds in those
   files, and report the rest. Plan edits and small wording changes skip it.
@@ -101,6 +102,28 @@ An agent in `.claude/agents/` is named for the side of the stack it works on:
 - `fe-` for other frontend work, such as styling or the frontend docs: `fe-docs-auditor`
 - `be-` for backend agents: `be-test-writer`, `be-docs-auditor`. Agents named for a
   backend tool, `fastapi-coder` and `schema-coder`, keep the tool name instead
+
+### Running agents in parallel
+
+Split work across parallel agents only along files they don't share.
+
+- **Code.** `schema-coder` runs alone first; everything else needs its Orm classes.
+  Then `fastapi-coder` agents split by lib or domain. When one part calls another,
+  write the contract first (names, signatures, `Input`/`Result` classes, exceptions)
+  and give both agents the identical text. One agent owns each shared wiring file
+  (`app_factory.py`, `core/dependencies.py`, `orm/__init__.py`). Afterwards, check
+  the calls match the contract, then run ruff and import the app.
+- **Tests.** One `be-test-writer` adds the shared factories, stubs and fixtures first.
+  Then two or three run in parallel on separate test files, each running only its
+  own files: never the full suite, never `pytest -m migration`, since they share the
+  `pb_test` database. Run the full suite and the migration test once at the end.
+
+## Pull requests
+
+Open the PR for review as soon as the code is written and `ruff check` passes, before
+tests and the docs audit. Tests, then audit fixes, land afterwards as separate commits
+on the same PR. Until they do, the PR description says what's still to come and which
+existing tests fail.
 
 ## Git
 

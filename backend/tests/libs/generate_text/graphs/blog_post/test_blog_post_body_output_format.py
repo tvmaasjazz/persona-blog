@@ -1,4 +1,6 @@
 from libs.generate_text.graphs.blog_post.blog_post_body_output_format import (
+    BLOG_POST_BODY_FORMAT_RULES,
+    EMPTY_BODY_MESSAGE,
     HEADING_TOO_DEEP_MESSAGE,
     IMAGE_MESSAGE,
     MULTIPLE_H1_MESSAGE,
@@ -106,3 +108,31 @@ def test_validate_output_h2_then_h3_then_h2_has_no_skipped_heading_level() -> No
     validate_output_result = BlogPostBodyOutputFormat().validate_output(output_text)
 
     assert SKIPPED_HEADING_LEVEL_MESSAGE not in validate_output_result.error_messages
+
+
+def test_validate_output_with_subtitle_returns_no_errors() -> None:
+    output_text = "# Title\n\n*A one-line subtitle.*\n\n## Section\n\nBody."
+
+    validate_output_result = BlogPostBodyOutputFormat().validate_output(output_text)
+
+    assert validate_output_result == ValidateOutputResult(error_messages=[])
+
+
+def test_validate_output_title_only_reports_empty_body() -> None:
+    output_text = "# Title"
+
+    validate_output_result = BlogPostBodyOutputFormat().validate_output(output_text)
+
+    assert validate_output_result == ValidateOutputResult(error_messages=[EMPTY_BODY_MESSAGE])
+
+
+def test_validate_output_title_and_subtitle_with_nothing_after_reports_empty_body() -> None:
+    output_text = "# Title\n\n*A one-line subtitle.*"
+
+    validate_output_result = BlogPostBodyOutputFormat().validate_output(output_text)
+
+    assert validate_output_result == ValidateOutputResult(error_messages=[EMPTY_BODY_MESSAGE])
+
+
+def test_blog_post_body_format_rules_mentions_optional_italic_subtitle() -> None:
+    assert "optional one-line subtitle" in BLOG_POST_BODY_FORMAT_RULES
