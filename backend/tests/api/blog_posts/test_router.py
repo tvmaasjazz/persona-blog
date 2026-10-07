@@ -182,7 +182,9 @@ async def test_create_blog_post_invalid_body_returns_422(
         },
     )
 
+    response_body = create_blog_post_response.json()
     assert create_blog_post_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == ["body", "body"]
 
 
 async def test_create_blog_post_is_public_on_private_persona_returns_422(

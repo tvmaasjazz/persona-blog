@@ -123,22 +123,24 @@ async def test_delete_content_item_never_inserted_raises_not_found_exception(
         await content_item_service.delete_content_item(999999, auth_user)
 
 
-async def test_link_generate_text_run_sets_content_item_id_on_run(
+async def test_create_content_item_with_generate_text_run_identity_links_run(
     db_session: AsyncSession,
 ) -> None:
     user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
     persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
-    content_item_record = await insert_content_item_row(
-        db_session, created_by_id=user_record.id, persona_id=persona_record.id
-    )
     generate_text_run_record = await insert_generate_text_run_row(
         db_session, created_by_id=user_record.id, persona_id=persona_record.id
     )
     await db_session.commit()
     content_item_service = ContentItemService(db_session=db_session)
+    create_content_item_input = build_create_content_item_input(
+        persona_id=persona_record.id,
+        generate_text_run_identity=generate_text_run_record.identity,
+    )
 
-    await content_item_service.link_generate_text_run(
-        content_item_record.id, generate_text_run_record.identity
+    create_content_item_result = await content_item_service.create_content_item(
+        create_content_item_input, auth_user
     )
 
     run_query = select(GenerateTextRunOrm).where(
@@ -146,19 +148,43 @@ async def test_link_generate_text_run_sets_content_item_id_on_run(
     )
     updated_run_record = await db_session.scalar(run_query)
     assert updated_run_record is not None
-    assert updated_run_record.content_item_id == content_item_record.id
+    assert updated_run_record.content_item_id == create_content_item_result.id
 
 
-async def test_link_generate_text_run_never_inserted_raises_not_found_exception(
+async def test_create_content_item_unknown_generate_text_run_identity_raises_not_found_exception(
     db_session: AsyncSession,
 ) -> None:
     user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
     persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
-    content_item_record = await insert_content_item_row(
+    await db_session.commit()
+    content_item_service = ContentItemService(db_session=db_session)
+    create_content_item_input = build_create_content_item_input(
+        persona_id=persona_record.id, generate_text_run_identity=uuid4()
+    )
+
+    with pytest.raises(NotFoundException):
+        await content_item_service.create_content_item(create_content_item_input, auth_user)
+
+
+async def test_create_content_item_without_generate_text_run_identity_touches_no_run(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
+    generate_text_run_record = await insert_generate_text_run_row(
         db_session, created_by_id=user_record.id, persona_id=persona_record.id
     )
     await db_session.commit()
     content_item_service = ContentItemService(db_session=db_session)
+    create_content_item_input = build_create_content_item_input(persona_id=persona_record.id)
 
-    with pytest.raises(NotFoundException):
-        await content_item_service.link_generate_text_run(content_item_record.id, uuid4())
+    await content_item_service.create_content_item(create_content_item_input, auth_user)
+
+    run_query = select(GenerateTextRunOrm).where(
+        GenerateTextRunOrm.id == generate_text_run_record.id
+    )
+    unchanged_run_record = await db_session.scalar(run_query)
+    assert unchanged_run_record is not None
+    assert unchanged_run_record.content_item_id is None

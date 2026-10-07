@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,12 +14,14 @@ def build_create_content_item_input(
     content_type: ContentType = ContentType.BLOG_POST,
     is_public: bool = False,
     published_at: datetime | None = None,
+    generate_text_run_identity: UUID | None = None,
 ) -> CreateContentItemInput:
     return CreateContentItemInput(
         persona_id=persona_id,
         content_type=content_type,
         is_public=is_public,
         published_at=published_at,
+        generate_text_run_identity=generate_text_run_identity,
     )
 
 

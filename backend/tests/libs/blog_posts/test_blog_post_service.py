@@ -5,7 +5,12 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.auth.results import AuthUser
-from libs.blog_posts.results import BlogPostDetailResult, FindUserBlogPostListResult
+from libs.blog_posts.results import (
+    BlogPostContentItemResult,
+    BlogPostDetailResult,
+    BlogPostPersonaResult,
+    FindUserBlogPostListResult,
+)
 from libs.blog_posts.services import BlogPostService
 from libs.content_items.services import ContentItemService
 from libs.content_items.types import ContentType
@@ -177,14 +182,16 @@ async def test_find_blog_post_own_post_returns_blog_post_detail_result(
 
     assert find_blog_post_result == BlogPostDetailResult(
         identity=blog_post_record.identity,
-        persona_identity=persona_record.identity,
         title=blog_post_record.title,
         subtitle=None,
         body=VALID_BLOG_POST_BODY,
-        is_public=False,
-        published_at=None,
         created_at=blog_post_record.created_at,
         updated_at=blog_post_record.updated_at,
+        content_item=BlogPostContentItemResult(
+            is_public=False,
+            published_at=None,
+            persona=BlogPostPersonaResult(identity=persona_record.identity),
+        ),
     )
 
 
@@ -215,14 +222,16 @@ async def test_find_blog_post_others_published_post_returns_blog_post_detail_res
 
     assert find_blog_post_result == BlogPostDetailResult(
         identity=blog_post_record.identity,
-        persona_identity=persona_record.identity,
         title=blog_post_record.title,
         subtitle=None,
         body=VALID_BLOG_POST_BODY,
-        is_public=True,
-        published_at=datetime(2020, 1, 1, tzinfo=UTC),
         created_at=blog_post_record.created_at,
         updated_at=blog_post_record.updated_at,
+        content_item=BlogPostContentItemResult(
+            is_public=True,
+            published_at=datetime(2020, 1, 1, tzinfo=UTC),
+            persona=BlogPostPersonaResult(identity=persona_record.identity),
+        ),
     )
 
 
@@ -317,25 +326,29 @@ async def test_find_user_blog_post_list_returns_only_own_newest_first(
         blog_posts=[
             BlogPostDetailResult(
                 identity=newest_blog_post_record.identity,
-                persona_identity=persona_record.identity,
                 title="Newest Post",
                 subtitle=None,
                 body=VALID_BLOG_POST_BODY,
-                is_public=False,
-                published_at=None,
                 created_at=newest_blog_post_record.created_at,
                 updated_at=newest_blog_post_record.updated_at,
+                content_item=BlogPostContentItemResult(
+                    is_public=False,
+                    published_at=None,
+                    persona=BlogPostPersonaResult(identity=persona_record.identity),
+                ),
             ),
             BlogPostDetailResult(
                 identity=oldest_blog_post_record.identity,
-                persona_identity=persona_record.identity,
                 title="Oldest Post",
                 subtitle=None,
                 body=VALID_BLOG_POST_BODY,
-                is_public=False,
-                published_at=None,
                 created_at=oldest_blog_post_record.created_at,
                 updated_at=oldest_blog_post_record.updated_at,
+                content_item=BlogPostContentItemResult(
+                    is_public=False,
+                    published_at=None,
+                    persona=BlogPostPersonaResult(identity=persona_record.identity),
+                ),
             ),
         ]
     )
@@ -371,14 +384,16 @@ async def test_find_user_blog_post_list_filters_by_persona_identity(
         blog_posts=[
             BlogPostDetailResult(
                 identity=matching_blog_post_record.identity,
-                persona_identity=matching_persona_record.identity,
                 title="Matching Post",
                 subtitle=None,
                 body=VALID_BLOG_POST_BODY,
-                is_public=False,
-                published_at=None,
                 created_at=matching_blog_post_record.created_at,
                 updated_at=matching_blog_post_record.updated_at,
+                content_item=BlogPostContentItemResult(
+                    is_public=False,
+                    published_at=None,
+                    persona=BlogPostPersonaResult(identity=matching_persona_record.identity),
+                ),
             )
         ]
     )
