@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import contains_eager
 
 from libs.auth.results import AuthUser
 from libs.blog_posts.inputs import CreateBlogPostInput, UpdateBlogPostInput
@@ -43,6 +44,7 @@ class BlogPostService:
                 content_type=ContentType.BLOG_POST,
                 is_public=create_blog_post_input.is_public,
                 published_at=create_blog_post_input.published_at,
+                generate_text_run_identity=create_blog_post_input.generate_text_run_identity,
             ),
             auth_user,
         )
@@ -57,70 +59,54 @@ class BlogPostService:
         self._db_session.add(blog_post_record)
         await self._db_session.flush()
 
-        if create_blog_post_input.generate_text_run_identity is not None:
-            await self._content_item_service.link_generate_text_run(
-                create_content_item_result.id, create_blog_post_input.generate_text_run_identity
-            )
-
         return CreateBlogPostResult(identity=blog_post_record.identity)
 
     async def find_blog_post(
         self, blog_post_identity: UUID, auth_user: AuthUser
     ) -> BlogPostDetailResult:
         query = (
-            select(
-                BlogPostOrm.identity.label("identity"),
-                PersonaOrm.identity.label("persona_identity"),
-                BlogPostOrm.title.label("title"),
-                BlogPostOrm.subtitle.label("subtitle"),
-                BlogPostOrm.body.label("body"),
-                ContentItemOrm.is_public.label("is_public"),
-                ContentItemOrm.published_at.label("published_at"),
-                BlogPostOrm.created_at.label("created_at"),
-                BlogPostOrm.updated_at.label("updated_at"),
-            )
+            select(BlogPostOrm)
             .join(ContentItemOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
             .join(PersonaOrm, ContentItemOrm.persona_id == PersonaOrm.id)
             .where(
                 BlogPostOrm.identity == blog_post_identity,
                 ContentItemQueryUtils.build_accessible_condition(auth_user.id),
             )
+            .options(
+                contains_eager(BlogPostOrm.content_item).contains_eager(ContentItemOrm.persona)
+            )
         )
         query_result = await self._db_session.execute(query)
-        blog_post_row = query_result.mappings().one_or_none()
+        blog_post_record = query_result.scalar_one_or_none()
 
-        if blog_post_row is None:
+        if blog_post_record is None:
             raise NotFoundException("Blog post not found")
-        return BlogPostDetailResult(**blog_post_row)
+        return BlogPostDetailResult.model_validate(blog_post_record, from_attributes=True)
 
     async def find_user_blog_post_list(
         self, auth_user: AuthUser, persona_identity: UUID | None
     ) -> FindUserBlogPostListResult:
         query = (
-            select(
-                BlogPostOrm.identity.label("identity"),
-                PersonaOrm.identity.label("persona_identity"),
-                BlogPostOrm.title.label("title"),
-                BlogPostOrm.subtitle.label("subtitle"),
-                BlogPostOrm.body.label("body"),
-                ContentItemOrm.is_public.label("is_public"),
-                ContentItemOrm.published_at.label("published_at"),
-                BlogPostOrm.created_at.label("created_at"),
-                BlogPostOrm.updated_at.label("updated_at"),
-            )
+            select(BlogPostOrm)
             .join(ContentItemOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
             .join(PersonaOrm, ContentItemOrm.persona_id == PersonaOrm.id)
             .where(ContentItemQueryUtils.build_owned_condition(auth_user.id))
             .order_by(ContentItemOrm.created_at.desc())
+            .options(
+                contains_eager(BlogPostOrm.content_item).contains_eager(ContentItemOrm.persona)
+            )
         )
         if persona_identity is not None:
             query = query.where(PersonaOrm.identity == persona_identity)
 
         query_result = await self._db_session.execute(query)
-        blog_post_rows = query_result.mappings().all()
+        blog_post_records = query_result.scalars().all()
 
         return FindUserBlogPostListResult(
-            blog_posts=[BlogPostDetailResult(**blog_post_row) for blog_post_row in blog_post_rows]
+            blog_posts=[
+                BlogPostDetailResult.model_validate(blog_post_record, from_attributes=True)
+                for blog_post_record in blog_post_records
+            ]
         )
 
     async def update_blog_post(

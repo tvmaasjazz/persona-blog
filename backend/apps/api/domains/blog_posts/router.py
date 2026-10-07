@@ -7,10 +7,8 @@ from apps.api.core.dependencies import AuthUserDep
 from apps.api.core.dtos import EmptyResponseDto, IdentityResponseDto
 from apps.api.domains.blog_posts.dependencies import (
     BlogPostServiceDep,
-    validate_new_blog_post_body,
     validate_new_blog_post_generate_text_run,
     validate_new_blog_post_visibility,
-    validate_updated_blog_post_body,
     validate_updated_blog_post_visibility,
 )
 from apps.api.domains.blog_posts.dtos import (
@@ -48,7 +46,6 @@ async def find_blog_post(
     "",
     status_code=201,
     dependencies=[
-        Depends(validate_new_blog_post_body),
         Depends(validate_new_blog_post_visibility),
         Depends(validate_new_blog_post_generate_text_run),
     ],
@@ -63,7 +60,6 @@ async def create_blog_post(
 @blog_post_router.put(
     "/{blog_post_identity}",
     dependencies=[
-        Depends(validate_updated_blog_post_body),
         Depends(validate_updated_blog_post_visibility),
     ],
 )

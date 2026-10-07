@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -10,6 +11,7 @@ class CreateContentItemInput(BaseModel):
     content_type: ContentType
     is_public: bool
     published_at: datetime | None
+    generate_text_run_identity: UUID | None
 
 
 class UpdateContentItemInput(BaseModel):

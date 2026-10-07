@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import BigInteger, Enum, ForeignKey, Index, desc, false
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from libs.content_items.types import ContentType
 from libs.database.base import BaseOrm
@@ -27,3 +27,5 @@ class ContentItemOrm(BaseOrm):
     content_type: Mapped[ContentType] = mapped_column(Enum(ContentType, name="pb_content_type"))
     is_public: Mapped[bool] = mapped_column(server_default=false())
     published_at: Mapped[datetime | None]
+
+    persona: Mapped[PersonaOrm] = relationship()

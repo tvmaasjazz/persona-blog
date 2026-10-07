@@ -29,6 +29,11 @@ class ContentItemService:
         self._db_session.add(content_item_record)
         await self._db_session.flush()
 
+        if create_content_item_input.generate_text_run_identity is not None:
+            await self._link_generate_text_run(
+                content_item_record.id, create_content_item_input.generate_text_run_identity
+            )
+
         return CreateContentItemResult(
             id=content_item_record.id, identity=content_item_record.identity
         )
@@ -51,7 +56,7 @@ class ContentItemService:
         content_item_record.deleted_by_id = auth_user.id
         await self._db_session.flush()
 
-    async def link_generate_text_run(
+    async def _link_generate_text_run(
         self, content_item_id: int, generate_text_run_identity: UUID
     ) -> None:
         run_query = select(GenerateTextRunOrm).where(

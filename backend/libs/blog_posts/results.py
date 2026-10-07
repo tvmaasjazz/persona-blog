@@ -8,16 +8,24 @@ class CreateBlogPostResult(BaseModel):
     identity: UUID
 
 
+class BlogPostPersonaResult(BaseModel):
+    identity: UUID
+
+
+class BlogPostContentItemResult(BaseModel):
+    is_public: bool
+    published_at: datetime | None
+    persona: BlogPostPersonaResult
+
+
 class BlogPostDetailResult(BaseModel):
     identity: UUID
-    persona_identity: UUID
     title: str
     subtitle: str | None
     body: str
-    is_public: bool
-    published_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    content_item: BlogPostContentItemResult
 
 
 class FindUserBlogPostListResult(BaseModel):

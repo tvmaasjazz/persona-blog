@@ -1,5 +1,5 @@
 from sqlalchemy import BigInteger, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from libs.database.base import BaseOrm
 from libs.database.orm.content_item import ContentItemOrm
@@ -14,3 +14,5 @@ class BlogPostOrm(BaseOrm):
     title: Mapped[str]
     subtitle: Mapped[str | None]
     body: Mapped[str]
+
+    content_item: Mapped[ContentItemOrm] = relationship()

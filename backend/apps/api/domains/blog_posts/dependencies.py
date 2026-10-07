@@ -65,20 +65,6 @@ BlogPostValidationServiceDep = Annotated[
 ]
 
 
-async def validate_new_blog_post_body(
-    dto: CreateBlogPostDto,
-    blog_post_validation_service: BlogPostValidationServiceDep,
-) -> None:
-    blog_post_validation_service.validate_blog_post_body(dto.body)
-
-
-async def validate_updated_blog_post_body(
-    dto: BlogPostDto,
-    blog_post_validation_service: BlogPostValidationServiceDep,
-) -> None:
-    blog_post_validation_service.validate_blog_post_body(dto.body)
-
-
 async def validate_new_blog_post_visibility(
     dto: CreateBlogPostDto,
     auth_user: AuthUserDep,
