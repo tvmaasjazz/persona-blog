@@ -25,7 +25,7 @@ async def _create_persona(api_client: AsyncClient) -> str:
 async def _create_review_pending_run(
     api_client: AsyncClient, llm_service_stub: LlmServiceStub, persona_identity: str
 ) -> str:
-    llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
+    llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
     generate_blog_post_response = await api_client.post(
         "/generate-text/blog-post",
         json={
@@ -41,7 +41,9 @@ async def test_generate_blog_post_default_options_returns_completed(
     api_client: AsyncClient, signed_in_user: UserOrm, llm_service_stub: LlmServiceStub
 ) -> None:
     persona_identity = await _create_persona(api_client)
-    llm_service_stub.complete_result = build_llm_completion_result(content="A finished blog post.")
+    llm_service_stub.complete_result = build_llm_completion_result(
+        content="# Finished\n\nA finished blog post."
+    )
 
     generate_blog_post_response = await api_client.post(
         "/generate-text/blog-post",
@@ -59,9 +61,9 @@ async def test_generate_blog_post_default_options_returns_completed(
         "status": "COMPLETED",
         "last_step": "GENERATE_DRAFT",
         "graph_name": "blog_post",
-        "graph_version": "2026-09-30.1",
-        "content": "A finished blog post.",
-        "character_count": 21,
+        "graph_version": "2026-10-07.1",
+        "content": "# Finished\n\nA finished blog post.",
+        "character_count": 33,
         "llm_call_count": 0,
         "input_tokens": 0,
         "output_tokens": 0,
@@ -78,7 +80,9 @@ async def test_generate_blog_post_persists_run_row_with_persona_tone_and_target_
     db_session: AsyncSession,
 ) -> None:
     persona_identity = await _create_persona(api_client)
-    llm_service_stub.complete_result = build_llm_completion_result(content="A finished blog post.")
+    llm_service_stub.complete_result = build_llm_completion_result(
+        content="# Finished\n\nA finished blog post."
+    )
 
     generate_blog_post_response = await api_client.post(
         "/generate-text/blog-post",
@@ -109,7 +113,7 @@ async def test_generate_blog_post_step_not_auto_approved_returns_awaiting_review
     api_client: AsyncClient, signed_in_user: UserOrm, llm_service_stub: LlmServiceStub
 ) -> None:
     persona_identity = await _create_persona(api_client)
-    llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
+    llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
 
     generate_blog_post_response = await api_client.post(
         "/generate-text/blog-post",
@@ -127,9 +131,9 @@ async def test_generate_blog_post_step_not_auto_approved_returns_awaiting_review
         "status": "AWAITING_REVIEW",
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
-        "graph_version": "2026-09-30.1",
-        "content": "A draft.",
-        "character_count": 8,
+        "graph_version": "2026-10-07.1",
+        "content": "# Draft\n\nA draft.",
+        "character_count": 17,
         "llm_call_count": 0,
         "input_tokens": 0,
         "output_tokens": 0,
@@ -205,6 +209,24 @@ async def test_generate_blog_post_invalid_body_returns_422(
     assert response_body["detail"][0]["loc"] == expected_error_location
 
 
+async def test_generate_blog_post_draft_never_validates_returns_503(
+    api_client: AsyncClient, signed_in_user: UserOrm, llm_service_stub: LlmServiceStub
+) -> None:
+    persona_identity = await _create_persona(api_client)
+    llm_service_stub.complete_result = build_llm_completion_result(content="Not valid markdown.")
+
+    generate_blog_post_response = await api_client.post(
+        "/generate-text/blog-post",
+        json={
+            "prompt_text": "Write about sourdough starters.",
+            "persona_identity": persona_identity,
+            "options": {},
+        },
+    )
+
+    assert generate_blog_post_response.status_code == 503
+
+
 @pytest.mark.usefixtures("signed_in_user")
 async def test_generate_blog_post_unknown_persona_returns_404(api_client: AsyncClient) -> None:
     generate_blog_post_response = await api_client.post(
@@ -276,9 +298,9 @@ async def test_find_generate_text_run_returns_run_response(
         "status": "AWAITING_REVIEW",
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
-        "graph_version": "2026-09-30.1",
-        "content": "A draft.",
-        "character_count": 8,
+        "graph_version": "2026-10-07.1",
+        "content": "# Draft\n\nA draft.",
+        "character_count": 17,
         "llm_call_count": 0,
         "input_tokens": 0,
         "output_tokens": 0,
@@ -339,9 +361,9 @@ async def test_resume_generate_text_approval_returns_completed(
         "status": "COMPLETED",
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
-        "graph_version": "2026-09-30.1",
-        "content": "A draft.",
-        "character_count": 8,
+        "graph_version": "2026-10-07.1",
+        "content": "# Draft\n\nA draft.",
+        "character_count": 17,
         "llm_call_count": 0,
         "input_tokens": 0,
         "output_tokens": 0,
@@ -357,7 +379,9 @@ async def test_resume_generate_text_rejection_rewrites_and_returns_awaiting_revi
     persona_identity = await _create_persona(api_client)
     run_identity = await _create_review_pending_run(api_client, llm_service_stub, persona_identity)
 
-    llm_service_stub.complete_result = build_llm_completion_result(content="A revised draft.")
+    llm_service_stub.complete_result = build_llm_completion_result(
+        content="# Draft\n\nA revised draft."
+    )
     resume_generate_text_response = await api_client.post(
         f"/generate-text/runs/{run_identity}/resume",
         json={"is_approved": False, "feedback_text": "Make it shorter."},
@@ -370,9 +394,9 @@ async def test_resume_generate_text_rejection_rewrites_and_returns_awaiting_revi
         "status": "AWAITING_REVIEW",
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
-        "graph_version": "2026-09-30.1",
-        "content": "A revised draft.",
-        "character_count": 16,
+        "graph_version": "2026-10-07.1",
+        "content": "# Draft\n\nA revised draft.",
+        "character_count": 25,
         "llm_call_count": 0,
         "input_tokens": 0,
         "output_tokens": 0,

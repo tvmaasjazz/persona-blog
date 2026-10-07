@@ -33,7 +33,9 @@ def get_generate_text_service(request: Request, llm_service: LlmServiceDep) -> G
     generate_text_instrumentation_service = GenerateTextInstrumentationService(
         run_service=generate_text_run_service, step_service=generate_text_step_service
     )
-    generate_text_node_service = GenerateTextNodeService(llm_service=llm_service)
+    generate_text_node_service = GenerateTextNodeService(
+        llm_service=llm_service, generate_text_settings=app_settings.generate_text
+    )
     generate_text_graph_builder_registry = GenerateTextGraphBuilderRegistry(
         node_service=generate_text_node_service,
         instrumentation_service=generate_text_instrumentation_service,

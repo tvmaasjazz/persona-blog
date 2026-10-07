@@ -46,11 +46,14 @@ def _build_graph_builder(
     instrumentation_service = GenerateTextInstrumentationService(
         run_service=run_service, step_service=step_service
     )
-    node_service = GenerateTextNodeService(llm_service=llm_service_stub)
+    generate_text_settings = GenerateTextSettings(max_rewrite_passes=max_rewrite_passes)
+    node_service = GenerateTextNodeService(
+        llm_service=llm_service_stub, generate_text_settings=generate_text_settings
+    )
     blog_post_graph_builder = BlogPostGraphBuilder(
         node_service=node_service,
         instrumentation_service=instrumentation_service,
-        generate_text_settings=GenerateTextSettings(max_rewrite_passes=max_rewrite_passes),
+        generate_text_settings=generate_text_settings,
     )
     return run_service, blog_post_graph_builder
 
@@ -78,7 +81,9 @@ async def test_build_graph_all_steps_auto_approved_runs_to_end(
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     llm_service_stub = LlmServiceStub()
-    llm_service_stub.complete_result = build_llm_completion_result(content="Generated text.")
+    llm_service_stub.complete_result = build_llm_completion_result(
+        content="# Generated\n\nGenerated text."
+    )
     run_service, blog_post_graph_builder = _build_graph_builder(
         db_session_factory, llm_service_stub
     )
@@ -98,9 +103,9 @@ async def test_build_graph_all_steps_auto_approved_runs_to_end(
     graph_state_snapshot = await blog_post_graph.aget_state(graph_run_config)
     assert graph_state_snapshot.next == ()
     assert graph_state_snapshot.values["step_outputs"] == {
-        "GENERATE_OUTLINE": "Generated text.",
-        "GENERATE_DRAFT": "Generated text.",
-        "HUMANIZE": "Generated text.",
+        "GENERATE_OUTLINE": "# Generated\n\nGenerated text.",
+        "GENERATE_DRAFT": "# Generated\n\nGenerated text.",
+        "HUMANIZE": "# Generated\n\nGenerated text.",
     }
     completion_llm_types = [
         completion_input.llm_type for completion_input in llm_service_stub.complete_inputs
@@ -117,7 +122,7 @@ async def test_build_graph_step_not_auto_approved_pauses_at_review(
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     llm_service_stub = LlmServiceStub()
-    llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
+    llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
     run_service, blog_post_graph_builder = _build_graph_builder(
         db_session_factory, llm_service_stub
     )
@@ -132,7 +137,7 @@ async def test_build_graph_step_not_auto_approved_pauses_at_review(
 
     graph_state_snapshot = await blog_post_graph.aget_state(graph_run_config)
     assert graph_state_snapshot.next == (GenerateTextNodeType.REVIEW_DRAFT.value,)
-    assert graph_state_snapshot.interrupts[0].value == {"step_output": "A draft."}
+    assert graph_state_snapshot.interrupts[0].value == {"step_output": "# Draft\n\nA draft."}
 
 
 async def test_build_graph_rejection_routes_to_rewrite_and_pauses_again(
@@ -140,7 +145,7 @@ async def test_build_graph_rejection_routes_to_rewrite_and_pauses_again(
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     llm_service_stub = LlmServiceStub()
-    llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
+    llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
     run_service, blog_post_graph_builder = _build_graph_builder(
         db_session_factory, llm_service_stub
     )
@@ -152,13 +157,18 @@ async def test_build_graph_rejection_routes_to_rewrite_and_pauses_again(
     graph_run_config = {"configurable": {"thread_id": str(uuid4())}}
     await blog_post_graph.ainvoke(generate_text_state, graph_run_config)
 
-    llm_service_stub.complete_result = build_llm_completion_result(content="A revised draft.")
+    llm_service_stub.complete_result = build_llm_completion_result(
+        content="# Draft\n\nA revised draft."
+    )
     resume_command = Command(resume={"is_approved": False, "feedback_text": "Make it shorter."})
     await blog_post_graph.ainvoke(resume_command, graph_run_config)
 
     graph_state_snapshot = await blog_post_graph.aget_state(graph_run_config)
     assert graph_state_snapshot.next == (GenerateTextNodeType.REVIEW_DRAFT.value,)
-    assert graph_state_snapshot.values["step_outputs"]["REWRITE_DRAFT"] == "A revised draft."
+    assert (
+        graph_state_snapshot.values["step_outputs"]["REWRITE_DRAFT"]
+        == "# Draft\n\nA revised draft."
+    )
     assert graph_state_snapshot.values["rewrite_counts"]["REVIEW_DRAFT"] == 1
 
 
@@ -167,7 +177,7 @@ async def test_build_graph_max_rewrite_passes_ends_run_instead_of_looping(
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     llm_service_stub = LlmServiceStub()
-    llm_service_stub.complete_result = build_llm_completion_result(content="A draft.")
+    llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
     run_service, blog_post_graph_builder = _build_graph_builder(
         db_session_factory, llm_service_stub, max_rewrite_passes=1
     )

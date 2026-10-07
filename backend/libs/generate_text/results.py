@@ -65,3 +65,7 @@ class FindLatestGenerateTextStepResult(BaseModel):
 class BuildPromptResult(BaseModel):
     system_prompt: str
     user_prompt: str
+
+
+class ValidateOutputResult(BaseModel):
+    error_messages: list[str]

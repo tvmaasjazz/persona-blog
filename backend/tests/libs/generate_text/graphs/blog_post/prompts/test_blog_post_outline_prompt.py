@@ -1,5 +1,16 @@
+from libs.generate_text.graphs.blog_post.blog_post_body_output_format import (
+    BLOG_POST_BODY_FORMAT_RULES,
+)
 from libs.generate_text.graphs.blog_post.prompts import BlogPostOutlinePrompt
 from tests.factories.generate_text import build_generate_text_state
+
+
+def test_build_generate_prompt_excludes_format_rules_from_system_prompt() -> None:
+    state = build_generate_text_state()
+
+    build_prompt_result = BlogPostOutlinePrompt().build_generate_prompt(state)
+
+    assert BLOG_POST_BODY_FORMAT_RULES not in build_prompt_result.system_prompt
 
 
 def test_build_generate_prompt_puts_used_persona_fields_in_system_prompt() -> None:

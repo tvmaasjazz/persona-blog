@@ -7,6 +7,9 @@ from pydantic import ValidationError
 
 from libs.generate_text.exceptions import GenerateTextOptionsInvalidException
 from libs.generate_text.graphs.base_generate_text_graph_builder import BaseGenerateTextGraphBuilder
+from libs.generate_text.graphs.blog_post.blog_post_body_output_format import (
+    BlogPostBodyOutputFormat,
+)
 from libs.generate_text.graphs.blog_post.inputs import BlogPostOptionsInput
 from libs.generate_text.graphs.blog_post.prompts import (
     BlogPostDraftPrompt,
@@ -28,7 +31,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
     """
 
     graph_name = "blog_post"
-    graph_version = "2026-09-30.1"
+    graph_version = "2026-10-07.1"
 
     def build_graph(
         self, options: dict[str, Any], checkpointer: BaseCheckpointSaver
@@ -45,6 +48,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
         outline_prompt = BlogPostOutlinePrompt()
         draft_prompt = BlogPostDraftPrompt()
         humanize_prompt = BlogPostHumanizePrompt()
+        blog_post_body_output_format = BlogPostBodyOutputFormat()
 
         outline_options = blog_post_options.outline
         humanize_options = blog_post_options.humanize
@@ -123,7 +127,10 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
 
         # Draft: always runs. A blog post without a draft isn't one.
         draft_node = self._node_service.build_generate_node(
-            GenerateTextNodeType.GENERATE_DRAFT, LlmType.STRONG, draft_prompt
+            GenerateTextNodeType.GENERATE_DRAFT,
+            LlmType.STRONG,
+            draft_prompt,
+            blog_post_body_output_format,
         )
         state_graph.add_node(
             GenerateTextNodeType.GENERATE_DRAFT,
@@ -149,6 +156,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
                 LlmType.STRONG,
                 GenerateTextNodeType.REVIEW_DRAFT,
                 draft_prompt,
+                blog_post_body_output_format,
             )
             state_graph.add_node(
                 GenerateTextNodeType.REWRITE_DRAFT,
@@ -179,7 +187,10 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
         # Humanize: a last pass over the draft, when the caller asked for one.
         if humanize_options is not None and humanize_options.is_enabled:
             humanize_node = self._node_service.build_generate_node(
-                GenerateTextNodeType.HUMANIZE, LlmType.STRONG, humanize_prompt
+                GenerateTextNodeType.HUMANIZE,
+                LlmType.STRONG,
+                humanize_prompt,
+                blog_post_body_output_format,
             )
             state_graph.add_node(
                 GenerateTextNodeType.HUMANIZE,
@@ -205,6 +216,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
                     LlmType.STRONG,
                     GenerateTextNodeType.REVIEW_HUMANIZE,
                     humanize_prompt,
+                    blog_post_body_output_format,
                 )
                 state_graph.add_node(
                     GenerateTextNodeType.REWRITE_HUMANIZE,
