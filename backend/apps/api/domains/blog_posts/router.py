@@ -7,7 +7,8 @@ from apps.api.core.dependencies import AuthUserDep
 from apps.api.core.dtos import EmptyResponseDto, IdentityResponseDto
 from apps.api.domains.blog_posts.dependencies import (
     BlogPostServiceDep,
-    validate_new_blog_post_generate_text_run,
+    validate_new_blog_post_from_run_availability,
+    validate_new_blog_post_from_run_visibility,
     validate_new_blog_post_visibility,
     validate_updated_blog_post_visibility,
 )
@@ -17,6 +18,7 @@ from apps.api.domains.blog_posts.dtos import (
     BlogPostListResponseDto,
     BlogPostResponseDto,
     CreateBlogPostDto,
+    CreateBlogPostFromGenerateTextRunDto,
 )
 
 blog_post_router = APIRouter(prefix="/blog-posts", tags=["blog-posts"])
@@ -47,13 +49,31 @@ async def find_blog_post(
     status_code=201,
     dependencies=[
         Depends(validate_new_blog_post_visibility),
-        Depends(validate_new_blog_post_generate_text_run),
     ],
 )
 async def create_blog_post(
     dto: CreateBlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> IdentityResponseDto:
     create_blog_post_result = await blog_post_service.create_blog_post(dto.to_input(), auth_user)
+    return IdentityResponseDto(identity=create_blog_post_result.identity)
+
+
+@blog_post_router.post(
+    "/from-generate-text-run",
+    status_code=201,
+    dependencies=[
+        Depends(validate_new_blog_post_from_run_availability),
+        Depends(validate_new_blog_post_from_run_visibility),
+    ],
+)
+async def create_blog_post_from_generate_text_run(
+    dto: CreateBlogPostFromGenerateTextRunDto,
+    auth_user: AuthUserDep,
+    blog_post_service: BlogPostServiceDep,
+) -> IdentityResponseDto:
+    create_blog_post_result = await blog_post_service.create_blog_post_from_generate_text_run(
+        dto.to_input(), auth_user
+    )
     return IdentityResponseDto(identity=create_blog_post_result.identity)
 
 

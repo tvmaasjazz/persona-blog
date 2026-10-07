@@ -41,6 +41,7 @@ class FindGenerateTextRunByIdentityResult(BaseModel):
     graph_version: str
     status: GenerateTextRunStatusType
     options: dict[str, Any]
+    persona_id: int | None
     llm_call_count: int
     input_tokens: int
     output_tokens: int

@@ -11,7 +11,12 @@ class CreateBlogPostInput(BaseModel):
     body: str
     is_public: bool
     published_at: datetime | None
-    generate_text_run_identity: UUID | None
+
+
+class CreateBlogPostFromGenerateTextRunInput(BaseModel):
+    generate_text_run_identity: UUID
+    is_public: bool
+    published_at: datetime | None
 
 
 class UpdateBlogPostInput(BaseModel):

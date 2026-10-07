@@ -3,7 +3,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
-from libs.blog_posts.inputs import CreateBlogPostInput, UpdateBlogPostInput
+from libs.blog_posts.inputs import (
+    CreateBlogPostFromGenerateTextRunInput,
+    CreateBlogPostInput,
+    UpdateBlogPostInput,
+)
 from libs.blog_posts.results import BlogPostDetailResult, FindUserBlogPostListResult
 from libs.blog_posts.utils import BlogPostValidationUtils
 
@@ -28,7 +32,6 @@ class CreateBlogPostDto(BaseModel):
     body: str
     is_public: bool = False
     published_at: datetime | None = None
-    generate_text_run_identity: UUID | None = None
 
     @field_validator("body")
     @classmethod
@@ -48,7 +51,24 @@ class CreateBlogPostDto(BaseModel):
             body=self.body,
             is_public=self.is_public,
             published_at=self.published_at.astimezone(UTC) if self.published_at else None,
+        )
+
+
+class CreateBlogPostFromGenerateTextRunDto(BaseModel):
+    generate_text_run_identity: UUID
+    is_public: bool = False
+    published_at: datetime | None = None
+
+    @field_validator("published_at")
+    @classmethod
+    def _validate_published_at(cls, published_at: datetime | None) -> datetime | None:
+        return _validate_timezone_aware(published_at)
+
+    def to_input(self) -> CreateBlogPostFromGenerateTextRunInput:
+        return CreateBlogPostFromGenerateTextRunInput(
             generate_text_run_identity=self.generate_text_run_identity,
+            is_public=self.is_public,
+            published_at=self.published_at.astimezone(UTC) if self.published_at else None,
         )
 
 
