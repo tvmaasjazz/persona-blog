@@ -7,9 +7,8 @@ The outline from here on. Detail gets added to each step as it comes up.
    - **Persona in generate text** — pass a persona into the generate text call and
      its prompts
    - **Persona CRUD — frontend**
-3. **Blog post CRUD — backend.** Open question: a generic `content_items` table with
-   `blog_post` beside it, or just `blog_post`. Writing gets its own `is_public` too: a
-   public persona can have public or private posts, a private persona only private ones
+3. **Blog post CRUD — backend**, in two PRs: Markdown output first (3a), then the
+   `content_item` and `blog_post` tables and CRUD (3b)
 4. **Blog post CRUD — frontend**
 5. **Testing and fine tuning** — try adding or removing steps in the generate text
    process, different models, different prompts
@@ -95,3 +94,77 @@ user prompt as sent. Persona revisions are a later concern.
 **Rules.** `fastapi-structure.md` › Prompts and the `Prompt` row in `python-naming.md`
 change to one class per step extending `Base<Domain>Prompt`, returning a
 `BuildPromptResult`.
+
+## Step 3a — Markdown blog post output
+
+Every step that writes the post body (draft, draft rewrite, humanize, humanize rewrite)
+writes Markdown, which is checked in code, never by another LLM call. The outline is a
+plan, not the post, so it's left alone.
+
+**Format.** A single `# Title` first, then `##` and `###` headings, paragraphs, bold
+and italic, lists, blockquotes, links and code. No raw HTML, no images for now. The
+rules text lives beside the check, in `graphs/blog_post/`, and the draft and humanize
+system templates use it, so the instructions and the check can't drift apart.
+
+**Output formats.** `BaseGenerateTextOutputFormat` has `normalize_output(output_text)`
+and `validate_output(output_text) -> ValidateOutputResult(error_messages)`.
+`BlogPostBodyOutputFormat` implements both:
+
+- **Normalize** fixes only what can't change the meaning: a single fence wrapping the
+  whole output, and surrounding whitespace. Never a preamble line.
+- **Validate** checks: one leading `# Title`, no preamble, no raw HTML, no images,
+  headings that don't skip levels.
+
+The parsing is `markdown-it-py` (new dependency), behind `MarkdownUtils` in
+`libs/core/utils/`, which the blog post service reuses in 3b to read the title.
+
+**Nodes.** The generate and rewrite node builders take an optional `output_format`.
+After the LLM returns, the node normalizes, then validates. On errors it retries once
+with the same system prompt and the problems added to the user prompt; a second
+failure raises `GenerateTextOutputInvalidException` (a 503, like a provider failure)
+and the run fails. The retry count
+is a `GenerateTextSettings` setting, default 1. The state stores the normalized text;
+`pb_llm_call.response_text` keeps the raw response.
+
+**Rules.** `python-naming.md` gains an `OutputFormat` suffix row, and
+`fastapi-structure.md` › LangGraph workflows describes output formats.
+
+## Step 3b — Content items and blog post CRUD
+
+Two tables, one router per content type. `content_item` holds only what's true of any
+content; the writing lives on the type's table.
+
+**`pb_content_item`**, on top of `BaseOrm` (owner is `created_by_id`):
+
+| Column         | Type                               | Notes                                  |
+| -------------- | ---------------------------------- | -------------------------------------- |
+| `persona_id`   | BIGINT, NOT NULL, FK `pb_persona`  | Must be the caller's own persona       |
+| `content_type` | enum `pb_content_type` (`BLOG_POST`) | Its own enum, not `pb_text_type`     |
+| `is_public`    | bool, default false                | Only allowed when the persona is public |
+| `published_at` | timestamp, nullable                | Null means draft                       |
+
+**`pb_blog_post`**:
+
+| Column            | Type                                                       | Notes    |
+| ----------------- | ---------------------------------------------------------- | -------- |
+| `content_item_id` | BIGINT, NOT NULL, UNIQUE, FK `pb_content_item` ON DELETE CASCADE | Exists only as part of its content item |
+| `title`           | text, required                                             |          |
+| `subtitle`        | text, nullable                                             |          |
+| `body`            | text, required                                             | Markdown |
+
+**`pb_generate_text_run`** gains `content_item_id` (nullable FK, indexed). The run
+points at the content item because one post will be shaped by several runs over time.
+
+**Services.** `ContentItemService` (`libs/content_items/`) owns the content item row:
+create, access, visibility, publishing, soft delete. `BlogPostService`
+(`libs/blog_posts/`) owns the blog post row and takes `ContentItemService` through
+`__init__`. The `/blog-posts` router calls only `BlogPostService`. A cross-type feed
+later gets its own `content_items` router.
+
+**Saving from a run.** `POST /blog-posts` takes an optional
+`generate_text_run_identity`; the run must be the caller's, finished, and written as the
+same persona, and gets linked. The frontend prefills title and body from the run.
+
+**Visibility.** A validation guard rejects `is_public` on a private persona's content.
+Reads compute it: others see a post only when it's public, published, and its persona
+is public, so a persona turning private hides its posts without a cascading write.
