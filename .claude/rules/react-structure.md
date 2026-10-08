@@ -209,6 +209,13 @@ Validation:
   `setFieldServerError(formApi, '<field>', message)`. `FormField` clears it when the
   user edits the field. Any other API error is a toast (› Toasts).
 
+Fields reused across forms, like the blog post publishing controls, are a field group:
+`withFieldGroup` from `use-app-form.ts`, defined in the feature's `components/` with
+its `defaultValues`. A parent form nests the values under a key and renders
+`<PublishingFields form={form} fields="publishing" />`, so the same fields serve more
+than one form. The group's Zod schema is exported from the feature's schema file and
+nested into each parent's schema.
+
 A new kind of control, such as a select or date picker, is a new field component in
 `components/form/`, registered in `use-app-form.ts`. For a form shape the app doesn't
 have yet, such as array fields, fields that depend on each other, or async
