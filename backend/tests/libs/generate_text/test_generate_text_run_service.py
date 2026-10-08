@@ -323,7 +323,7 @@ async def test_find_run_by_identity_null_persona_id_returns_null_persona_identit
     assert find_run_result.persona_identity is None
 
 
-async def test_find_run_by_identity_soft_deleted_persona_still_returns_persona_identity(
+async def test_find_run_by_identity_soft_deleted_persona_returns_null_persona_identity(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
@@ -342,7 +342,7 @@ async def test_find_run_by_identity_soft_deleted_persona_still_returns_persona_i
     find_run_result = await generate_text_run_service.find_run_by_identity(run_record.identity)
 
     assert find_run_result.persona_id == persona_record.id
-    assert find_run_result.persona_identity == persona_record.identity
+    assert find_run_result.persona_identity is None
 
 
 async def test_find_run_by_identity_not_found_raises_not_found_exception(
