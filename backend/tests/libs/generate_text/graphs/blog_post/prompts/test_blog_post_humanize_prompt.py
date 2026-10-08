@@ -31,14 +31,12 @@ def test_build_generate_prompt_omits_fields_the_step_does_not_use() -> None:
     state = build_generate_text_state(
         persona_bio="Writes about sourdough.",
         persona_background="Former baker.",
-        persona_expertise="Fermentation.",
     )
 
     build_prompt_result = BlogPostHumanizePrompt().build_generate_prompt(state)
 
     assert "Writes about sourdough." not in build_prompt_result.system_prompt
     assert "Former baker." not in build_prompt_result.system_prompt
-    assert "Fermentation." not in build_prompt_result.system_prompt
 
 
 def test_build_generate_prompt_puts_tone_and_target_audience_in_system_prompt() -> None:

@@ -18,7 +18,6 @@ def test_build_generate_prompt_puts_persona_fields_in_system_prompt() -> None:
         persona_name="Marta Quill",
         persona_bio="Writes about sourdough.",
         persona_background="Former baker.",
-        persona_expertise="Fermentation.",
         persona_writing_style="Short punchy sentences.",
         persona_sample_writing="The starter bubbled all night.",
     )
@@ -28,7 +27,6 @@ def test_build_generate_prompt_puts_persona_fields_in_system_prompt() -> None:
     assert "Marta Quill" in build_prompt_result.system_prompt
     assert "Writes about sourdough." in build_prompt_result.system_prompt
     assert "Former baker." in build_prompt_result.system_prompt
-    assert "Fermentation." in build_prompt_result.system_prompt
     assert "Short punchy sentences." in build_prompt_result.system_prompt
     assert "The starter bubbled all night." in build_prompt_result.system_prompt
 
