@@ -9,6 +9,7 @@ from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.llm_call import LlmCallOrm
+from libs.database.orm.persona import PersonaOrm
 from libs.generate_text.inputs import CreateGenerateTextRunInput
 from libs.generate_text.results import (
     CreateGenerateTextRunResult,
@@ -94,13 +95,24 @@ class GenerateTextRunService:
 
     async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
         async with self._db_session_factory() as db_session:
-            query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.identity == run_identity)
+            # The persona joins as a Core table, which the soft-delete rule leaves alone: a
+            # run still reports the persona it was made with after that persona is deleted.
+            persona_table = PersonaOrm.__table__
+            query = (
+                select(GenerateTextRunOrm, persona_table.c.identity)
+                .outerjoin(persona_table, persona_table.c.id == GenerateTextRunOrm.persona_id)
+                .where(GenerateTextRunOrm.identity == run_identity)
+            )
             query_result = await db_session.execute(query)
-            run_record = query_result.scalar_one_or_none()
+            query_row = query_result.one_or_none()
 
-        if run_record is None:
+        if query_row is None:
             raise NotFoundException(f"Generate text run {run_identity} not found")
-        return FindGenerateTextRunByIdentityResult.model_validate(run_record, from_attributes=True)
+        run_record, persona_identity = query_row
+        find_run_result = FindGenerateTextRunByIdentityResult.model_validate(
+            run_record, from_attributes=True
+        )
+        return find_run_result.model_copy(update={"persona_identity": persona_identity})
 
     async def _apply_rollup(self, db_session: AsyncSession, run_record: GenerateTextRunOrm) -> None:
         """Sums this run's pb_llm_call rows onto the run row itself. Aggregating by
