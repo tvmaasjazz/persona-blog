@@ -19,23 +19,27 @@ The outline from here on. Detail gets added to each step as it comes up.
    process, different models, different prompts
 7. **Logging** — proper logging for the endpoints and for the graph
 8. **Log tracking service** — set it up and test it
+9. setup for initial deploy
+
+- setup basic plan architecture - as in unlimited for me, then free tier can generate one persona and one blog post, and I can grant extended trial to users that I choose who can create two personas and 10 blog posts
+- then setup railway and deploy fe and be (at subdomain of tvfeedme.com or right away at a more legit domain?)
 
 ## Step 1 — Persona CRUD backend
 
 Table `pb_persona`, on top of `BaseOrm`'s columns. The owner is `created_by_id`, the
 same as `pb_generate_text_run`, so there's no separate `user_id`.
 
-| Column                    | Type           | Notes                                                    |
-| ------------------------- | -------------- | -------------------------------------------------------- |
-| `name`                    | text, required | Pen name; unique per owner among live rows               |
-| `bio`                     | text, required | Short public summary                                     |
-| `avatar_url`              | text, nullable |                                                          |
-| `background`              | text, nullable | Backstory that shapes their view                         |
-| `writing_style`           | text, nullable | Sentence length, vocabulary, formatting habits           |
-| `default_tone`            | text, nullable | Prefills tone when asking the persona to write something |
-| `default_target_audience` | text, nullable | Prefills audience the same way                           |
-| `sample_writing`          | text, nullable | A passage in their voice for the model to imitate        |
-| `is_public`               | bool, default false | Others can read the profile; later, persona search  |
+| Column                    | Type                | Notes                                                    |
+| ------------------------- | ------------------- | -------------------------------------------------------- |
+| `name`                    | text, required      | Pen name; unique per owner among live rows               |
+| `bio`                     | text, required      | Short public summary                                     |
+| `avatar_url`              | text, nullable      |                                                          |
+| `background`              | text, nullable      | Backstory that shapes their view                         |
+| `writing_style`           | text, nullable      | Sentence length, vocabulary, formatting habits           |
+| `default_tone`            | text, nullable      | Prefills tone when asking the persona to write something |
+| `default_target_audience` | text, nullable      | Prefills audience the same way                           |
+| `sample_writing`          | text, nullable      | A passage in their voice for the model to imitate        |
+| `is_public`               | bool, default false | Others can read the profile; later, persona search       |
 
 Every field is open text. The frontend (step 2b) shows a description with an example for
 each field.
@@ -58,11 +62,11 @@ from that persona's fields.
 
 **Request.** `GenerateBlogPostDto` drops `persona_info` and gains:
 
-| Field              | Type             | Notes                                                  |
-| ------------------ | ---------------- | ------------------------------------------------------ |
-| `persona_identity` | UUID, required   | One of the caller's own personas; anyone else's is 404 |
-| `tone`             | text, nullable   | The frontend prefills it from `default_tone`           |
-| `target_audience`  | text, nullable   | Prefilled from `default_target_audience`               |
+| Field              | Type           | Notes                                                  |
+| ------------------ | -------------- | ------------------------------------------------------ |
+| `persona_identity` | UUID, required | One of the caller's own personas; anyone else's is 404 |
+| `tone`             | text, nullable | The frontend prefills it from `default_tone`           |
+| `target_audience`  | text, nullable | Prefilled from `default_target_audience`               |
 
 **Before the graph.** A dependency, `get_generate_text_persona`, loads the persona on
 its own short session and closes it before the route runs, so no connection sits idle
@@ -110,12 +114,12 @@ shortcut may come back once posts exist.
 
 **Routes**, all behind `RequireAuth`:
 
-| Path                              | Page                                                   |
-| --------------------------------- | ------------------------------------------------------ |
-| `/personas`                       | Your personas as cards, a **New persona** button, and an empty state |
-| `/personas/new`                   | Create form                                            |
+| Path                              | Page                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------- |
+| `/personas`                       | Your personas as cards, a **New persona** button, and an empty state            |
+| `/personas/new`                   | Create form                                                                     |
 | `/personas/:personaIdentity`      | Read-only profile with **Edit** and **Delete**. Later, "Write a post" goes here |
-| `/personas/:personaIdentity/edit` | The same form, prefilled                               |
+| `/personas/:personaIdentity/edit` | The same form, prefilled                                                        |
 
 **Form:** one shared form component (`persona-form.tsx`) that create and edit both
 render, in three sections:
@@ -140,14 +144,14 @@ the list.
 **Backend validation** added with this step. `PersonaDto` strips whitespace from name
 and bio and requires both to be non-empty. Lengths:
 
-| Field                                     | Limit                        |
-| ----------------------------------------- | ---------------------------- |
-| name                                      | 80                           |
-| bio                                       | 500                          |
-| background, writing_style                 | 2000                         |
-| default_tone, default_target_audience     | 200                          |
-| sample_writing                            | 10000                        |
-| avatar_url                                | 2048, must be `http(s)://`   |
+| Field                                 | Limit                      |
+| ------------------------------------- | -------------------------- |
+| name                                  | 80                         |
+| bio                                   | 500                        |
+| background, writing_style             | 2000                       |
+| default_tone, default_target_audience | 200                        |
+| sample_writing                        | 10000                      |
+| avatar_url                            | 2048, must be `http(s)://` |
 
 The form's Zod schema mirrors these limits.
 
@@ -195,21 +199,21 @@ content; the writing lives on the type's table.
 
 **`pb_content_item`**, on top of `BaseOrm` (owner is `created_by_id`):
 
-| Column         | Type                               | Notes                                  |
-| -------------- | ---------------------------------- | -------------------------------------- |
-| `persona_id`   | BIGINT, NOT NULL, FK `pb_persona`  | Must be the caller's own persona       |
-| `content_type` | enum `pb_content_type` (`BLOG_POST`) | Its own enum, not `pb_text_type`     |
-| `is_public`    | bool, default false                | Only allowed when the persona is public |
-| `published_at` | timestamp, nullable                | Null is a draft; past is published; future is scheduled |
+| Column         | Type                                 | Notes                                                   |
+| -------------- | ------------------------------------ | ------------------------------------------------------- |
+| `persona_id`   | BIGINT, NOT NULL, FK `pb_persona`    | Must be the caller's own persona                        |
+| `content_type` | enum `pb_content_type` (`BLOG_POST`) | Its own enum, not `pb_text_type`                        |
+| `is_public`    | bool, default false                  | Only allowed when the persona is public                 |
+| `published_at` | timestamp, nullable                  | Null is a draft; past is published; future is scheduled |
 
 **`pb_blog_post`**:
 
-| Column            | Type                                                       | Notes    |
-| ----------------- | ---------------------------------------------------------- | -------- |
-| `content_item_id` | BIGINT, NOT NULL, UNIQUE, FK `pb_content_item` ON DELETE CASCADE | Exists only as part of its content item |
-| `title`           | text, required                                             |          |
-| `subtitle`        | text, nullable                                             |          |
-| `body`            | text, required                                             | Markdown, without the title and subtitle |
+| Column            | Type                                                             | Notes                                    |
+| ----------------- | ---------------------------------------------------------------- | ---------------------------------------- |
+| `content_item_id` | BIGINT, NOT NULL, UNIQUE, FK `pb_content_item` ON DELETE CASCADE | Exists only as part of its content item  |
+| `title`           | text, required                                                   |                                          |
+| `subtitle`        | text, nullable                                                   |                                          |
+| `body`            | text, required                                                   | Markdown, without the title and subtitle |
 
 **`pb_generate_text_run`** gains `content_item_id` (nullable FK, indexed). The run
 points at the content item because one post will be shaped by several runs over time.
