@@ -64,6 +64,16 @@ async def test_generate_blog_post_default_options_returns_completed(
         "last_step": "GENERATE_DRAFT",
         "graph_name": "blog_post",
         "graph_version": "2026-10-07.2",
+        "persona_identity": persona_identity,
+        "prompt_text": "Write about sourdough starters.",
+        "tone": None,
+        "target_audience": None,
+        "additional_context": None,
+        "options": {
+            "outline": None,
+            "draft": {"is_enabled": True, "is_auto_approved": True},
+            "humanize": None,
+        },
         "content": "# Finished\n\nA finished blog post.",
         "character_count": 33,
         "llm_call_count": 0,
@@ -134,6 +144,16 @@ async def test_generate_blog_post_step_not_auto_approved_returns_awaiting_review
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
         "graph_version": "2026-10-07.2",
+        "persona_identity": persona_identity,
+        "prompt_text": "Write about sourdough starters.",
+        "tone": None,
+        "target_audience": None,
+        "additional_context": None,
+        "options": {
+            "outline": None,
+            "draft": {"is_enabled": True, "is_auto_approved": False},
+            "humanize": None,
+        },
         "content": "# Draft\n\nA draft.",
         "character_count": 17,
         "llm_call_count": 0,
@@ -301,6 +321,16 @@ async def test_find_generate_text_run_returns_run_response(
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
         "graph_version": "2026-10-07.2",
+        "persona_identity": persona_identity,
+        "prompt_text": "Write about sourdough starters.",
+        "tone": None,
+        "target_audience": None,
+        "additional_context": None,
+        "options": {
+            "outline": None,
+            "draft": {"is_enabled": True, "is_auto_approved": False},
+            "humanize": None,
+        },
         "content": "# Draft\n\nA draft.",
         "character_count": 17,
         "llm_call_count": 0,
@@ -308,6 +338,90 @@ async def test_find_generate_text_run_returns_run_response(
         "output_tokens": 0,
         "cost_usd": "0E-10",
         "started_at": ANY,
+        "finished_at": None,
+    }
+
+
+async def test_generate_blog_post_echoes_every_input_in_response(
+    api_client: AsyncClient, signed_in_user: UserOrm, llm_service_stub: LlmServiceStub
+) -> None:
+    persona_identity = await _create_persona(api_client)
+    llm_service_stub.complete_result = build_llm_completion_result(
+        content="# Finished\n\nA finished blog post."
+    )
+
+    generate_blog_post_response = await api_client.post(
+        "/generate-text/blog-post",
+        json={
+            "prompt_text": "Write about sourdough starters.",
+            "persona_identity": persona_identity,
+            "tone": "Playful",
+            "target_audience": "Home bakers",
+            "additional_context": "Mention rye flour.",
+            "options": {
+                "outline": {"is_enabled": False, "is_auto_approved": True},
+                "draft": {"is_enabled": True, "is_auto_approved": True},
+            },
+        },
+    )
+
+    response_body = generate_blog_post_response.json()
+    assert generate_blog_post_response.status_code == 200
+    assert response_body["persona_identity"] == persona_identity
+    assert response_body["prompt_text"] == "Write about sourdough starters."
+    assert response_body["tone"] == "Playful"
+    assert response_body["target_audience"] == "Home bakers"
+    assert response_body["additional_context"] == "Mention rye flour."
+    assert response_body["options"] == {
+        "outline": {"is_enabled": False, "is_auto_approved": True},
+        "draft": {"is_enabled": True, "is_auto_approved": True},
+        "humanize": None,
+    }
+
+
+async def test_find_generate_text_run_failed_run_hides_error_fields(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=signed_in_user.id,
+        status=GenerateTextRunStatusType.FAILED,
+        prompt_text="Write about sourdough starters.",
+        options={"draft": {"is_enabled": True, "is_auto_approved": True}},
+        error_code="ValueError",
+        error_message="secret upstream failure text",
+    )
+    await db_session.commit()
+
+    find_generate_text_run_response = await api_client.get(
+        f"/generate-text/runs/{run_record.identity}"
+    )
+
+    assert find_generate_text_run_response.status_code == 200
+    assert find_generate_text_run_response.json() == {
+        "run_identity": str(run_record.identity),
+        "text_type": "BLOG_POST",
+        "status": "FAILED",
+        "last_step": None,
+        "graph_name": "blog_post",
+        "graph_version": "test-version",
+        "persona_identity": None,
+        "prompt_text": "Write about sourdough starters.",
+        "tone": None,
+        "target_audience": None,
+        "additional_context": None,
+        "options": {
+            "outline": None,
+            "draft": {"is_enabled": True, "is_auto_approved": True},
+            "humanize": None,
+        },
+        "content": "",
+        "character_count": 0,
+        "llm_call_count": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": "0E-10",
+        "started_at": None,
         "finished_at": None,
     }
 
@@ -364,6 +478,16 @@ async def test_resume_generate_text_approval_returns_completed(
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
         "graph_version": "2026-10-07.2",
+        "persona_identity": persona_identity,
+        "prompt_text": "Write about sourdough starters.",
+        "tone": None,
+        "target_audience": None,
+        "additional_context": None,
+        "options": {
+            "outline": None,
+            "draft": {"is_enabled": True, "is_auto_approved": False},
+            "humanize": None,
+        },
         "content": "# Draft\n\nA draft.",
         "character_count": 17,
         "llm_call_count": 0,
@@ -397,6 +521,16 @@ async def test_resume_generate_text_rejection_rewrites_and_returns_awaiting_revi
         "last_step": "REVIEW_DRAFT",
         "graph_name": "blog_post",
         "graph_version": "2026-10-07.2",
+        "persona_identity": persona_identity,
+        "prompt_text": "Write about sourdough starters.",
+        "tone": None,
+        "target_audience": None,
+        "additional_context": None,
+        "options": {
+            "outline": None,
+            "draft": {"is_enabled": True, "is_auto_approved": False},
+            "humanize": None,
+        },
         "content": "# Draft\n\nA revised draft.",
         "character_count": 25,
         "llm_call_count": 0,

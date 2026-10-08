@@ -69,6 +69,8 @@ async def insert_generate_text_run_row(
     additional_context: str | None = None,
     options: dict[str, Any] | None = None,
     content_item_id: int | None = None,
+    error_code: str | None = None,
+    error_message: str | None = None,
 ) -> GenerateTextRunOrm:
     run_record = GenerateTextRunOrm(
         text_type=text_type,
@@ -82,6 +84,8 @@ async def insert_generate_text_run_row(
         additional_context=additional_context,
         options=options if options is not None else {},
         content_item_id=content_item_id,
+        error_code=error_code,
+        error_message=error_message,
         created_by_id=created_by_id,
         updated_by_id=created_by_id,
     )

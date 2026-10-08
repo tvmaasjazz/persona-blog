@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -12,7 +13,10 @@ from libs.generate_text.results import FindGenerateTextRunByIdentityResult
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.types import GenerateTextRunStatusType, TextType
 from tests.factories.auth import build_auth_user
-from tests.factories.generate_text import build_create_generate_text_run_input
+from tests.factories.generate_text import (
+    build_create_generate_text_run_input,
+    insert_generate_text_run_row,
+)
 from tests.factories.llm import insert_llm_call_row
 from tests.factories.personas import insert_persona_row
 from tests.factories.users import insert_user_row
@@ -258,10 +262,18 @@ async def test_find_run_by_identity_returns_result(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
+    persona_record = await insert_persona_row(db_session, created_by_id=auth_user.id)
+    await db_session.commit()
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     create_generate_text_run_input = build_create_generate_text_run_input(
-        graph_name="blog_post", graph_version="2026-09-24.1", persona_id=persona_id
+        graph_name="blog_post",
+        graph_version="2026-09-24.1",
+        prompt_text="Write about sourdough starters.",
+        persona_id=persona_record.id,
+        tone="Playful",
+        target_audience="Home bakers",
+        additional_context="Mention rye flour.",
+        options={"draft": {"is_enabled": True, "is_auto_approved": False}},
     )
     create_run_result = await generate_text_run_service.create_run(
         create_generate_text_run_input, auth_user
@@ -278,8 +290,13 @@ async def test_find_run_by_identity_returns_result(
         graph_name="blog_post",
         graph_version="2026-09-24.1",
         status=GenerateTextRunStatusType.PENDING,
-        options={},
-        persona_id=persona_id,
+        prompt_text="Write about sourdough starters.",
+        tone="Playful",
+        target_audience="Home bakers",
+        additional_context="Mention rye flour.",
+        options={"draft": {"is_enabled": True, "is_auto_approved": False}},
+        persona_id=persona_record.id,
+        persona_identity=persona_record.identity,
         llm_call_count=0,
         input_tokens=0,
         output_tokens=0,
@@ -288,6 +305,44 @@ async def test_find_run_by_identity_returns_result(
         finished_at=None,
         created_by_id=auth_user.id,
     )
+
+
+async def test_find_run_by_identity_null_persona_id_returns_null_persona_identity(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, persona_id=None
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    find_run_result = await generate_text_run_service.find_run_by_identity(run_record.identity)
+
+    assert find_run_result.persona_id is None
+    assert find_run_result.persona_identity is None
+
+
+async def test_find_run_by_identity_soft_deleted_persona_still_returns_persona_identity(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    persona_record = await insert_persona_row(
+        db_session,
+        created_by_id=auth_user.id,
+        deleted_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        deleted_by_id=auth_user.id,
+    )
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, persona_id=persona_record.id
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    find_run_result = await generate_text_run_service.find_run_by_identity(run_record.identity)
+
+    assert find_run_result.persona_id == persona_record.id
+    assert find_run_result.persona_identity == persona_record.identity
 
 
 async def test_find_run_by_identity_not_found_raises_not_found_exception(
