@@ -68,8 +68,11 @@ route file in `routes/` composes them, the way a backend lib composes two servic
 instead of one domain importing another. What more than one feature needs moves to
 `components/` or `lib/`.
 
-`routes/` files are thin: they lay out feature components and read route params. No
-API calls and no business logic.
+`routes/` files are thin: they lay out feature components and read route and search
+params. A route never calls `apiClient` and holds no business logic. It may call
+features' query hooks to pass one feature's data into another as props, or to choose
+which feature's component to render, which is how it composes them: `write-page.tsx`
+reads `usePersonaList()` and hands the personas to the generate form.
 
 No barrel `index.ts` files. Import from the file that defines the thing.
 
@@ -195,7 +198,9 @@ A feature's form has three parts. `features/personas/` is the example:
   `onSubmit` that:
   - parses the values
   - awaits the mutation's `mutateAsync`, so the submit button stays disabled while
-    the request runs
+    the request runs. A submit that can take long, like generating text, gives
+    `SubmitButton` a `pendingLabel` ("Writing…") and a `pendingHint` saying how long,
+    rather than a hand-built button
   - then toasts and navigates
 
 Validation:
