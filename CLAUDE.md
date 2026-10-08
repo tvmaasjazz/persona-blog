@@ -117,6 +117,17 @@ Split work across parallel agents only along files they don't share.
   Then two or three run in parallel on separate test files, each running only its
   own files: never the full suite, never `pytest -m migration`, since they share the
   `pb_test` database. Run the full suite and the migration test once at the end.
+- **Frontend.** A backend change the feature needs lands first, then
+  `npm run api:types` regenerates the types before any `react-coder` starts. One
+  `react-coder` writes the shared layer: every query and mutation hook, new field
+  components in `components/form/`, components more than one page uses, and the wiring
+  (routes in `app/router.tsx` pointing at stub pages, and nav links). Then two or three
+  run in parallel, split by page. Each owns its pages in `routes/` and the components
+  only those pages use, edits nothing else, and gets the shared layer's file list and
+  exports as its contract. Each runs `npm run fmt -- <files>` and
+  `npm run lint -- <files>` on its own files only, and reads a build error in a file
+  it doesn't own as another agent's work in progress. Run `fmt`, `lint` and `build`
+  once at the end.
 
 ## Pull requests
 

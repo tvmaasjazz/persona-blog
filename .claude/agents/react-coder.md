@@ -72,7 +72,9 @@ Run Bash only from `frontend/`, and only these:
 
 ```bash
 npm run fmt
+npm run fmt -- <files>
 npm run lint
+npm run lint -- <files>
 npm run build
 npx shadcn@latest add <component> --dry-run
 npx shadcn@latest add <component>
@@ -81,6 +83,12 @@ npx shadcn@latest add <component>
 After writing, run `npm run fmt`, then `npm run lint` and `npm run build`, and fix
 what they report in the files you wrote. Don't start the dev server, and don't run `npm run api:types`:
 it needs the API running, so report that the types need regenerating instead.
+
+When the task says other agents are writing in parallel (`CLAUDE.md` › Running agents
+in parallel), touch only the files the task gives you. Run `fmt` and `lint` with your
+files listed, never bare, so you don't rewrite theirs. A build error in a file you
+don't own is their work in progress: leave it, and report it only if it comes from
+something you wrote.
 
 ## How to work
 
