@@ -170,11 +170,13 @@ both rows). A post's persona never changes after create.
 current time, schedule sends a future one, unpublish sends null. Reads compare it to
 now, so a scheduled post appears when its time passes with no job.
 
-**Saving from a run.** Only `POST /blog-posts` takes `generate_text_run_identity`; the
-run must be the caller's, finished, written as the same persona, and not already linked
-(409). The frontend prefills title, subtitle and body from the run's output, split the
-same way `MarkdownUtils.split_post()` does: either on the frontend or as fields on the
-run response, decided in step 4.
+**Saving from a run.** Its own route, `POST /blog-posts/from-generate-text-run`, taking
+only `generate_text_run_identity`, `is_public` and `published_at`. The run must be the
+caller's, finished, and not already saved (409). The server reads the run's final text,
+splits it with `MarkdownUtils.split_post()` into title, subtitle and body, takes the
+persona from the run, and links the run. Output that isn't in the post format (such as
+a run from before Step 3a) is a 422. The plain `POST /blog-posts` is for posts written
+by hand and takes no run. The frontend never splits Markdown.
 
 **Body checks.** The create and update DTOs check the body with
 `BlogPostValidationUtils`: no H1, only `##`/`###` without skipped levels, no raw HTML,

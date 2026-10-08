@@ -2,9 +2,10 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from libs.auth.results import AuthUser
+from libs.blog_posts.exceptions import BlogPostGenerateTextRunOutputInvalidException
+from libs.blog_posts.inputs import CreateBlogPostFromGenerateTextRunInput
 from libs.blog_posts.results import (
     BlogPostContentItemResult,
     BlogPostDetailResult,
@@ -16,7 +17,8 @@ from libs.content_items.services import ContentItemService
 from libs.content_items.types import ContentType
 from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.database.orm import BlogPostOrm, ContentItemOrm, GenerateTextRunOrm
-from libs.generate_text.types import GenerateTextRunStatusType
+from libs.generate_text.services import GenerateTextRunService, GenerateTextStepService
+from libs.generate_text.types import GenerateTextRunStatusType, GenerateTextStepStatusType
 from libs.personas.services import PersonaService
 from tests.factories.auth import build_auth_user
 from tests.factories.blog_posts import (
@@ -26,16 +28,23 @@ from tests.factories.blog_posts import (
     insert_blog_post_row,
 )
 from tests.factories.content_items import insert_content_item_row
-from tests.factories.generate_text import insert_generate_text_run_row
+from tests.factories.generate_text import (
+    insert_generate_text_run_row,
+    insert_generate_text_step_row,
+)
 from tests.factories.personas import insert_persona_row
 from tests.factories.users import insert_user_row
 
 
-def _build_blog_post_service(db_session: AsyncSession) -> BlogPostService:
+def _build_blog_post_service(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> BlogPostService:
     return BlogPostService(
         db_session=db_session,
         content_item_service=ContentItemService(db_session=db_session),
         persona_service=PersonaService(db_session=db_session),
+        generate_text_run_service=GenerateTextRunService(db_session_factory=db_session_factory),
+        generate_text_step_service=GenerateTextStepService(db_session_factory=db_session_factory),
     )
 
 
@@ -72,20 +81,14 @@ async def _insert_blog_post(
     return content_item_record, blog_post_record
 
 
-async def _insert_auth_user(db_session: AsyncSession) -> AuthUser:
-    user_record = await insert_user_row(db_session)
-    await db_session.commit()
-    return build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
-
-
 async def test_create_blog_post_persists_content_item_and_blog_post_rows(
-    db_session: AsyncSession,
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
     persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
     create_blog_post_input = build_create_blog_post_input(
         persona_identity=persona_record.identity,
         title="A Persisted Post",
@@ -112,7 +115,7 @@ async def test_create_blog_post_persists_content_item_and_blog_post_rows(
 
 
 async def test_create_blog_post_someone_elses_persona_raises_not_found_exception(
-    db_session: AsyncSession,
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -121,15 +124,15 @@ async def test_create_blog_post_someone_elses_persona_raises_not_found_exception
     )
     persona_record = await insert_persona_row(db_session, created_by_id=owner_record.id)
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
     create_blog_post_input = build_create_blog_post_input(persona_identity=persona_record.identity)
 
     with pytest.raises(NotFoundException):
         await blog_post_service.create_blog_post(create_blog_post_input, other_auth_user)
 
 
-async def test_create_blog_post_with_generate_text_run_identity_links_run(
-    db_session: AsyncSession,
+async def test_create_blog_post_from_generate_text_run_persists_rows_and_links_run(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
@@ -140,32 +143,229 @@ async def test_create_blog_post_with_generate_text_run_identity_links_run(
         persona_id=persona_record.id,
         status=GenerateTextRunStatusType.COMPLETED,
     )
+    await insert_generate_text_step_row(
+        db_session,
+        run_id=generate_text_run_record.id,
+        created_by_id=user_record.id,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+        output_text=(
+            "# My Great Title\n\n*A subtitle that explains more*\n\n" + VALID_BLOG_POST_BODY
+        ),
+    )
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
-    create_blog_post_input = build_create_blog_post_input(
-        persona_identity=persona_record.identity,
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
+    create_blog_post_from_generate_text_run_input = CreateBlogPostFromGenerateTextRunInput(
         generate_text_run_identity=generate_text_run_record.identity,
+        is_public=False,
+        published_at=None,
     )
 
-    create_blog_post_result = await blog_post_service.create_blog_post(
-        create_blog_post_input, auth_user
+    create_blog_post_result = await blog_post_service.create_blog_post_from_generate_text_run(
+        create_blog_post_from_generate_text_run_input, auth_user
     )
 
     blog_post_query = select(BlogPostOrm).where(
         BlogPostOrm.identity == create_blog_post_result.identity
     )
     blog_post_record = await db_session.scalar(blog_post_query)
+    assert blog_post_record is not None
+    assert blog_post_record.title == "My Great Title"
+    assert blog_post_record.subtitle == "A subtitle that explains more"
+    assert blog_post_record.body == VALID_BLOG_POST_BODY
+    content_item_query = select(ContentItemOrm).where(
+        ContentItemOrm.id == blog_post_record.content_item_id
+    )
+    content_item_record = await db_session.scalar(content_item_query)
+    assert content_item_record is not None
+    assert content_item_record.persona_id == persona_record.id
+    assert content_item_record.content_type == ContentType.BLOG_POST
     updated_run_query = select(GenerateTextRunOrm).where(
         GenerateTextRunOrm.id == generate_text_run_record.id
     )
     updated_run_record = await db_session.scalar(updated_run_query)
-    assert blog_post_record is not None
     assert updated_run_record is not None
     assert updated_run_record.content_item_id == blog_post_record.content_item_id
 
 
+async def test_create_blog_post_from_generate_text_run_no_subtitle_returns_none_subtitle(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
+    generate_text_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=user_record.id,
+        persona_id=persona_record.id,
+        status=GenerateTextRunStatusType.COMPLETED,
+    )
+    await insert_generate_text_step_row(
+        db_session,
+        run_id=generate_text_run_record.id,
+        created_by_id=user_record.id,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+        output_text=f"# My Great Title\n\n{VALID_BLOG_POST_BODY}",
+    )
+    await db_session.commit()
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
+    create_blog_post_from_generate_text_run_input = CreateBlogPostFromGenerateTextRunInput(
+        generate_text_run_identity=generate_text_run_record.identity,
+        is_public=False,
+        published_at=None,
+    )
+
+    create_blog_post_result = await blog_post_service.create_blog_post_from_generate_text_run(
+        create_blog_post_from_generate_text_run_input, auth_user
+    )
+
+    blog_post_query = select(BlogPostOrm).where(
+        BlogPostOrm.identity == create_blog_post_result.identity
+    )
+    blog_post_record = await db_session.scalar(blog_post_query)
+    assert blog_post_record is not None
+    assert blog_post_record.title == "My Great Title"
+    assert blog_post_record.subtitle is None
+    assert blog_post_record.body == VALID_BLOG_POST_BODY
+
+
+async def test_create_blog_post_from_generate_text_run_no_title_raises_invalid_exception(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
+    generate_text_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=user_record.id,
+        persona_id=persona_record.id,
+        status=GenerateTextRunStatusType.COMPLETED,
+    )
+    await insert_generate_text_step_row(
+        db_session,
+        run_id=generate_text_run_record.id,
+        created_by_id=user_record.id,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+        output_text="Just a paragraph with no heading at all, so there is nothing to split.",
+    )
+    await db_session.commit()
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
+    create_blog_post_from_generate_text_run_input = CreateBlogPostFromGenerateTextRunInput(
+        generate_text_run_identity=generate_text_run_record.identity,
+        is_public=False,
+        published_at=None,
+    )
+
+    with pytest.raises(BlogPostGenerateTextRunOutputInvalidException):
+        await blog_post_service.create_blog_post_from_generate_text_run(
+            create_blog_post_from_generate_text_run_input, auth_user
+        )
+
+
+async def test_create_blog_post_from_generate_text_run_empty_body_raises_output_invalid_exception(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
+    generate_text_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=user_record.id,
+        persona_id=persona_record.id,
+        status=GenerateTextRunStatusType.COMPLETED,
+    )
+    await insert_generate_text_step_row(
+        db_session,
+        run_id=generate_text_run_record.id,
+        created_by_id=user_record.id,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+        output_text="# Only A Title",
+    )
+    await db_session.commit()
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
+    create_blog_post_from_generate_text_run_input = CreateBlogPostFromGenerateTextRunInput(
+        generate_text_run_identity=generate_text_run_record.identity,
+        is_public=False,
+        published_at=None,
+    )
+
+    with pytest.raises(BlogPostGenerateTextRunOutputInvalidException):
+        await blog_post_service.create_blog_post_from_generate_text_run(
+            create_blog_post_from_generate_text_run_input, auth_user
+        )
+
+
+async def test_create_blog_post_from_generate_text_run_h4_in_body_raises_output_invalid_exception(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
+    generate_text_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=user_record.id,
+        persona_id=persona_record.id,
+        status=GenerateTextRunStatusType.COMPLETED,
+    )
+    await insert_generate_text_step_row(
+        db_session,
+        run_id=generate_text_run_record.id,
+        created_by_id=user_record.id,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+        output_text=(
+            "# My Great Title\n\n"
+            "A paragraph that opens the post with some context.\n\n"
+            "#### Too Deep Heading\n\n"
+            "More text here."
+        ),
+    )
+    await db_session.commit()
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
+    create_blog_post_from_generate_text_run_input = CreateBlogPostFromGenerateTextRunInput(
+        generate_text_run_identity=generate_text_run_record.identity,
+        is_public=False,
+        published_at=None,
+    )
+
+    with pytest.raises(BlogPostGenerateTextRunOutputInvalidException):
+        await blog_post_service.create_blog_post_from_generate_text_run(
+            create_blog_post_from_generate_text_run_input, auth_user
+        )
+
+
+async def test_create_blog_post_from_generate_text_run_no_persona_raises_output_invalid_exception(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    generate_text_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=user_record.id,
+        persona_id=None,
+        status=GenerateTextRunStatusType.COMPLETED,
+    )
+    await insert_generate_text_step_row(
+        db_session,
+        run_id=generate_text_run_record.id,
+        created_by_id=user_record.id,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+        output_text=f"# My Great Title\n\n{VALID_BLOG_POST_BODY}",
+    )
+    await db_session.commit()
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
+    create_blog_post_from_generate_text_run_input = CreateBlogPostFromGenerateTextRunInput(
+        generate_text_run_identity=generate_text_run_record.identity,
+        is_public=False,
+        published_at=None,
+    )
+
+    with pytest.raises(BlogPostGenerateTextRunOutputInvalidException):
+        await blog_post_service.create_blog_post_from_generate_text_run(
+            create_blog_post_from_generate_text_run_input, auth_user
+        )
+
+
 async def test_find_blog_post_own_post_returns_blog_post_detail_result(
-    db_session: AsyncSession,
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
@@ -174,7 +374,7 @@ async def test_find_blog_post_own_post_returns_blog_post_detail_result(
         db_session, created_by_id=user_record.id, persona_id=persona_record.id
     )
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
     find_blog_post_result = await blog_post_service.find_blog_post(
         blog_post_record.identity, auth_user
@@ -196,7 +396,7 @@ async def test_find_blog_post_own_post_returns_blog_post_detail_result(
 
 
 async def test_find_blog_post_others_published_post_returns_blog_post_detail_result(
-    db_session: AsyncSession,
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -214,7 +414,7 @@ async def test_find_blog_post_others_published_post_returns_blog_post_detail_res
         published_at=datetime(2020, 1, 1, tzinfo=UTC),
     )
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
     find_blog_post_result = await blog_post_service.find_blog_post(
         blog_post_record.identity, other_auth_user
@@ -236,7 +436,7 @@ async def test_find_blog_post_others_published_post_returns_blog_post_detail_res
 
 
 async def test_find_blog_post_others_private_post_raises_not_found_exception(
-    db_session: AsyncSession,
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -248,14 +448,14 @@ async def test_find_blog_post_others_private_post_raises_not_found_exception(
         db_session, created_by_id=owner_record.id, persona_id=persona_record.id
     )
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
     with pytest.raises(NotFoundException):
         await blog_post_service.find_blog_post(blog_post_record.identity, other_auth_user)
 
 
 async def test_find_blog_post_deleted_raises_not_found_exception(
-    db_session: AsyncSession,
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
@@ -269,14 +469,14 @@ async def test_find_blog_post_deleted_raises_not_found_exception(
         deleted_by_id=user_record.id,
     )
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
     with pytest.raises(NotFoundException):
         await blog_post_service.find_blog_post(blog_post_record.identity, auth_user)
 
 
 async def test_find_user_blog_post_list_returns_only_own_newest_first(
-    db_session: AsyncSession,
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     user_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -316,7 +516,7 @@ async def test_find_user_blog_post_list_returns_only_own_newest_first(
         published_at=datetime(2020, 1, 1, tzinfo=UTC),
     )
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
     find_user_blog_post_list_result = await blog_post_service.find_user_blog_post_list(
         auth_user, None
@@ -355,7 +555,7 @@ async def test_find_user_blog_post_list_returns_only_own_newest_first(
 
 
 async def test_find_user_blog_post_list_filters_by_persona_identity(
-    db_session: AsyncSession,
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
@@ -374,7 +574,7 @@ async def test_find_user_blog_post_list_filters_by_persona_identity(
         title="Other Persona's Post",
     )
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
     find_user_blog_post_list_result = await blog_post_service.find_user_blog_post_list(
         auth_user, matching_persona_record.identity
@@ -399,7 +599,9 @@ async def test_find_user_blog_post_list_filters_by_persona_identity(
     )
 
 
-async def test_update_blog_post_own_post_updates_both_rows(db_session: AsyncSession) -> None:
+async def test_update_blog_post_own_post_updates_both_rows(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
     persona_record = await insert_persona_row(
@@ -409,7 +611,7 @@ async def test_update_blog_post_own_post_updates_both_rows(db_session: AsyncSess
         db_session, created_by_id=user_record.id, persona_id=persona_record.id, title="Old Title"
     )
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
     published_at = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
     update_blog_post_input = build_update_blog_post_input(
         title="New Title", is_public=True, published_at=published_at
@@ -434,7 +636,7 @@ async def test_update_blog_post_own_post_updates_both_rows(db_session: AsyncSess
 
 
 async def test_update_blog_post_others_visible_post_raises_forbidden_exception(
-    db_session: AsyncSession,
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -452,7 +654,7 @@ async def test_update_blog_post_others_visible_post_raises_forbidden_exception(
         published_at=datetime(2020, 1, 1, tzinfo=UTC),
     )
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
     with pytest.raises(ForbiddenException):
         await blog_post_service.update_blog_post(
@@ -461,7 +663,7 @@ async def test_update_blog_post_others_visible_post_raises_forbidden_exception(
 
 
 async def test_update_blog_post_others_hidden_post_raises_not_found_exception(
-    db_session: AsyncSession,
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -473,7 +675,7 @@ async def test_update_blog_post_others_hidden_post_raises_not_found_exception(
         db_session, created_by_id=owner_record.id, persona_id=persona_record.id
     )
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
     with pytest.raises(NotFoundException):
         await blog_post_service.update_blog_post(
@@ -481,7 +683,9 @@ async def test_update_blog_post_others_hidden_post_raises_not_found_exception(
         )
 
 
-async def test_delete_blog_post_soft_deletes_both_rows(db_session: AsyncSession) -> None:
+async def test_delete_blog_post_soft_deletes_both_rows(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
     persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
@@ -489,7 +693,7 @@ async def test_delete_blog_post_soft_deletes_both_rows(db_session: AsyncSession)
         db_session, created_by_id=user_record.id, persona_id=persona_record.id
     )
     await db_session.commit()
-    blog_post_service = _build_blog_post_service(db_session)
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
     await blog_post_service.delete_blog_post(blog_post_record.identity, auth_user)
 

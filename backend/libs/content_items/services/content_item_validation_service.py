@@ -7,7 +7,6 @@ from libs.auth.results import AuthUser
 from libs.content_items.exceptions import (
     ContentItemGenerateTextRunAlreadySavedException,
     ContentItemGenerateTextRunNotCompletedException,
-    ContentItemGenerateTextRunPersonaMismatchException,
     ContentItemPersonaPrivateException,
 )
 from libs.core.exceptions import NotFoundException
@@ -40,7 +39,7 @@ class ContentItemValidationService:
             )
 
     async def validate_generate_text_run_available(
-        self, generate_text_run_identity: UUID, persona_identity: UUID, auth_user: AuthUser
+        self, generate_text_run_identity: UUID, auth_user: AuthUser
     ) -> None:
         run_query = select(GenerateTextRunOrm).where(
             GenerateTextRunOrm.identity == generate_text_run_identity,
@@ -55,16 +54,32 @@ class ContentItemValidationService:
             raise ContentItemGenerateTextRunNotCompletedException(
                 "Generate text run is not completed"
             )
-
-        persona_query = select(PersonaOrm.id).where(PersonaOrm.identity == persona_identity)
-        persona_query_result = await self._db_session.execute(persona_query)
-        persona_id = persona_query_result.scalar_one_or_none()
-
-        if generate_text_run_record.persona_id != persona_id:
-            raise ContentItemGenerateTextRunPersonaMismatchException(
-                "Generate text run was not written as this persona"
-            )
         if generate_text_run_record.content_item_id is not None:
             raise ContentItemGenerateTextRunAlreadySavedException(
                 "Generate text run is already saved to a content item"
+            )
+
+    async def validate_generate_text_run_allows_public(
+        self, generate_text_run_identity: UUID, is_public: bool, auth_user: AuthUser
+    ) -> None:
+        if not is_public:
+            return
+
+        persona_is_public_query = (
+            select(PersonaOrm.is_public)
+            .select_from(GenerateTextRunOrm)
+            .join(PersonaOrm, GenerateTextRunOrm.persona_id == PersonaOrm.id)
+            .where(
+                GenerateTextRunOrm.identity == generate_text_run_identity,
+                GenerateTextRunOrm.created_by_id == auth_user.id,
+            )
+        )
+        persona_is_public_query_result = await self._db_session.execute(persona_is_public_query)
+        persona_is_public = persona_is_public_query_result.scalar_one_or_none()
+
+        if persona_is_public is None:
+            return
+        if not persona_is_public:
+            raise ContentItemPersonaPrivateException(
+                "A private persona's content can't be made public"
             )

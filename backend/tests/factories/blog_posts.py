@@ -21,7 +21,6 @@ def build_create_blog_post_input(
     body: str = VALID_BLOG_POST_BODY,
     is_public: bool = False,
     published_at: datetime | None = None,
-    generate_text_run_identity: UUID | None = None,
 ) -> CreateBlogPostInput:
     return CreateBlogPostInput(
         persona_identity=persona_identity,
@@ -30,7 +29,6 @@ def build_create_blog_post_input(
         body=body,
         is_public=is_public,
         published_at=published_at,
-        generate_text_run_identity=generate_text_run_identity,
     )
 
 

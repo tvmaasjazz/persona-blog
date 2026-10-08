@@ -279,6 +279,7 @@ async def test_find_run_by_identity_returns_result(
         graph_version="2026-09-24.1",
         status=GenerateTextRunStatusType.PENDING,
         options={},
+        persona_id=persona_id,
         llm_call_count=0,
         input_tokens=0,
         output_tokens=0,

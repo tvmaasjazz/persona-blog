@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
+from libs.generate_text.constants import STEP_OUTPUT_TEXT_KEY
 from libs.generate_text.graphs.blog_post.inputs import BlogPostOptionsInput
 from libs.generate_text.inputs import (
     CreateGenerateTextRunInput,
@@ -108,6 +109,7 @@ async def insert_generate_text_step_row(
     attempt: int = 1,
     status: GenerateTextStepStatusType = GenerateTextStepStatusType.RUNNING,
     input: dict[str, Any] | None = None,
+    output_text: str | None = None,
 ) -> GenerateTextStepOrm:
     step_record = GenerateTextStepOrm(
         run_id=run_id,
@@ -116,6 +118,7 @@ async def insert_generate_text_step_row(
         attempt=attempt,
         status=status,
         input=input,
+        output={STEP_OUTPUT_TEXT_KEY: output_text} if output_text is not None else None,
         created_by_id=created_by_id,
         updated_by_id=created_by_id,
     )
