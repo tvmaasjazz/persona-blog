@@ -1,5 +1,5 @@
-import { Home, Plus, Sparkles, Users } from 'lucide-react'
-import { NavLink, Outlet } from 'react-router'
+import { FileText, Home, Plus, Sparkles, Users } from 'lucide-react'
+import { Link, NavLink, Outlet } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { useCurrentUser } from '@/features/auth/api/current-user-query'
@@ -44,10 +44,26 @@ export function AppLayout() {
               <span className="hidden md:inline">My Personas</span>
             </NavLink>
           </li>
+          <li>
+            <NavLink
+              to="/posts"
+              className={({ isActive }) =>
+                cn(
+                  'flex h-12 items-center justify-center gap-3 rounded-xl px-2 hover:bg-accent md:justify-start',
+                  isActive && 'bg-accent font-semibold',
+                )
+              }
+            >
+              <FileText aria-hidden className="size-5" />
+              <span className="hidden md:inline">My Posts</span>
+            </NavLink>
+          </li>
         </ul>
-        <Button disabled className="mt-3 w-full px-0 md:px-4">
-          <Plus aria-hidden className="size-5 md:hidden" />
-          <span className="hidden md:inline">Create</span>
+        <Button asChild className="mt-3 w-full px-0 md:px-4">
+          <Link to="/write">
+            <Plus aria-hidden className="size-5 md:hidden" />
+            <span className="hidden md:inline">Create</span>
+          </Link>
         </Button>
         <div className="mt-auto">
           {isPending ? (
