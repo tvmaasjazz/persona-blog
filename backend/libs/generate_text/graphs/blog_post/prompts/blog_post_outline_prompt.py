@@ -45,7 +45,7 @@ class BlogPostOutlinePrompt(BaseGenerateTextPrompt):
     def _build_system_prompt(self, state: GenerateTextState) -> str:
         persona = state.build_persona()
         persona_prompt_section = self._build_persona_prompt_section(
-            persona, ["name", "bio", "background", "expertise"]
+            persona, ["name", "bio", "background"]
         )
         tone_and_audience_prompt_section = self._build_tone_and_audience_prompt_section(
             state.tone, state.target_audience

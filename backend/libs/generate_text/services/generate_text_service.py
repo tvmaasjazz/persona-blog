@@ -88,7 +88,6 @@ class GenerateTextService:
             persona_name=find_user_persona_result.name,
             persona_bio=find_user_persona_result.bio,
             persona_background=find_user_persona_result.background,
-            persona_expertise=find_user_persona_result.expertise,
             persona_writing_style=find_user_persona_result.writing_style,
             persona_sample_writing=find_user_persona_result.sample_writing,
             tone=generate_text_input.tone,

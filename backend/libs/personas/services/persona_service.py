@@ -28,7 +28,6 @@ class PersonaService:
             bio=persona_input.bio,
             avatar_url=persona_input.avatar_url,
             background=persona_input.background,
-            expertise=persona_input.expertise,
             writing_style=persona_input.writing_style,
             default_tone=persona_input.default_tone,
             default_target_audience=persona_input.default_target_audience,
@@ -88,7 +87,6 @@ class PersonaService:
         persona_record.bio = persona_input.bio
         persona_record.avatar_url = persona_input.avatar_url
         persona_record.background = persona_input.background
-        persona_record.expertise = persona_input.expertise
         persona_record.writing_style = persona_input.writing_style
         persona_record.default_tone = persona_input.default_tone
         persona_record.default_target_audience = persona_input.default_target_audience

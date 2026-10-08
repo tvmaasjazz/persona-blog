@@ -81,7 +81,6 @@ export function PersonaProfile({ personaIdentity }: PersonaProfileProps) {
       <section className="flex flex-col gap-5">
         <h2 className="text-lg font-bold">Voice</h2>
         <ProfileField label="Background" value={persona.background} />
-        <ProfileField label="Expertise" value={persona.expertise} />
         <ProfileField label="Writing style" value={persona.writing_style} />
         <ProfileField
           label="Sample writing"

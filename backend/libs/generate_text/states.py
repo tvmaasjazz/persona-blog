@@ -25,7 +25,6 @@ class GenerateTextState(BaseModel):
     persona_name: str
     persona_bio: str
     persona_background: str | None = None
-    persona_expertise: str | None = None
     persona_writing_style: str | None = None
     persona_sample_writing: str | None = None
     tone: str | None = None
@@ -54,7 +53,6 @@ class GenerateTextState(BaseModel):
             name=self.persona_name,
             bio=self.persona_bio,
             background=self.persona_background,
-            expertise=self.persona_expertise,
             writing_style=self.persona_writing_style,
             sample_writing=self.persona_sample_writing,
         )

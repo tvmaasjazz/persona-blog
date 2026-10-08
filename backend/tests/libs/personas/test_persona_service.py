@@ -34,7 +34,6 @@ async def test_create_persona_persists_row(db_session: AsyncSession) -> None:
         bio="Writes long-form essays on computing history.",
         avatar_url="https://example.com/ada.png",
         background="Former mathematician.",
-        expertise="Computing history",
         writing_style="Formal",
         default_tone="Warm",
         default_target_audience="Engineers",
@@ -51,7 +50,6 @@ async def test_create_persona_persists_row(db_session: AsyncSession) -> None:
     assert persona_record.bio == "Writes long-form essays on computing history."
     assert persona_record.avatar_url == "https://example.com/ada.png"
     assert persona_record.background == "Former mathematician."
-    assert persona_record.expertise == "Computing history"
     assert persona_record.writing_style == "Formal"
     assert persona_record.default_tone == "Warm"
     assert persona_record.default_target_audience == "Engineers"
@@ -143,7 +141,6 @@ async def test_find_persona_returns_persona_detail_result(db_session: AsyncSessi
         bio="Writes long-form essays.",
         avatar_url=None,
         background=None,
-        expertise=None,
         writing_style=None,
         default_tone=None,
         default_target_audience=None,
@@ -224,7 +221,6 @@ async def test_find_persona_another_users_public_persona_returns_persona_detail_
         bio="Writes long-form essays.",
         avatar_url=None,
         background=None,
-        expertise=None,
         writing_style=None,
         default_tone=None,
         default_target_audience=None,
@@ -317,7 +313,6 @@ async def test_find_user_persona_own_persona_returns_result_with_id(
         name="Ada the Essayist",
         bio="Writes long-form essays.",
         background=None,
-        expertise=None,
         writing_style=None,
         sample_writing=None,
     )

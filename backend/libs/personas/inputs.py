@@ -6,7 +6,6 @@ class PersonaInput(BaseModel):
     bio: str
     avatar_url: str | None
     background: str | None
-    expertise: str | None
     writing_style: str | None
     default_tone: str | None
     default_target_audience: str | None

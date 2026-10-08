@@ -14,7 +14,6 @@ class PersonaDetailResult(BaseModel):
     bio: str
     avatar_url: str | None
     background: str | None
-    expertise: str | None
     writing_style: str | None
     default_tone: str | None
     default_target_audience: str | None
@@ -34,6 +33,5 @@ class FindUserPersonaResult(BaseModel):
     name: str
     bio: str
     background: str | None
-    expertise: str | None
     writing_style: str | None
     sample_writing: str | None

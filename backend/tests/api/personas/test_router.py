@@ -21,7 +21,6 @@ async def test_create_persona_returns_identity_and_persists_row(
             "bio": "Writes long-form essays on computing history.",
             "avatar_url": "https://example.com/ada.png",
             "background": "Former mathematician.",
-            "expertise": "Computing history",
             "writing_style": "Formal",
             "default_tone": "Warm",
             "default_target_audience": "Engineers",
@@ -38,7 +37,6 @@ async def test_create_persona_returns_identity_and_persists_row(
     assert persona_record.bio == "Writes long-form essays on computing history."
     assert persona_record.avatar_url == "https://example.com/ada.png"
     assert persona_record.background == "Former mathematician."
-    assert persona_record.expertise == "Computing history"
     assert persona_record.writing_style == "Formal"
     assert persona_record.default_tone == "Warm"
     assert persona_record.default_target_audience == "Engineers"
@@ -61,7 +59,6 @@ async def test_create_persona_optional_fields_omitted_persists_null_fields(
     assert create_persona_response.status_code == 201
     assert persona_record.avatar_url is None
     assert persona_record.background is None
-    assert persona_record.expertise is None
     assert persona_record.writing_style is None
     assert persona_record.default_tone is None
     assert persona_record.default_target_audience is None
@@ -247,7 +244,6 @@ async def test_find_user_persona_list_returns_only_signed_in_users_live_personas
                 "bio": newest_persona_record.bio,
                 "avatar_url": None,
                 "background": None,
-                "expertise": None,
                 "writing_style": None,
                 "default_tone": None,
                 "default_target_audience": None,
@@ -262,7 +258,6 @@ async def test_find_user_persona_list_returns_only_signed_in_users_live_personas
                 "bio": oldest_persona_record.bio,
                 "avatar_url": None,
                 "background": None,
-                "expertise": None,
                 "writing_style": None,
                 "default_tone": None,
                 "default_target_audience": None,
@@ -301,7 +296,6 @@ async def test_find_persona_returns_persona_response(
         "bio": "Writes essays.",
         "avatar_url": None,
         "background": None,
-        "expertise": None,
         "writing_style": None,
         "default_tone": None,
         "default_target_audience": None,
@@ -367,7 +361,6 @@ async def test_find_persona_another_users_public_persona_returns_persona_respons
         "bio": "Writes public essays.",
         "avatar_url": None,
         "background": None,
-        "expertise": None,
         "writing_style": None,
         "default_tone": None,
         "default_target_audience": None,

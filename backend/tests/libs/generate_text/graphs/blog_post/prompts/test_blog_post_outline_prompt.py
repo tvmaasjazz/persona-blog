@@ -18,7 +18,6 @@ def test_build_generate_prompt_puts_used_persona_fields_in_system_prompt() -> No
         persona_name="Marta Quill",
         persona_bio="Writes about sourdough.",
         persona_background="Former baker.",
-        persona_expertise="Fermentation.",
     )
 
     build_prompt_result = BlogPostOutlinePrompt().build_generate_prompt(state)
@@ -26,7 +25,6 @@ def test_build_generate_prompt_puts_used_persona_fields_in_system_prompt() -> No
     assert "Marta Quill" in build_prompt_result.system_prompt
     assert "Writes about sourdough." in build_prompt_result.system_prompt
     assert "Former baker." in build_prompt_result.system_prompt
-    assert "Fermentation." in build_prompt_result.system_prompt
 
 
 def test_build_generate_prompt_omits_field_the_step_does_not_use() -> None:
