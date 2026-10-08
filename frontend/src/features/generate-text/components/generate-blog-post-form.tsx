@@ -1,6 +1,5 @@
 import { FormSection } from '@/components/form/form-section'
 import { withForm } from '@/components/form/use-app-form'
-import { Button } from '@/components/ui/button'
 import { generateBlogPostFormOptions } from '@/features/generate-text/generate-blog-post-form-schema'
 
 export type PersonaChoice = {
@@ -105,20 +104,13 @@ export const GenerateBlogPostForm = withForm({
           </div>
         </FormSection>
 
-        <form.Subscribe selector={(formState) => formState.isSubmitting}>
-          {(isSubmitting) => (
-            <div className="flex flex-col items-start gap-2">
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Writing…' : 'Write post'}
-              </Button>
-              {isSubmitting && (
-                <p className="text-sm text-muted-foreground">
-                  This can take a minute or more. Keep this page open.
-                </p>
-              )}
-            </div>
-          )}
-        </form.Subscribe>
+        <form.AppForm>
+          <form.SubmitButton
+            label="Write post"
+            pendingLabel="Writing…"
+            pendingHint="This can take a minute or more. Keep this page open."
+          />
+        </form.AppForm>
       </form>
     )
   },
