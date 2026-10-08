@@ -31,7 +31,6 @@ same as `pb_generate_text_run`, so there's no separate `user_id`.
 | `bio`                     | text, required | Short public summary                                     |
 | `avatar_url`              | text, nullable |                                                          |
 | `background`              | text, nullable | Backstory that shapes their view                         |
-| `expertise`               | text, nullable | What they know and write about                           |
 | `writing_style`           | text, nullable | Sentence length, vocabulary, formatting habits           |
 | `default_tone`            | text, nullable | Prefills tone when asking the persona to write something |
 | `default_target_audience` | text, nullable | Prefills audience the same way                           |
@@ -122,7 +121,7 @@ shortcut may come back once posts exist.
 render, in three sections:
 
 - **Profile:** name, bio, avatar URL, public toggle
-- **Voice:** background, expertise, writing style, sample writing
+- **Voice:** background, writing style, sample writing
 - **Defaults:** tone and audience
 
 Every field has a short description with an example, and none offers suggestions to
@@ -145,7 +144,7 @@ and bio and requires both to be non-empty. Lengths:
 | ----------------------------------------- | ---------------------------- |
 | name                                      | 80                           |
 | bio                                       | 500                          |
-| background, expertise, writing_style      | 2000                         |
+| background, writing_style                 | 2000                         |
 | default_tone, default_target_audience     | 200                          |
 | sample_writing                            | 10000                        |
 | avatar_url                                | 2048, must be `http(s)://`   |

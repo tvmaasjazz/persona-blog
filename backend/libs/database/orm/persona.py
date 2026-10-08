@@ -25,7 +25,6 @@ class PersonaOrm(BaseOrm):
     bio: Mapped[str]
     avatar_url: Mapped[str | None]
     background: Mapped[str | None]
-    expertise: Mapped[str | None]
     writing_style: Mapped[str | None]
     default_tone: Mapped[str | None]
     default_target_audience: Mapped[str | None]

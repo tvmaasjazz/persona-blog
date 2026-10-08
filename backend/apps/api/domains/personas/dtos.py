@@ -24,7 +24,6 @@ class PersonaDto(BaseModel):
     bio: PersonaBioStr
     avatar_url: AvatarUrlStr | None = None
     background: PersonaLongTextStr | None = None
-    expertise: PersonaLongTextStr | None = None
     writing_style: PersonaLongTextStr | None = None
     default_tone: PersonaShortTextStr | None = None
     default_target_audience: PersonaShortTextStr | None = None
@@ -37,7 +36,6 @@ class PersonaDto(BaseModel):
             bio=self.bio,
             avatar_url=self.avatar_url,
             background=self.background,
-            expertise=self.expertise,
             writing_style=self.writing_style,
             default_tone=self.default_tone,
             default_target_audience=self.default_target_audience,
@@ -52,7 +50,6 @@ class PersonaResponseDto(BaseModel):
     bio: str
     avatar_url: str | None
     background: str | None
-    expertise: str | None
     writing_style: str | None
     default_tone: str | None
     default_target_audience: str | None
@@ -69,7 +66,6 @@ class PersonaResponseDto(BaseModel):
             bio=persona_detail_result.bio,
             avatar_url=persona_detail_result.avatar_url,
             background=persona_detail_result.background,
-            expertise=persona_detail_result.expertise,
             writing_style=persona_detail_result.writing_style,
             default_tone=persona_detail_result.default_tone,
             default_target_audience=persona_detail_result.default_target_audience,

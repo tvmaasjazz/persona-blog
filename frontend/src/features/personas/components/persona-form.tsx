@@ -67,14 +67,6 @@ export const PersonaForm = withForm({
               />
             )}
           </form.AppField>
-          <form.AppField name="expertise">
-            {(field) => (
-              <field.TextareaField
-                label="Expertise"
-                description="What they know well enough to write about. For example: Weeknight cooking, budget grocery shopping, West African home food."
-              />
-            )}
-          </form.AppField>
           <form.AppField name="writing_style">
             {(field) => (
               <field.TextareaField

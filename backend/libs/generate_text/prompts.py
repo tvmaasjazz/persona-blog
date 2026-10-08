@@ -8,7 +8,6 @@ PERSONA_FIELD_LABELS: dict[str, str] = {
     "name": "Name",
     "bio": "Bio",
     "background": "Background",
-    "expertise": "Expertise",
     "writing_style": "Writing style",
     "sample_writing": "Sample writing",
 }

@@ -46,6 +46,5 @@ class GenerateTextPersonaInput(BaseModel):
     name: str
     bio: str
     background: str | None = None
-    expertise: str | None = None
     writing_style: str | None = None
     sample_writing: str | None = None

@@ -479,8 +479,6 @@ export interface components {
             avatar_url?: string | null;
             /** Background */
             background?: string | null;
-            /** Expertise */
-            expertise?: string | null;
             /** Writing Style */
             writing_style?: string | null;
             /** Default Tone */
@@ -515,8 +513,6 @@ export interface components {
             avatar_url: string | null;
             /** Background */
             background: string | null;
-            /** Expertise */
-            expertise: string | null;
             /** Writing Style */
             writing_style: string | null;
             /** Default Tone */

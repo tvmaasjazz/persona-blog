@@ -51,7 +51,7 @@ class BlogPostDraftPrompt(BaseGenerateTextPrompt):
     def _build_system_prompt(self, state: GenerateTextState) -> str:
         persona = state.build_persona()
         persona_prompt_section = self._build_persona_prompt_section(
-            persona, ["name", "bio", "background", "expertise", "writing_style", "sample_writing"]
+            persona, ["name", "bio", "background", "writing_style", "sample_writing"]
         )
         tone_and_audience_prompt_section = self._build_tone_and_audience_prompt_section(
             state.tone, state.target_audience
