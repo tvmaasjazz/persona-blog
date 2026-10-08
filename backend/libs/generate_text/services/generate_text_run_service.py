@@ -95,12 +95,10 @@ class GenerateTextRunService:
 
     async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
         async with self._db_session_factory() as db_session:
-            # The persona joins as a Core table, which the soft-delete rule leaves alone: a
-            # run still reports the persona it was made with after that persona is deleted.
-            persona_table = PersonaOrm.__table__
+            # A soft-deleted persona is filtered out of the join, so its identity is None.
             query = (
-                select(GenerateTextRunOrm, persona_table.c.identity)
-                .outerjoin(persona_table, persona_table.c.id == GenerateTextRunOrm.persona_id)
+                select(GenerateTextRunOrm, PersonaOrm.identity)
+                .outerjoin(PersonaOrm, PersonaOrm.id == GenerateTextRunOrm.persona_id)
                 .where(GenerateTextRunOrm.identity == run_identity)
             )
             query_result = await db_session.execute(query)
