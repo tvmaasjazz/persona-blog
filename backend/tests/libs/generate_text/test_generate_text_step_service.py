@@ -19,6 +19,7 @@ from tests.factories.generate_text import (
     insert_generate_text_step_row,
 )
 from tests.factories.llm import insert_llm_call_row
+from tests.factories.personas import insert_persona_row
 from tests.factories.users import insert_user_row
 
 
@@ -28,9 +29,13 @@ async def _insert_auth_user(db_session: AsyncSession) -> AuthUser:
     return build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
 
 
-async def _insert_run_id(run_service: GenerateTextRunService, auth_user: AuthUser) -> int:
+async def _insert_run_id(
+    db_session: AsyncSession, run_service: GenerateTextRunService, auth_user: AuthUser
+) -> int:
+    persona_record = await insert_persona_row(db_session, created_by_id=auth_user.id)
+    await db_session.commit()
     create_run_result = await run_service.create_run(
-        build_create_generate_text_run_input(), auth_user
+        build_create_generate_text_run_input(persona_id=persona_record.id), auth_user
     )
     return create_run_result.id
 
@@ -41,7 +46,7 @@ async def test_create_step_persists_first_step_number_and_attempt(
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    run_id = await _insert_run_id(run_service, auth_user)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
     create_generate_text_step_input = build_create_generate_text_step_input(
         run_id=run_id, step_name="GENERATE_DRAFT"
     )
@@ -68,7 +73,7 @@ async def test_create_step_step_number_increments_per_run(
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    run_id = await _insert_run_id(run_service, auth_user)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
 
     first_step_result = await step_service.create_step(
         build_create_generate_text_step_input(run_id=run_id, step_name="GENERATE_OUTLINE"),
@@ -92,7 +97,7 @@ async def test_create_step_attempt_increments_per_repeated_step_name(
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    run_id = await _insert_run_id(run_service, auth_user)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
 
     first_step_result = await step_service.create_step(
         build_create_generate_text_step_input(run_id=run_id, step_name="GENERATE_DRAFT"), auth_user
@@ -116,7 +121,7 @@ async def test_create_step_awaiting_review_step_resumes_instead_of_duplicating(
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    run_id = await _insert_run_id(run_service, auth_user)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
     create_step_result = await step_service.create_step(
         build_create_generate_text_step_input(run_id=run_id, step_name="REVIEW_DRAFT"), auth_user
     )
@@ -138,7 +143,7 @@ async def test_complete_step_sets_succeeded_status_output_and_zero_rollup_when_n
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    run_id = await _insert_run_id(run_service, auth_user)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
     create_step_result = await step_service.create_step(
         build_create_generate_text_step_input(run_id=run_id), auth_user
     )
@@ -163,7 +168,7 @@ async def test_complete_step_sums_llm_calls_coalescing_null_tokens_and_cost(
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    run_id = await _insert_run_id(run_service, auth_user)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
     create_step_result = await step_service.create_step(
         build_create_generate_text_step_input(run_id=run_id), auth_user
     )
@@ -203,7 +208,7 @@ async def test_fail_step_sets_failed_status_and_error_fields(
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    run_id = await _insert_run_id(run_service, auth_user)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
     create_step_result = await step_service.create_step(
         build_create_generate_text_step_input(run_id=run_id), auth_user
     )
@@ -225,7 +230,7 @@ async def test_record_decision_sets_human_decision_and_feedback(
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    run_id = await _insert_run_id(run_service, auth_user)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
     create_step_result = await step_service.create_step(
         build_create_generate_text_step_input(run_id=run_id), auth_user
     )
@@ -249,7 +254,7 @@ async def test_record_awaiting_review_sets_awaiting_review_status_and_duration(
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    run_id = await _insert_run_id(run_service, auth_user)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
     create_step_result = await step_service.create_step(
         build_create_generate_text_step_input(run_id=run_id, step_name="REVIEW_DRAFT"), auth_user
     )
@@ -277,7 +282,7 @@ async def test_find_latest_step_returns_newest_step_name_and_content(
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    run_id = await _insert_run_id(run_service, auth_user)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
     first_step_result = await step_service.create_step(
         build_create_generate_text_step_input(run_id=run_id, step_name="GENERATE_OUTLINE"),
         auth_user,
@@ -301,7 +306,7 @@ async def test_find_latest_step_output_null_returns_empty_content(
     auth_user = await _insert_auth_user(db_session)
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
-    run_id = await _insert_run_id(run_service, auth_user)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
     await insert_generate_text_step_row(
         db_session,
         run_id=run_id,

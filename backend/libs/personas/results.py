@@ -26,3 +26,14 @@ class PersonaDetailResult(BaseModel):
 
 class FindUserPersonaListResult(BaseModel):
     personas: list[PersonaDetailResult]
+
+
+class FindUserPersonaResult(BaseModel):
+    id: int
+    identity: UUID
+    name: str
+    bio: str
+    background: str | None
+    expertise: str | None
+    writing_style: str | None
+    sample_writing: str | None

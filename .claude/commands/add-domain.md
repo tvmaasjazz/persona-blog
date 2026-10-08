@@ -46,11 +46,13 @@ domain needs from this list:
   - `constants.py` — only if the domain has values that must not be overridden
   - `types.py` — only if the domain has enums; all of them go here
   - `tasks.py` — only if the domain has work that runs after a response
-  - `prompts.py` — only if the domain calls an LLM
+  - `prompts.py` — only if the domain calls an LLM; a `prompts/` package, one module per
+    class, once it has more than one (`fastapi-structure.md` › Prompts)
   - `exceptions.py` — only if the domain needs exceptions callers must tell apart
   - `states.py`, a `graphs/` package and a `<Domain>NodeService` in `services/` — only
     if the domain's work is a graph, laid out as `fastapi-structure.md` › LangGraph
-    workflows describes. A second graph for an existing domain is a folder under that
+    workflows describes, including `output_formats.py` when a step's output must follow
+    a format. A second graph for an existing domain is a folder under that
     domain's `graphs/`, and needs no new domain at all
 - `apps/api/domains/$1/`
   - `dtos.py` (request field limits as `StringConstraints` aliases,

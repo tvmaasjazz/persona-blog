@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
+from libs.generate_text.constants import STEP_OUTPUT_TEXT_KEY
 from libs.generate_text.graphs.blog_post.inputs import BlogPostOptionsInput
 from libs.generate_text.inputs import (
     CreateGenerateTextRunInput,
@@ -34,7 +35,9 @@ def build_create_generate_text_run_input(
     graph_name: str = "blog_post",
     graph_version: str = "test-version",
     prompt_text: str = "Write about coffee.",
-    persona_info: str | None = None,
+    persona_id: int,
+    tone: str | None = None,
+    target_audience: str | None = None,
     additional_context: str | None = None,
     options: dict[str, Any] | None = None,
 ) -> CreateGenerateTextRunInput:
@@ -43,7 +46,9 @@ def build_create_generate_text_run_input(
         graph_name=graph_name,
         graph_version=graph_version,
         prompt_text=prompt_text,
-        persona_info=persona_info,
+        persona_id=persona_id,
+        tone=tone,
+        target_audience=target_audience,
         additional_context=additional_context,
         options=options if options is not None else {},
     )
@@ -58,9 +63,12 @@ async def insert_generate_text_run_row(
     graph_version: str = "test-version",
     status: GenerateTextRunStatusType = GenerateTextRunStatusType.PENDING,
     prompt_text: str = "Write about coffee.",
-    persona_info: str | None = None,
+    persona_id: int | None = None,
+    tone: str | None = None,
+    target_audience: str | None = None,
     additional_context: str | None = None,
     options: dict[str, Any] | None = None,
+    content_item_id: int | None = None,
 ) -> GenerateTextRunOrm:
     run_record = GenerateTextRunOrm(
         text_type=text_type,
@@ -68,9 +76,12 @@ async def insert_generate_text_run_row(
         graph_version=graph_version,
         status=status,
         prompt_text=prompt_text,
-        persona_info=persona_info,
+        persona_id=persona_id,
+        tone=tone,
+        target_audience=target_audience,
         additional_context=additional_context,
         options=options if options is not None else {},
+        content_item_id=content_item_id,
         created_by_id=created_by_id,
         updated_by_id=created_by_id,
     )
@@ -98,6 +109,7 @@ async def insert_generate_text_step_row(
     attempt: int = 1,
     status: GenerateTextStepStatusType = GenerateTextStepStatusType.RUNNING,
     input: dict[str, Any] | None = None,
+    output_text: str | None = None,
 ) -> GenerateTextStepOrm:
     step_record = GenerateTextStepOrm(
         run_id=run_id,
@@ -106,6 +118,7 @@ async def insert_generate_text_step_row(
         attempt=attempt,
         status=status,
         input=input,
+        output={STEP_OUTPUT_TEXT_KEY: output_text} if output_text is not None else None,
         created_by_id=created_by_id,
         updated_by_id=created_by_id,
     )
@@ -123,7 +136,14 @@ def build_generate_text_state(
     graph_version: str = "test-version",
     text_type: TextType = TextType.BLOG_POST,
     prompt_text: str = "Write about coffee.",
-    persona_info: str | None = None,
+    persona_name: str = "Marta Quill",
+    persona_bio: str = "Writes about slow mornings and stronger coffee.",
+    persona_background: str | None = None,
+    persona_expertise: str | None = None,
+    persona_writing_style: str | None = None,
+    persona_sample_writing: str | None = None,
+    tone: str | None = None,
+    target_audience: str | None = None,
     additional_context: str | None = None,
     step_outputs: dict[str, str] | None = None,
     step_decisions: dict[str, str] | None = None,
@@ -139,7 +159,14 @@ def build_generate_text_state(
         graph_version=graph_version,
         text_type=text_type.value,
         prompt_text=prompt_text,
-        persona_info=persona_info,
+        persona_name=persona_name,
+        persona_bio=persona_bio,
+        persona_background=persona_background,
+        persona_expertise=persona_expertise,
+        persona_writing_style=persona_writing_style,
+        persona_sample_writing=persona_sample_writing,
+        tone=tone,
+        target_audience=target_audience,
         additional_context=additional_context,
         step_outputs=step_outputs or {},
         step_decisions=step_decisions or {},
@@ -153,14 +180,16 @@ def build_generate_text_input(
     *,
     text_type: TextType = TextType.BLOG_POST,
     prompt_text: str = "Write about coffee.",
-    persona_info: str | None = None,
+    tone: str | None = None,
+    target_audience: str | None = None,
     additional_context: str | None = None,
     options: BlogPostOptionsInput | None = None,
 ) -> GenerateTextInput[BlogPostOptionsInput]:
     return GenerateTextInput[BlogPostOptionsInput](
         text_type=text_type,
         prompt_text=prompt_text,
-        persona_info=persona_info,
+        tone=tone,
+        target_audience=target_audience,
         additional_context=additional_context,
         options=options if options is not None else BlogPostOptionsInput(),
     )

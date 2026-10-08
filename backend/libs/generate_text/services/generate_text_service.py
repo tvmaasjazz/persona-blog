@@ -23,6 +23,7 @@ from libs.generate_text.services.generate_text_run_service import GenerateTextRu
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
 from libs.generate_text.states import GenerateTextState
 from libs.generate_text.types import GenerateTextRunStatusType, HumanDecisionType
+from libs.personas.results import FindUserPersonaResult
 
 if TYPE_CHECKING:
     # Imported for the annotation only: the builders this registry holds import the node
@@ -51,7 +52,10 @@ class GenerateTextService:
         self._checkpointer = checkpointer
 
     async def generate_text[OptionsT: BaseModel](
-        self, generate_text_input: GenerateTextInput[OptionsT], auth_user: AuthUser
+        self,
+        generate_text_input: GenerateTextInput[OptionsT],
+        find_user_persona_result: FindUserPersonaResult,
+        auth_user: AuthUser,
     ) -> GenerateTextRunResult:
         text_type = generate_text_input.text_type
         graph_builder = self._graph_builder_registry.get_by_text_type(text_type)
@@ -62,7 +66,9 @@ class GenerateTextService:
             graph_name=graph_builder.graph_name,
             graph_version=graph_builder.graph_version,
             prompt_text=generate_text_input.prompt_text,
-            persona_info=generate_text_input.persona_info,
+            persona_id=find_user_persona_result.id,
+            tone=generate_text_input.tone,
+            target_audience=generate_text_input.target_audience,
             additional_context=generate_text_input.additional_context,
             options=options_dict,
         )
@@ -79,7 +85,14 @@ class GenerateTextService:
             graph_version=graph_builder.graph_version,
             text_type=text_type.value,
             prompt_text=generate_text_input.prompt_text,
-            persona_info=generate_text_input.persona_info,
+            persona_name=find_user_persona_result.name,
+            persona_bio=find_user_persona_result.bio,
+            persona_background=find_user_persona_result.background,
+            persona_expertise=find_user_persona_result.expertise,
+            persona_writing_style=find_user_persona_result.writing_style,
+            persona_sample_writing=find_user_persona_result.sample_writing,
+            tone=generate_text_input.tone,
+            target_audience=generate_text_input.target_audience,
             additional_context=generate_text_input.additional_context,
         )
 

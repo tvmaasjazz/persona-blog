@@ -19,7 +19,8 @@ Every class ends in the suffix for what it is:
 | ------------ | -------------------------------------------- | -------------------------------- |
 | `Type`       | Enums                                        | `TextType.BLOG_POST`             |
 | `Settings`   | Config models: the root `AppSettings` (`BaseSettings`) and each domain's frozen `BaseModel` | `HumanizerSettings` |
-| `Prompt`     | A grouped set of LLM prompt builders         | `HumanizerPrompt`                |
+| `Prompt`     | Builds one step's system and user prompt     | `BlogPostDraftPrompt`            |
+| `OutputFormat` | Normalizes and validates one step's LLM output | `BlogPostBodyOutputFormat`     |
 | `Input`      | A service method's payload (`libs/` only)    | `CreateUserInput`                |
 | `Result`     | A function's return shape                    | `FindUserByEmailResult`          |
 | `Router`     | FastAPI `APIRouter` modules                  | `account_router` (an `APIRouter` instance) |
@@ -254,5 +255,7 @@ The same applies to chained attribute access into a call:
 - A `Dto` name leads with its entity or domain: `PersonaListResponseDto`, never
   `ListPersonasResponseDto`. A `Result` is still named for its function
   (`FindUserPersonaListResult`).
-- `Result` and `Dto` classes are usually simple enough that their name and fields
-  explain them, so they rarely carry a docstring. Add one only when they don't.
+- A function or class gets a docstring or comment only when it isn't clear from its
+  name and context: a non-obvious reason, a constraint, a trap. Never restate what the
+  code already says. Most `Result` and `Dto` classes and most one-screen functions need
+  none.

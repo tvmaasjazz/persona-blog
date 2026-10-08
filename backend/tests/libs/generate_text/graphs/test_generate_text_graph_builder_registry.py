@@ -24,11 +24,14 @@ def _build_registry(
     instrumentation_service = GenerateTextInstrumentationService(
         run_service=run_service, step_service=step_service
     )
-    node_service = GenerateTextNodeService(llm_service=LlmServiceStub())
+    generate_text_settings = GenerateTextSettings()
+    node_service = GenerateTextNodeService(
+        llm_service=LlmServiceStub(), generate_text_settings=generate_text_settings
+    )
     return GenerateTextGraphBuilderRegistry(
         node_service=node_service,
         instrumentation_service=instrumentation_service,
-        generate_text_settings=GenerateTextSettings(),
+        generate_text_settings=generate_text_settings,
     )
 
 

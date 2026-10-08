@@ -41,6 +41,7 @@ class FindGenerateTextRunByIdentityResult(BaseModel):
     graph_version: str
     status: GenerateTextRunStatusType
     options: dict[str, Any]
+    persona_id: int | None
     llm_call_count: int
     input_tokens: int
     output_tokens: int
@@ -60,3 +61,12 @@ class FindLatestGenerateTextStepResult(BaseModel):
 
     step_name: str
     content: str
+
+
+class BuildPromptResult(BaseModel):
+    system_prompt: str
+    user_prompt: str
+
+
+class ValidateOutputResult(BaseModel):
+    error_messages: list[str]

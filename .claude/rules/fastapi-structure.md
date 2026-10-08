@@ -29,7 +29,9 @@ backend/
 │       └── main.py            # app = create_app()
 ├── libs/
 │   ├── core/
-│   │   └── exceptions.py      # standard exceptions: NotFoundException, ...
+│   │   ├── exceptions.py      # standard exceptions: NotFoundException, ...
+│   │   ├── results.py         # Results returned by the domain-free Utils below
+│   │   └── utils/             # domain-free Utils: DateTimeUtils, MarkdownUtils
 │   ├── database/              # tables, Orm classes: see database.md
 │   │   ├── base.py            # BaseOrm: shared columns every table inherits
 │   │   ├── column_types.py    # UtcDateTime
@@ -99,6 +101,13 @@ Split a lib by what it is about, not by how big it gets.
 
 ### Validation guards
 
+A check that needs only a field's own value, however involved, is a DTO
+`field_validator` that calls a pure `<Domain>ValidationUtils` in the lib and raises
+`ValueError` with the problems it returns. FastAPI turns that into a 422 that names
+the field. `BlogPostValidationUtils.find_body_problems(body)` checks a post's Markdown
+this way. The name says what it validates, never `Dto`: `libs/` doesn't know DTOs exist,
+and a service may run the same check.
+
 When checking an incoming payload needs a database read or compares more than one
 field (DTOs › Inbound), the route gets a validation guard: a dependency in the domain's
 `dependencies.py`, named `validate_<what>` and attached with
@@ -125,6 +134,27 @@ The validation service holds only the methods a guard calls. Business services n
 validate payloads this way, and access control, such as whether the caller may change
 a row, stays in the business service that loads the row.
 
+### Rows a long-running route needs
+
+A row that a long-running route needs, such as the persona a generation writes as, is
+loaded by a dependency on its own short session, closed before the route runs. The
+route passes the loaded `Result` to the service. Never load it on the request's
+session: that session would sit idle inside an open transaction while the route waits
+on the LLM.
+
+```python
+# apps/api/domains/generate_text/dependencies.py
+async def get_generate_text_persona(
+    request: Request,
+    dto: GenerateBlogPostDto,
+    auth_user: AuthUserDep,
+) -> FindUserPersonaResult:
+    db_session_factory = request.app.state.db_session_factory
+    async with db_session_factory() as db_session:
+        persona_service = PersonaService(db_session=db_session)
+        return await persona_service.find_user_persona(dto.persona_identity, auth_user)
+```
+
 A provider gets its own lib when it has its own HTTP surface: `libs/google_auth/` sits
 beside `libs/auth/` because signing in with Google has routes, a domain and a callback
 of its own. A provider that is only an implementation of another lib's contract has no
@@ -138,7 +168,8 @@ Functions that build or map values — no db session, no client, no state — li
 `Utils` class in `libs/<domain>/utils/`, one module per class, with `__init__.py`
 re-exporting each one (`python-naming.md` › Class suffixes). A service keeps
 orchestration; the shaping of what it passes and returns moves out. Utilities with no
-domain at all, like `DateTimeUtils`, live in `libs/core/utils/`.
+domain at all, like `DateTimeUtils`, live in `libs/core/utils/`, and a `Result` one of
+them returns lives in `libs/core/results.py`.
 
 ### LangGraph workflows
 
@@ -182,6 +213,22 @@ at runtime in both directions.
 LangGraph signals an interrupt by raising it, so a generic handler turns every review
 pause into a recorded failure. Catch the control-flow exception first, record the pause
 for what it is, and let it through.
+
+**A step whose output must follow a format gets an `OutputFormat`**, passed to its
+node builder beside its `Prompt`. `Base<Domain>OutputFormat` has `normalize_output()`,
+which fixes in code only what can't change the meaning (a fence wrapping the whole
+output, surrounding whitespace), and `validate_output()`, which returns the problems
+left. The node normalizes, then validates; on problems it retries the LLM call with
+them added to the user prompt, up to a settings limit, then raises. Checking is code,
+never another LLM call. The format's rules text lives in the same module as the
+`OutputFormat`, and the step's system template uses it, so the instructions and the
+check can't drift apart. Parsing goes through a domain-free `Utils` class, such as
+`MarkdownUtils`. The domain's `Base<Domain>OutputFormat` lives in `output_formats.py`,
+beside `prompts.py`. A graph variant's `OutputFormat` gets its own module directly in the
+variant's folder, beside its builder and its `prompts/` package. When retries run out,
+the node raises a lib exception under `ServiceUnavailableException`: the model, not the
+caller, produced the unusable output, so the caller gets the same 503 as a provider
+failure.
 
 The service owns the graph's lifecycle, not its shape: it asks the registry for the
 builder, calls `build_graph`, runs it, reads the snapshot, and maps it to a `Result`.
@@ -245,7 +292,7 @@ A route takes a `Dto` only when a body or a query model is sent.
 
 | Route                                  | Inbound                                                    |
 | -------------------------------------- | ---------------------------------------------------------- |
-| `POST` create / `PUT` update           | `<Entity>Dto` body, **one class shared by both**: `BlogPostDto` |
+| `POST` create / `PUT` update           | `<Entity>Dto` body, **one class shared by both**: `PersonaDto`. Create gets its own `Create<Entity>Dto` only when it carries fields an update must never change (see Input models) |
 | `GET /{identity}` / `DELETE /{identity}` | None — the entity's `identity` is a plain `UUID` path parameter |
 | `GET` list                             | `<Entity>FetchAllQueryDto` query model: `BlogPostFetchAllQueryDto` |
 | Non-CRUD action (`POST /generate-text`) | `<Verb><Entity>Dto` body: `GenerateTextDto`                |
@@ -320,8 +367,14 @@ A service method taking a structured payload takes a Pydantic `Input` model from
 `libs/<domain>/inputs.py`. Scalar identifiers stay plain parameters —
 `find_user(user_identity: UUID)` gets no wrapper. Create and update share the one
 `Input` their shared `Dto` maps to:
-`create_blog_post(blog_post_input: BlogPostInput, auth_user: AuthUser)` and
-`update_blog_post(blog_post_identity: UUID, blog_post_input: BlogPostInput, auth_user: AuthUser)`.
+`create_persona(persona_input: PersonaInput, auth_user: AuthUser)` and
+`update_persona(persona_identity: UUID, persona_input: PersonaInput, auth_user: AuthUser)`.
+
+When create carries fields an update must never change, such as the owning persona or a
+source run, create gets its own `Create<Entity>Dto` and `Create<Entity>Input`, and
+update keeps `<Entity>Dto` with an `Update<Entity>Input`:
+`create_blog_post(create_blog_post_input: CreateBlogPostInput, auth_user: AuthUser)` and
+`update_blog_post(blog_post_identity: UUID, update_blog_post_input: UpdateBlogPostInput, auth_user: AuthUser)`.
 
 ### The acting user
 
@@ -352,8 +405,8 @@ class BlogPostDto(BaseModel):
     title: str
     body: str
 
-    def to_input(self) -> BlogPostInput:
-        return BlogPostInput(title=self.title, body=self.body)
+    def to_input(self) -> UpdateBlogPostInput:
+        return UpdateBlogPostInput(title=self.title, body=self.body)
 
 
 class BlogPostResponseDto(BaseModel):
@@ -431,7 +484,7 @@ async def find_blog_post(
 
 @blog_post_router.post("", status_code=201)
 async def create_blog_post(
-    dto: BlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
+    dto: CreateBlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> IdentityResponseDto:
     create_blog_post_result = await blog_post_service.create_blog_post(
         dto.to_input(), auth_user
@@ -470,7 +523,8 @@ application code uses the database.
 - The engine is created once in `lifespan`, and the session factory once from it with
   `create_db_session_factory(db_engine)`. Never build an `async_sessionmaker` by hand;
   the factory carries the session options and the soft-delete rule. Db sessions are
-  per-request.
+  per-request. The one exception is a row a long-running route needs (Services › Rows
+  a long-running route needs).
 - A service may import any Orm it needs; the domain boundary applies to services, not
   tables.
 - Python code handles aware UTC datetimes only: `datetime.now(UTC)`
@@ -525,6 +579,12 @@ A record becomes a `Result` through `model_validate(<entity>_record, from_attrib
 which copies only the fields the `Result` declares, including nested `Result`s. The
 flag goes on the call; a `Result` class never sets `model_config`, so it stays a plain
 shape.
+
+A `Result` that spans related rows is built the same way, from a record whose
+relationships were loaded up front: `contains_eager` when the query already joins them
+(such as for an access filter), `selectinload` otherwise, which also covers a list of
+related rows. A labelled multi-column `select()` read through `.mappings()` is only for
+flat projections and aggregates.
 
 `scalar_one_or_none()` then raise `NotFoundException` for a single row,
 `scalars().all()` for a list, which is empty rather than an error when nothing
@@ -659,29 +719,73 @@ belongs on the DTO (DTOs › Inbound). Never use an `Enum` to group unrelated co
 
 ### Prompts
 
-LLM prompts live in a `Prompt` class per prompt set, in `libs/<domain>/prompts.py`.
-Every prompt is a method returning `str`.
+Every LLM call takes a system prompt and a user prompt, and one `Prompt` class builds
+both for one step. A domain whose steps share a shape declares an abstract
+`Base<Domain>Prompt`, and each step extends it. A lib or graph variant with one prompt
+class keeps it in `prompts.py`. One with more keeps them in a `prompts/` package, one
+module per class named after it in snake_case, holding that class and its templates,
+with `__init__.py` re-exporting every class.
 
 ```python
-# libs/humanizer/prompts.py
-class HumanizerPrompt:
-    @staticmethod
-    def build_system_prompt() -> str:
-        return REWRITE_SYSTEM_TEMPLATE.format(rules=AI_TELL_RULES)
+# libs/generate_text/graphs/blog_post/prompts/blog_post_draft_prompt.py
+DRAFT_SYSTEM_TEMPLATE = (
+    "Write a complete blog post draft from the outline and brief provided. ..."
+    "{persona_prompt_section}{tone_and_audience_prompt_section}"
+)
 
-    @staticmethod
-    def build_user_prompt(draft_text: str, persona_style: str) -> str:
-        return REWRITE_USER_TEMPLATE.format(draft=draft_text, style=persona_style)
+DRAFT_USER_TEMPLATE = (
+    "Outline:\n\n{outline_text}\n\nBrief:\n\n{prompt_text}{additional_context_prompt_section}"
+)
+
+
+class BlogPostDraftPrompt(BaseGenerateTextPrompt):
+    def build_generate_prompt(self, state: GenerateTextState) -> BuildPromptResult:
+        additional_context_prompt_section = self._build_additional_context_prompt_section(
+            state.additional_context
+        )
+        user_prompt = DRAFT_USER_TEMPLATE.format(
+            outline_text=state.latest_output(),
+            prompt_text=state.prompt_text,
+            additional_context_prompt_section=additional_context_prompt_section,
+        )
+        return BuildPromptResult(
+            system_prompt=self._build_system_prompt(state), user_prompt=user_prompt
+        )
+
+    def _build_system_prompt(self, state: GenerateTextState) -> str:
+        persona = state.build_persona()
+        persona_prompt_section = self._build_persona_prompt_section(
+            persona,
+            ["name", "bio", "background", "expertise", "writing_style", "sample_writing"],
+        )
+        tone_and_audience_prompt_section = self._build_tone_and_audience_prompt_section(
+            state.tone, state.target_audience
+        )
+        return DRAFT_SYSTEM_TEMPLATE.format(
+            persona_prompt_section=persona_prompt_section,
+            tone_and_audience_prompt_section=tone_and_audience_prompt_section,
+        )
 ```
 
-- Method names are `build_<what>_prompt`. Never a bare `prompt()`.
-- `@staticmethod` when the prompt is a pure function of its arguments. A prompt set
-  needing configuration is a normal class constructed with those values, like a
-  service.
-- Template text is an `UPPER_SNAKE` constant, in `constants.py` or at the top of
-  `prompts.py`. Never inline in the method.
-- One `Prompt` class per prompt set, not per domain; several can share `prompts.py`.
-- A service never builds a prompt string inline.
+- The system prompt says what the model is expected to do, then who it is doing it
+  as. The user prompt carries the material for this call.
+- Every prompt a class returns is one template, formatted once, with everything passed
+  in, including sections built by `_build_<what>_prompt_section` helpers. Never add to
+  a formatted template afterwards. The helpers format with templates too, and a
+  section that has nothing to say returns `""`.
+- A rewrite is a method on its step's class, not a class of its own, so it shares the
+  step's system prompt.
+- Each class chooses which inputs it uses and where they go. Formatting shared by
+  several steps is a protected helper on the base class; the subclass still decides
+  what to pass it and which prompt it lands in.
+- Method names are `build_<what>_prompt`. Never a bare `prompt()`. Every one returns a
+  `BuildPromptResult` holding `system_prompt` and `user_prompt`.
+- A prompt class holds no state. One needing configuration takes it through
+  `__init__`, like a service.
+- Template text is an `UPPER_SNAKE` constant at the top of the module that uses it.
+  Never inline in the method. Prompt text that belongs to no single step, such as a
+  node's retry instructions, follows the same rule in the module that uses it.
+- A service or node never builds a prompt string inline.
 
 ## Errors
 

@@ -90,7 +90,8 @@ backend/tests/
 | Source                               | Test file                              | Required cases |
 | ------------------------------------ | -------------------------------------- | -------------- |
 | `libs/<d>/services.py`, or each module in `libs/<d>/services/` | `tests/libs/<d>/test_services.py`, or `test_<service>.py` | For each public method: happy path, each branch, each exception it raises, each collaborator failure it handles. With a database, also persisted state, not found, constraint violations, related rows loaded (§2, §3) |
-| `libs/<d>/prompts.py`                | `tests/libs/<d>/test_prompts.py`       | Each builder: the arguments appear in the output (§1) |
+| `prompts.py`, or each module in a `prompts/` package, in a lib or a graph variant | The mirrored `test_prompts.py`, or `prompts/test_<prompt>.py` | Each builder: the inputs land in the prompt they belong in (§1) |
+| A graph variant's `<variant>_<what>_output_format.py` | The mirrored `test_<module>.py` | `normalize_output`: each fix it makes and what it leaves alone. `validate_output`: each problem on its own, and a valid document with none (§1) |
 | `libs/<d>/utils/*.py`, `libs/core/utils/*.py` | `tests/libs/<d>/test_<utils>.py` | Every branch of every static method (§1, §2). A `Utils` class whose only output is a wall-clock measurement, like `DateTimeUtils`, gets no file: its effect is asserted through the service |
 | `libs/<d>/inputs.py`, `results.py`   | `tests/libs/<d>/test_inputs.py`, `test_results.py` | Only models with a validator or declared constraint: accepted and rejected values (§1) |
 | `libs/<d>/states.py`                 | `tests/libs/<d>/test_states.py`        | Only a method that does more than group stored fields; otherwise the graph and service tests cover it |
@@ -119,6 +120,9 @@ backend/tests/
   - `test_create_user_returns_created_user`
   - `test_create_user_email_taken_raises_user_email_taken_exception`
   - `test_build_digest_unknown_region_type_returns_422`
+- When a full exception class name would push a test name past the line limit,
+  shorten `<outcome>` to the exception's distinguishing words:
+  `..._raises_persona_private_exception`, not the whole class name.
 - No test classes. Group tests by file and by the `<unit>` prefix.
 - A fixture is a noun, named exactly like the production object it stands for:
   `db_session`, `redis_client`, `app_settings`, `fastapi_app`, `api_client`. Never a
@@ -156,7 +160,9 @@ default.
   `unittest.mock`. It works inside a plain dict or JSON comparison; a Pydantic model
   rejects it at validation, so assert those fields individually instead.
 - Assert exceptions with `with pytest.raises(UserEmailTakenException):`. Add `match=`
-  only when the message is part of the contract, such as user-facing text.
+  only when the message is part of the contract, such as user-facing text. When the
+  behaviour under test is that one message lists several problems, check each problem
+  with `in`, never the exact full string.
 - Compare floats with `pytest.approx`.
 - Don't assert on log wording, exception messages, or FastAPI's validation `msg`.
 
@@ -194,6 +200,11 @@ calls.
   - the root `environment_variables` fixture
   - a domain conftest's override of a third-party boundary, so no test in that
     folder can reach the real API
+- A third-party override that several domains' route tests need, such as the LLM
+  stub, is an opt-in fixture in `tests/api/conftest.py`, never autouse there: an
+  app-level autouse fixture pulls in whichever `fastapi_app` a domain overrides. A
+  module opts in with `pytestmark = pytest.mark.usefixtures("llm_service_stub")`, or a
+  test requests it by name to configure it.
 - When a fixture is only needed for its side effect, request it with
   `@pytest.mark.usefixtures("signed_in_user")`, not as an unused argument.
 - Test data is not a fixture. Build any value a test asserts on inside that test,
@@ -220,6 +231,7 @@ Use stubs, never mocks.
 | Collaborator                        | Double                                                        |
 | ----------------------------------- | ------------------------------------------------------------- |
 | One of our services                 | Hand-written `<Class>Stub` in `tests/stubs/<domain>.py`       |
+| A `Prompt` handed to a generic node or service | Hand-written `<Name>PromptStub` returning a fixed `BuildPromptResult`, placed and named like a service stub |
 | Third-party HTTP API                | The real SDK client over `httpx.MockTransport` (§4)           |
 | Postgres, Redis                     | The real thing                                                |
 | A `Utils` class                     | Nothing. It is pure, so call the real one                     |
@@ -246,7 +258,8 @@ How to write a stub:
   - `<method>_inputs`: every input received, in order
   - `<method>_result`: the value to return
   - `<method>_results`: values popped in order, for when calls must differ (such as a
-    rewrite loop)
+    rewrite loop). When it's set it wins over `<method>_result`, and running out
+    raises, so a test that makes more calls than it scripted fails
   - `<method>_error`: an exception to raise instead
 
 ```python
@@ -397,28 +410,28 @@ dispatch maps, and DTO mappers that contain logic.
 
 | Situation                          | Pattern |
 | ---------------------------------- | ------- |
-| Prompt builder                     | Call it with distinctive argument values and assert each one appears. Never snapshot the whole prompt |
+| Prompt builder                     | Call it with distinctive input values and assert each one appears in the prompt it belongs in, system or user. Never snapshot the whole prompt |
 | Template placeholder never filled  | Calling every builder once covers it, because `.format()` raises `KeyError` |
 | Validator or `Field` constraint    | One parametrized test of accepted values, one of rejected values raising `ValidationError` |
 | Enum dispatch map                  | Parametrize over every member and assert each has a handler. The only allowed read of a `_private` attribute |
 | DTO mapper with logic              | Build the DTO, call the mapper, compare the whole returned model |
 
 ```python
-# tests/libs/forecast_digest/test_prompts.py
-def test_build_user_prompt_includes_station_name() -> None:
-    user_prompt = ForecastDigestPrompt.build_user_prompt(
-        station_name="pier-17",
-        region_type=RegionType.COASTAL,
-    )
+# tests/libs/generate_text/graphs/blog_post/prompts/test_blog_post_draft_prompt.py
+def test_build_generate_prompt_puts_persona_name_in_system_prompt() -> None:
+    state = build_generate_text_state(persona_name="Marta Quill")
 
-    assert "pier-17" in user_prompt
+    build_prompt_result = BlogPostDraftPrompt().build_generate_prompt(state)
+
+    assert "Marta Quill" in build_prompt_result.system_prompt
 ```
 
 ## §2 Service tests
 
 Build the service directly with stubs and an explicit settings object. No app, no
 HTTP. If construction takes a client stack, move it into a fixture in the domain's
-`conftest.py`.
+`conftest.py`. A test of a sync method that never touches a collaborator may pass
+`None` for it, rather than a stub written only to satisfy `__init__`.
 
 | Situation                         | Pattern |
 | --------------------------------- | ------- |

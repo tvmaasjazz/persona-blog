@@ -14,6 +14,7 @@ from libs.generate_text.types import GenerateTextRunStatusType, TextType
 from tests.factories.auth import build_auth_user
 from tests.factories.generate_text import build_create_generate_text_run_input
 from tests.factories.llm import insert_llm_call_row
+from tests.factories.personas import insert_persona_row
 from tests.factories.users import insert_user_row
 
 
@@ -23,13 +24,20 @@ async def _insert_auth_user(db_session: AsyncSession) -> AuthUser:
     return build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
 
 
+async def _insert_persona_id(db_session: AsyncSession, *, created_by_id: int) -> int:
+    persona_record = await insert_persona_row(db_session, created_by_id=created_by_id)
+    await db_session.commit()
+    return persona_record.id
+
+
 async def test_create_run_persists_pending_row(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     create_generate_text_run_input = build_create_generate_text_run_input(
-        graph_name="blog_post", graph_version="2026-09-24.1"
+        graph_name="blog_post", graph_version="2026-09-24.1", persona_id=persona_id
     )
 
     create_run_result = await generate_text_run_service.create_run(
@@ -49,13 +57,36 @@ async def test_create_run_persists_pending_row(
     assert run_record.created_at is not None
 
 
+async def test_create_run_persists_persona_id_tone_and_target_audience(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    create_generate_text_run_input = build_create_generate_text_run_input(
+        persona_id=persona_id, tone="Playful", target_audience="Home bakers"
+    )
+
+    create_run_result = await generate_text_run_service.create_run(
+        create_generate_text_run_input, auth_user
+    )
+
+    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
+    run_record = await db_session.scalar(run_query)
+    assert run_record is not None
+    assert run_record.persona_id == persona_id
+    assert run_record.tone == "Playful"
+    assert run_record.target_audience == "Home bakers"
+
+
 async def test_start_run_sets_running_status_and_started_at(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     create_run_result = await generate_text_run_service.create_run(
-        build_create_generate_text_run_input(), auth_user
+        build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
 
     await generate_text_run_service.start_run(create_run_result.id)
@@ -80,9 +111,10 @@ async def test_complete_run_sets_completed_status_and_zero_rollup_when_no_calls(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     create_run_result = await generate_text_run_service.create_run(
-        build_create_generate_text_run_input(), auth_user
+        build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
 
     await generate_text_run_service.complete_run(create_run_result.id)
@@ -102,9 +134,10 @@ async def test_complete_run_sums_llm_calls_coalescing_null_tokens_and_cost(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     create_run_result = await generate_text_run_service.create_run(
-        build_create_generate_text_run_input(), auth_user
+        build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
     await insert_llm_call_row(
         db_session,
@@ -139,9 +172,10 @@ async def test_record_awaiting_review_sets_awaiting_review_status_and_rolls_up_c
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     create_run_result = await generate_text_run_service.create_run(
-        build_create_generate_text_run_input(), auth_user
+        build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
     await insert_llm_call_row(
         db_session,
@@ -169,9 +203,10 @@ async def test_fail_run_sets_failed_status_error_fields_and_rolls_up_calls(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     create_run_result = await generate_text_run_service.create_run(
-        build_create_generate_text_run_input(), auth_user
+        build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
     await insert_llm_call_row(
         db_session,
@@ -202,9 +237,10 @@ async def test_fail_run_already_failed_keeps_first_failures_values(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     create_run_result = await generate_text_run_service.create_run(
-        build_create_generate_text_run_input(), auth_user
+        build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
     await generate_text_run_service.fail_run(create_run_result.id, "ValueError", "first failure")
 
@@ -222,9 +258,10 @@ async def test_find_run_by_identity_returns_result(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     create_generate_text_run_input = build_create_generate_text_run_input(
-        graph_name="blog_post", graph_version="2026-09-24.1"
+        graph_name="blog_post", graph_version="2026-09-24.1", persona_id=persona_id
     )
     create_run_result = await generate_text_run_service.create_run(
         create_generate_text_run_input, auth_user
@@ -242,6 +279,7 @@ async def test_find_run_by_identity_returns_result(
         graph_version="2026-09-24.1",
         status=GenerateTextRunStatusType.PENDING,
         options={},
+        persona_id=persona_id,
         llm_call_count=0,
         input_tokens=0,
         output_tokens=0,

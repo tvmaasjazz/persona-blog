@@ -2,11 +2,13 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Enum, Index, Integer, Numeric, desc, text
+from sqlalchemy import BigInteger, Enum, ForeignKey, Index, Integer, Numeric, desc, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from libs.database.base import BaseOrm
+from libs.database.orm.content_item import ContentItemOrm
+from libs.database.orm.persona import PersonaOrm
 from libs.generate_text.types import GenerateTextRunStatusType, TextType
 
 if TYPE_CHECKING:
@@ -26,6 +28,8 @@ class GenerateTextRunOrm(BaseOrm):
             "status",
             postgresql_where=text("status IN ('PENDING', 'RUNNING', 'AWAITING_REVIEW')"),
         ),
+        Index("pb_generate_text_run_persona_id_idx", "persona_id"),
+        Index("pb_generate_text_run_content_item_id_idx", "content_item_id"),
     )
 
     text_type: Mapped[TextType] = mapped_column(Enum(TextType, name="pb_text_type"))
@@ -36,7 +40,9 @@ class GenerateTextRunOrm(BaseOrm):
         server_default=text("'PENDING'"),
     )
     prompt_text: Mapped[str]
-    persona_info: Mapped[str | None]
+    persona_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey(PersonaOrm.id))
+    tone: Mapped[str | None]
+    target_audience: Mapped[str | None]
     additional_context: Mapped[str | None]
     options: Mapped[dict[str, Any]] = mapped_column(JSONB)
     error_code: Mapped[str | None]
@@ -47,5 +53,6 @@ class GenerateTextRunOrm(BaseOrm):
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(16, 10), server_default=text("0"))
     started_at: Mapped[datetime | None]
     finished_at: Mapped[datetime | None]
+    content_item_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey(ContentItemOrm.id))
 
     steps: Mapped[list[GenerateTextStepOrm]] = relationship(back_populates="run")
