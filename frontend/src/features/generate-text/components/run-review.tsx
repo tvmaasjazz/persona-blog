@@ -3,9 +3,8 @@ import { toast } from 'sonner'
 
 import { MarkdownContent } from '@/components/markdown-content'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { useResumeGenerateText } from '@/features/generate-text/api/use-resume-generate-text'
+import { RequestChangesForm } from '@/features/generate-text/components/request-changes-form'
 
 type RunReviewProps = {
   runIdentity: string
@@ -22,19 +21,21 @@ const REVIEW_STEP_NAMES: Record<string, string> = {
 export function RunReview({ runIdentity, lastStep, content }: RunReviewProps) {
   const resumeGenerateText = useResumeGenerateText()
   const [isRequestingChanges, setIsRequestingChanges] = useState(false)
-  const [feedbackText, setFeedbackText] = useState('')
   const stepName = (lastStep && REVIEW_STEP_NAMES[lastStep]) || 'Review'
   const isWorking = resumeGenerateText.isPending
-  const trimmedFeedback = feedbackText.trim()
 
-  function resume(isApproved: boolean) {
-    resumeGenerateText.mutate(
-      {
+  async function resume(isApproved: boolean, feedbackText: string | null) {
+    if (isWorking) {
+      return
+    }
+    try {
+      await resumeGenerateText.mutateAsync({
         runIdentity,
-        resume: { is_approved: isApproved, feedback_text: isApproved ? null : trimmedFeedback },
-      },
-      { onError: () => toast.error("Couldn't continue the run. Try again.") },
-    )
+        resume: { is_approved: isApproved, feedback_text: feedbackText },
+      })
+    } catch {
+      toast.error("Couldn't continue the run. Try again.")
+    }
   }
 
   return (
@@ -42,7 +43,7 @@ export function RunReview({ runIdentity, lastStep, content }: RunReviewProps) {
       <h2 className="text-xl font-extrabold">{stepName} ready for review</h2>
       <MarkdownContent markdown={content} />
       <div className="flex flex-wrap gap-3">
-        <Button disabled={isWorking} onClick={() => resume(true)}>
+        <Button disabled={isWorking} onClick={() => void resume(true, null)}>
           Approve
         </Button>
         {!isRequestingChanges && (
@@ -56,31 +57,11 @@ export function RunReview({ runIdentity, lastStep, content }: RunReviewProps) {
         )}
       </div>
       {isRequestingChanges && (
-        <div className="flex flex-col gap-3">
-          <Label htmlFor="run-feedback">What should change?</Label>
-          <Textarea
-            id="run-feedback"
-            rows={4}
-            value={feedbackText}
-            onChange={(event) => setFeedbackText(event.target.value)}
-          />
-          <div className="flex gap-3">
-            <Button
-              variant="secondary"
-              disabled={isWorking || trimmedFeedback === ''}
-              onClick={() => resume(false)}
-            >
-              Send
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={isWorking}
-              onClick={() => setIsRequestingChanges(false)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
+        <RequestChangesForm
+          isDisabled={isWorking}
+          onSend={(feedbackText) => resume(false, feedbackText)}
+          onCancel={() => setIsRequestingChanges(false)}
+        />
       )}
       {isWorking && (
         <p className="text-sm text-muted-foreground">Working… this can take a minute or more.</p>
