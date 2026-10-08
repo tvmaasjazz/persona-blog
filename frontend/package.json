@@ -13,6 +13,7 @@
     "api:types": "openapi-typescript http://localhost:8000/openapi.json -o src/lib/api-schema.gen.ts"
   },
   "dependencies": {
+    "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-query": "^5.103.2",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.3.0",
@@ -21,7 +22,9 @@
     "radix-ui": "^1.6.7",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router": "^7.18.4"
+    "react-router": "^7.18.4",
+    "sonner": "^2.0.8",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

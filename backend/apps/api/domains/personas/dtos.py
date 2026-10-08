@@ -1,22 +1,34 @@
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 
 from libs.personas.inputs import PersonaInput
 from libs.personas.results import FindUserPersonaListResult, PersonaDetailResult
 
+PersonaNameStr = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
+]
+PersonaBioStr = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
+]
+AvatarUrlStr = Annotated[str, StringConstraints(max_length=2048, pattern=r"^https?://")]
+PersonaShortTextStr = Annotated[str, StringConstraints(max_length=200)]
+PersonaLongTextStr = Annotated[str, StringConstraints(max_length=2000)]
+SampleWritingStr = Annotated[str, StringConstraints(max_length=10000)]
+
 
 class PersonaDto(BaseModel):
-    name: str
-    bio: str
-    avatar_url: str | None = None
-    background: str | None = None
-    expertise: str | None = None
-    writing_style: str | None = None
-    default_tone: str | None = None
-    default_target_audience: str | None = None
-    sample_writing: str | None = None
+    name: PersonaNameStr
+    bio: PersonaBioStr
+    avatar_url: AvatarUrlStr | None = None
+    background: PersonaLongTextStr | None = None
+    expertise: PersonaLongTextStr | None = None
+    writing_style: PersonaLongTextStr | None = None
+    default_tone: PersonaShortTextStr | None = None
+    default_target_audience: PersonaShortTextStr | None = None
+    sample_writing: SampleWritingStr | None = None
     is_public: bool = False
 
     def to_input(self) -> PersonaInput:

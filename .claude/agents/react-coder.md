@@ -34,10 +34,15 @@ The rules files say where each of these lives and how it is shaped.
   router, add the feature's routes and nothing else.
 - **Shared components** in `src/components/layout/` or `src/components/`, when more
   than one feature needs them
+- **Form field components** in `src/components/form/`, registered in
+  `use-app-form.ts`, when a form needs a kind of control the app doesn't have yet
+  (`react-structure.md` › Forms)
 - **Shared helpers** in `src/lib/`, when more than one feature needs them, other than
-  the setup files listed below
+  the setup files listed below. `lib/api-error.ts` is one: extend it when a feature
+  needs more from API errors
 - **shadcn components**, added with the CLI. Variant edits only, per
-  `react-styling.md` › Components.
+  `react-styling.md` › Components. Never re-add `button.tsx`, `alert-dialog.tsx`, or
+  `sonner.tsx`: the CLI would overwrite their deliberate edits
 
 ## What you don't write
 
@@ -52,9 +57,8 @@ The rules files say where each of these lives and how it is shaped.
   package instead.
 - **App setup files**: `main.tsx`, `app/providers.tsx`, `app/query-client.ts`,
   `lib/api-client.ts`, `lib/utils.ts`, `index.html`, `vite.config.ts`, the tsconfig
-  files, `components.json`, `.oxlintrc.json`, and the `App.tsx` placeholder. Written
-  once, by the main session (step 11 for `app/` and `lib/api-client.ts`). If a task
-  seems to need a change there, report it instead.
+  files, `components.json`, and `.oxlintrc.json`. Written once, by the main session.
+  If a task seems to need a change there, report it instead.
 - **`src/lib/api-schema.gen.ts`**: generated, never hand-edited. If a route you need
   is missing from it, the backend doesn't have it yet or the file is stale. Report it
   rather than writing a type by hand.
