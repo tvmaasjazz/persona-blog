@@ -122,12 +122,11 @@ Split work across parallel agents only along files they don't share.
   `react-coder` writes the shared layer: every query and mutation hook, new field
   components in `components/form/`, components more than one page uses, and the wiring
   (routes in `app/router.tsx` pointing at stub pages, and nav links). Then two or three
-  run in parallel, split by page. Each owns its pages in `routes/` and the components
-  only those pages use, edits nothing else, and gets the shared layer's file list and
-  exports as its contract. Each runs `npm run fmt -- <files>` and
-  `npm run lint -- <files>` on its own files only, and reads a build error in a file
-  it doesn't own as another agent's work in progress. Run `fmt`, `lint` and `build`
-  once at the end.
+  run in parallel, split by page. Each owns its pages in `routes/`, replacing their
+  stubs, and the components only those pages use. It edits nothing else, and gets the
+  shared layer's file list and exports as its contract. Each formats and lints only
+  its own files (`react-coder.md` › Commands). Run `fmt`, `lint` and `build` once at
+  the end.
 
 ## Pull requests
 

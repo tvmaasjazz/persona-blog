@@ -174,9 +174,9 @@ callback, and the callback sets the cookie and redirects back to the app.
 Forms use TanStack Form, validated with a Zod schema. The app's form layer is in
 `components/form/`:
 
-- `use-app-form.ts` builds `useAppForm` and `withForm` with `createFormHook`. It
-  registers the field components (`TextField`, `TextareaField`, `SwitchField`) and the
-  form components (`SubmitButton`).
+- `use-app-form.ts` builds `useAppForm`, `withForm` and `withFieldGroup` with
+  `createFormHook`. It registers the field components in this folder and the form
+  components (`SubmitButton`).
 - Each field component renders its control through `FormField`. `FormField` owns the
   label, description, error, and the ids that tie them together, so a form never
   wires those by hand.
@@ -212,8 +212,9 @@ Validation:
 Fields reused across forms, like the blog post publishing controls, are a field group:
 `withFieldGroup` from `use-app-form.ts`, defined in the feature's `components/` with
 its `defaultValues`. A parent form nests the values under a key and renders
-`<PublishingFields form={form} fields="publishing" />`, so the same fields serve more
-than one form. The group's Zod schema is exported from the feature's schema file and
+`<PublishingFields form={form} fields="publishing" isPersonaPublic={...} />`, so the
+same fields serve more than one form. The group's Zod schema is exported from its own
+`<group>-form-schema.ts` at the feature root, like `publishing-form-schema.ts`, and
 nested into each parent's schema.
 
 A new kind of control, such as a select or date picker, is a new field component in
