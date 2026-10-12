@@ -5,6 +5,7 @@ import { MarkdownContent } from '@/components/markdown-content'
 import { Button } from '@/components/ui/button'
 import { useResumeGenerateText } from '@/features/generate-text/api/use-resume-generate-text'
 import { RequestChangesForm } from '@/features/generate-text/components/request-changes-form'
+import { describeRunReady, findReviewStepName } from '@/features/generate-text/run-steps'
 
 type RunReviewProps = {
   runIdentity: string
@@ -12,16 +13,10 @@ type RunReviewProps = {
   content: string
 }
 
-const REVIEW_STEP_NAMES: Record<string, string> = {
-  REVIEW_OUTLINE: 'Outline',
-  REVIEW_DRAFT: 'Draft',
-  REVIEW_HUMANIZE: 'Humanize',
-}
-
 export function RunReview({ runIdentity, lastStep, content }: RunReviewProps) {
   const resumeGenerateText = useResumeGenerateText()
   const [isRequestingChanges, setIsRequestingChanges] = useState(false)
-  const stepName = (lastStep && REVIEW_STEP_NAMES[lastStep]) || 'Review'
+  const stepName = findReviewStepName(lastStep)
   const isWorking = resumeGenerateText.isPending
 
   async function resume(isApproved: boolean, feedbackText: string | null) {
@@ -29,10 +24,16 @@ export function RunReview({ runIdentity, lastStep, content }: RunReviewProps) {
       return
     }
     try {
-      await resumeGenerateText.mutateAsync({
+      const run = await resumeGenerateText.mutateAsync({
         runIdentity,
         resume: { is_approved: isApproved, feedback_text: feedbackText },
       })
+      // The next step replaces this one in place, above where the buttons were.
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      const runReadyMessage = describeRunReady(run)
+      if (runReadyMessage) {
+        toast.success(runReadyMessage)
+      }
     } catch {
       toast.error("Couldn't continue the run. Try again.")
     }
