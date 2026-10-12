@@ -66,8 +66,8 @@ cd backend
 cp .env.example .env
 ```
 
-[`backend/.env.example`](backend/.env.example) lists every value the app reads. Most
-are already filled in for the Docker containers. You supply three, all your own:
+[`backend/.env.example`](backend/.env.example) lists the values you need. Most are
+already filled in for the Docker containers. You supply three, all your own:
 
 | Variable               | Where it comes from                         | Cost                     |
 | ---------------------- | ------------------------------------------- | ------------------------ |
@@ -81,6 +81,29 @@ machine.
 
 Settings come from `config.toml`, overridden by environment variables and `.env`.
 Nested settings use a double underscore, such as `AUTH__SESSION_TTL_SECONDS`.
+
+#### Choosing the models
+
+Each step asks for a tier of model rather than a specific one, and each tier has a
+default:
+
+| Tier       | Used for                                          | Default       | Variable                    |
+| ---------- | ------------------------------------------------- | ------------- | --------------------------- |
+| `FAST`     | The outline and its rewrites                      | `gpt-4o-mini` | `LLM__FAST__MODEL_NAME`     |
+| `STRONG`   | The draft, the humanize pass and their rewrites   | `gpt-5.6-sol` | `LLM__STRONG__MODEL_NAME`   |
+| `THINKING` | Not used yet                                      | `o3`          | `LLM__THINKING__MODEL_NAME` |
+
+To keep costs down while you try it out, run every step on the cheaper model by
+adding this to `.env` (it's in `.env.example`, commented out):
+
+```bash
+LLM__STRONG__MODEL_NAME=gpt-4o-mini
+```
+
+Each tier's output limit and timeout can be set the same way, for example
+`LLM__STRONG__MAX_OUTPUT_TOKENS` and `LLM__STRONG__REQUEST_TIMEOUT_SECONDS`. Run costs
+are worked out from a price table for the default models. A model that isn't in it
+still works, but its runs show the cost as unknown.
 
 ### 2. Start Postgres and Redis
 
