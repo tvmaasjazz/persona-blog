@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
@@ -14,9 +15,18 @@ import { ApiError } from '@/lib/api-error'
 type SaveRunAsPostFormProps = {
   runIdentity: string
   isPersonaPublic: boolean
+  // Called once the post is saved, just before navigating to it.
+  onSaved?: () => void
+  // Shown beside Save, such as a Discard button.
+  secondaryAction?: ReactNode
 }
 
-export function SaveRunAsPostForm({ runIdentity, isPersonaPublic }: SaveRunAsPostFormProps) {
+export function SaveRunAsPostForm({
+  runIdentity,
+  isPersonaPublic,
+  onSaved,
+  secondaryAction,
+}: SaveRunAsPostFormProps) {
   const navigate = useNavigate()
   const createBlogPostFromRun = useCreateBlogPostFromRun()
 
@@ -31,6 +41,7 @@ export function SaveRunAsPostForm({ runIdentity, isPersonaPublic }: SaveRunAsPos
           published_at: toPublishedAt(publishing),
         })
         toast.success('Post saved')
+        onSaved?.()
         navigate(`/posts/${blogPostIdentity}`)
       } catch (error) {
         if (error instanceof ApiError && error.status === 409) {
@@ -52,10 +63,11 @@ export function SaveRunAsPostForm({ runIdentity, isPersonaPublic }: SaveRunAsPos
       }}
     >
       <PublishingFields form={form} fields="publishing" isPersonaPublic={isPersonaPublic} />
-      <div className="flex">
+      <div className="flex flex-wrap items-start gap-3">
         <form.AppForm>
           <form.SubmitButton label="Save post" />
         </form.AppForm>
+        {secondaryAction}
       </div>
     </form>
   )

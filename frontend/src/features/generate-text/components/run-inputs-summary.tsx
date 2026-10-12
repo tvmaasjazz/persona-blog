@@ -46,23 +46,22 @@ export function RunInputsSummary({
 }: RunInputsSummaryProps) {
   return (
     <Collapsible className="flex flex-col gap-3 rounded-2xl border bg-card p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h2 className="font-bold">{title}</h2>
-          <p className="text-sm text-muted-foreground">{personaName}</p>
-        </div>
-        <CollapsibleTrigger asChild>
-          <Button variant="ghost" className="group shrink-0">
-            Show details
-            <ChevronDown
-              aria-hidden
-              className="transition-transform group-data-[state=open]:rotate-180"
-            />
-          </Button>
-        </CollapsibleTrigger>
+      <div className="flex min-w-0 flex-col gap-1">
+        <h2 className="font-bold">{title}</h2>
+        <p className="text-sm text-muted-foreground">{personaName}</p>
       </div>
       {status}
       <p className="line-clamp-2 whitespace-pre-wrap">{promptText}</p>
+      <CollapsibleTrigger asChild>
+        <Button variant="link" className="group h-auto self-start px-0">
+          <span className="group-data-[state=open]:hidden">Show details</span>
+          <span className="hidden group-data-[state=open]:inline">Hide details</span>
+          <ChevronDown
+            aria-hidden
+            className="transition-transform group-data-[state=open]:rotate-180"
+          />
+        </Button>
+      </CollapsibleTrigger>
       <CollapsibleContent>
         <dl className="flex flex-col gap-3 border-t pt-3">
           <SummaryRow label="Prompt" value={promptText} />

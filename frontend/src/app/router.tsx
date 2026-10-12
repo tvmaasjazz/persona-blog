@@ -30,7 +30,11 @@ export const router = createBrowserRouter([
           },
           { path: '/personas/:personaIdentity/edit', element: <EditPersonaPage /> },
           { path: '/write', element: <WritePage /> },
-          { path: '/write/runs/:runIdentity', element: <GenerateTextRunPage /> },
+          {
+            path: '/write/runs/:runIdentity',
+            element: <GenerateTextRunPage />,
+            handle: { hasSidebar: true } satisfies AppRouteHandle,
+          },
           { path: '/posts', element: <BlogPostsPage /> },
           { path: '/posts/:blogPostIdentity', element: <BlogPostPage /> },
           { path: '/posts/:blogPostIdentity/edit', element: <EditBlogPostPage /> },

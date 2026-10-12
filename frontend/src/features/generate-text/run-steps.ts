@@ -18,8 +18,13 @@ export function findReviewStepName(lastStep: string | null): string {
   return (lastStep && REVIEW_STEP_NAMES[lastStep]) || 'Step'
 }
 
-export function describeSteps({ isOutlineEnabled, isHumanizeEnabled }: DescribeStepsInput): string {
-  const stepNames = []
+export type RunStepName = 'Outline' | 'Draft' | 'Humanize'
+
+export function listSteps({
+  isOutlineEnabled,
+  isHumanizeEnabled,
+}: DescribeStepsInput): RunStepName[] {
+  const stepNames: RunStepName[] = []
   if (isOutlineEnabled) {
     stepNames.push('Outline')
   }
@@ -27,7 +32,25 @@ export function describeSteps({ isOutlineEnabled, isHumanizeEnabled }: DescribeS
   if (isHumanizeEnabled) {
     stepNames.push('Humanize')
   }
-  return stepNames.join(', ')
+  return stepNames
+}
+
+export function describeSteps(describeStepsInput: DescribeStepsInput): string {
+  return listSteps(describeStepsInput).join(', ')
+}
+
+// The step a run's last node belongs to: REVIEW_DRAFT and REWRITE_DRAFT are both Draft.
+export function findRunStepName(lastStep: string | null): RunStepName | null {
+  if (lastStep?.includes('OUTLINE')) {
+    return 'Outline'
+  }
+  if (lastStep?.includes('DRAFT')) {
+    return 'Draft'
+  }
+  if (lastStep?.includes('HUMANIZE')) {
+    return 'Humanize'
+  }
+  return null
 }
 
 // What a toast says when a generate or resume call comes back, or null when the run
