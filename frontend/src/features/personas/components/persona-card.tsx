@@ -1,7 +1,7 @@
 import { Link } from 'react-router'
 
+import { PersonaAvatar } from '@/components/persona-avatar'
 import { Badge } from '@/components/ui/badge'
-import { PersonaAvatar } from '@/features/personas/components/persona-avatar'
 import type { components } from '@/lib/api-schema.gen'
 
 type PersonaResponseDto = components['schemas']['PersonaResponseDto']

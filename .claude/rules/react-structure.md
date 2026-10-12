@@ -68,8 +68,11 @@ route file in `routes/` composes them, the way a backend lib composes two servic
 instead of one domain importing another. What more than one feature needs moves to
 `components/` or `lib/`.
 
-`routes/` files are thin: they lay out feature components and read route params. No
-API calls and no business logic.
+`routes/` files are thin: they lay out feature components and read route and search
+params. A route never calls `apiClient` and holds no business logic. It may call
+features' query hooks to pass one feature's data into another as props, or to choose
+which feature's component to render, which is how it composes them: `write-page.tsx`
+reads `usePersonaList()` and hands the personas to the generate form.
 
 No barrel `index.ts` files. Import from the file that defines the thing.
 
@@ -174,9 +177,9 @@ callback, and the callback sets the cookie and redirects back to the app.
 Forms use TanStack Form, validated with a Zod schema. The app's form layer is in
 `components/form/`:
 
-- `use-app-form.ts` builds `useAppForm` and `withForm` with `createFormHook`. It
-  registers the field components (`TextField`, `TextareaField`, `SwitchField`) and the
-  form components (`SubmitButton`).
+- `use-app-form.ts` builds `useAppForm`, `withForm` and `withFieldGroup` with
+  `createFormHook`. It registers the field components in this folder and the form
+  components (`SubmitButton`).
 - Each field component renders its control through `FormField`. `FormField` owns the
   label, description, error, and the ids that tie them together, so a form never
   wires those by hand.
@@ -195,7 +198,9 @@ A feature's form has three parts. `features/personas/` is the example:
   `onSubmit` that:
   - parses the values
   - awaits the mutation's `mutateAsync`, so the submit button stays disabled while
-    the request runs
+    the request runs. A submit that can take long, like generating text, gives
+    `SubmitButton` a `pendingLabel` ("Writing…") and a `pendingHint` saying how long,
+    rather than a hand-built button
   - then toasts and navigates
 
 Validation:
@@ -208,6 +213,14 @@ Validation:
 - An API error about one field goes on that field, with
   `setFieldServerError(formApi, '<field>', message)`. `FormField` clears it when the
   user edits the field. Any other API error is a toast (› Toasts).
+
+Fields reused across forms, like the blog post publishing controls, are a field group:
+`withFieldGroup` from `use-app-form.ts`, defined in the feature's `components/` with
+its `defaultValues`. A parent form nests the values under a key and renders
+`<PublishingFields form={form} fields="publishing" isPersonaPublic={...} />`, so the
+same fields serve more than one form. The group's Zod schema is exported from its own
+`<group>-form-schema.ts` at the feature root, like `publishing-form-schema.ts`, and
+nested into each parent's schema.
 
 A new kind of control, such as a select or date picker, is a new field component in
 `components/form/`, registered in `use-app-form.ts`. For a form shape the app doesn't

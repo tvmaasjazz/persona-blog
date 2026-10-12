@@ -18,6 +18,12 @@ class GenerateTextRunResult(BaseModel):
     last_step: str | None
     graph_name: str
     graph_version: str
+    persona_identity: UUID | None
+    prompt_text: str
+    tone: str | None
+    target_audience: str | None
+    additional_context: str | None
+    options: dict[str, Any]
     content: str
     character_count: int
     llm_call_count: int
@@ -40,8 +46,13 @@ class FindGenerateTextRunByIdentityResult(BaseModel):
     graph_name: str
     graph_version: str
     status: GenerateTextRunStatusType
+    prompt_text: str
+    tone: str | None
+    target_audience: str | None
+    additional_context: str | None
     options: dict[str, Any]
     persona_id: int | None
+    persona_identity: UUID | None = None
     llm_call_count: int
     input_tokens: int
     output_tokens: int

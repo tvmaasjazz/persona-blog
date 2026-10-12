@@ -256,3 +256,85 @@ at the content item, with the current post in its prompt, and on approval writes
 through the update or an "apply run" action. `pb_generate_text_run.content_item_id`
 isn't unique, so a content item can already have many runs; only creating a post
 from a finished run is limited to one link.
+
+## Step 4 — Blog post CRUD frontend
+
+Write a post with a persona, review each step, save the result, then manage your
+posts: list, read, publish, edit and delete. Everything uses the routes from Steps 2a
+and 3b, plus one backend change: the run response returns the run's inputs.
+
+**Nav:** **My Posts** (`/posts`) joins **My Personas**. The **Create** button is
+enabled and goes to `/write`.
+
+**Routes**, all behind `RequireAuth`:
+
+| Path                       | Page                                                           |
+| -------------------------- | -------------------------------------------------------------- |
+| `/write`                   | The generate form. `?persona=<identity>` preselects a persona  |
+| `/write/runs/:runIdentity` | One run: review a step, or save the finished post              |
+| `/posts`                   | Your posts as cards, filtered by persona, with an empty state  |
+| `/posts/:blogPostIdentity` | The rendered post with **Edit**, **Delete** and publishing     |
+| `/posts/:blogPostIdentity/edit` | Title, subtitle, visibility and publish time              |
+
+The persona profile gains **Write a post** (to `/write?persona=...`) and a list of that
+persona's posts.
+
+**Generate form** (`POST /generate-text/blog-post`):
+
+- **Persona:** a select of your personas. Choosing one prefills tone and audience from
+  its defaults, which stay editable
+- **Prompt** (required), **tone**, **target audience**, **additional context**
+- **Steps:** outline, draft and humanize, each with an **on** switch and an
+  **auto-approve** switch, all visible. Draft always runs, so it has no on switch.
+  Defaults: every step on, none auto-approved
+
+The call blocks until the run pauses for review or finishes, which can take a minute or
+more, so the button shows a working state the whole time. On return, go to the run page.
+If the call fails, the run is marked failed and the route returns an error, not a run,
+so the page stays on the form with everything still filled in and shows the error.
+
+`/write?from_run=<identity>` prefills the whole form, persona and step switches
+included, from a run's inputs.
+
+**Run page** (`GET /generate-text/runs/:runIdentity`), by `status`:
+
+- **`AWAITING_REVIEW`:** the step's name and its output rendered as Markdown, then
+  **Approve** or **Request changes** with a feedback box (`POST .../resume`). A step is
+  rewritten at most `max_rewrite_passes` times; after that the run moves on
+- **`COMPLETED`:** a preview of the post and **Save as post**
+  (`POST /blog-posts/from-generate-text-run`) with the publishing controls below, then
+  go to the post. A 409 means it's already saved
+- **`FAILED`:** a short failure message and **Try again**, which opens
+  `/write?from_run=...`. A resume that fails while you're on the page lands here too.
+  The stored `error_message` is raw exception text, so it isn't shown
+- **`RUNNING` / `PENDING`:** a working state that refetches
+
+Run usage (tokens, cost) shows in a small footer. Runs aren't listed anywhere: there's
+no route for it yet, so the URL is the only way back to an unfinished run.
+
+**Run inputs on the run response.** `pb_generate_text_run` already stores every input,
+so the server stays the source of truth rather than the browser remembering them.
+`GenerateTextRunResponseDto` gains `persona_identity`, `prompt_text`, `tone`,
+`target_audience`, `additional_context` and `options`, in the same shape the request
+sent them. The run page also shows them as a "What you asked for" summary.
+
+**Publishing controls**, shared by save and edit: **Public** switch (disabled with an
+explanation when the persona is private), and **Draft**, **Publish now** or
+**Schedule**. Schedule shows a date and time input; the time is sent with its offset,
+because the backend refuses a naive one. Badges read the state from `published_at`:
+null is Draft, future is Scheduled, past is Published.
+
+**Rendering:** the post body is Markdown in the post format (Step 3a), rendered with
+`react-markdown` (new dependency) and styles mapped to our tokens, with no typography
+plugin. The title and subtitle come from their own fields.
+
+**Not in this step:**
+
+- **Editing the body.** It needs an editor that offers only what the format allows,
+  so users never see Markdown. Until then, a post's body changes only by regenerating
+- **Writing a post by hand** (`POST /blog-posts`), which lands with that editor
+- **A list of runs** and run progress while a step is running
+
+**Open:** a blog post response carries `persona_identity` but not the persona's name or
+avatar, so the list joins against your personas query. When other users' public posts
+can be browsed, the response should carry the persona summary instead.

@@ -71,6 +71,13 @@ class GenerateTextRunResponseDto(BaseModel):
     last_step: str | None
     graph_name: str
     graph_version: str
+    persona_identity: UUID | None
+    prompt_text: str
+    tone: str | None
+    target_audience: str | None
+    additional_context: str | None
+    # TextType has only BLOG_POST today; a second type makes this a union keyed on text_type.
+    options: BlogPostOptionsDto
     content: str
     character_count: int
     llm_call_count: int
@@ -89,6 +96,12 @@ class GenerateTextRunResponseDto(BaseModel):
             last_step=result.last_step,
             graph_name=result.graph_name,
             graph_version=result.graph_version,
+            persona_identity=result.persona_identity,
+            prompt_text=result.prompt_text,
+            tone=result.tone,
+            target_audience=result.target_audience,
+            additional_context=result.additional_context,
+            options=BlogPostOptionsDto.model_validate(result.options),
             content=result.content,
             character_count=result.character_count,
             llm_call_count=result.llm_call_count,

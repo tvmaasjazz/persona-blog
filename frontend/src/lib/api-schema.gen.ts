@@ -401,6 +401,17 @@ export interface components {
             graph_name: string;
             /** Graph Version */
             graph_version: string;
+            /** Persona Identity */
+            persona_identity: string | null;
+            /** Prompt Text */
+            prompt_text: string;
+            /** Tone */
+            tone: string | null;
+            /** Target Audience */
+            target_audience: string | null;
+            /** Additional Context */
+            additional_context: string | null;
+            options: components["schemas"]["BlogPostOptionsDto"];
             /** Content */
             content: string;
             /** Character Count */

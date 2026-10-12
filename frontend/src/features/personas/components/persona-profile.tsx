@@ -1,12 +1,12 @@
-import { Pencil } from 'lucide-react'
+import { Pencil, PenLine } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 
+import { PersonaAvatar } from '@/components/persona-avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { usePersona } from '@/features/personas/api/persona-query'
 import { DeletePersonaButton } from '@/features/personas/components/delete-persona-button'
-import { PersonaAvatar } from '@/features/personas/components/persona-avatar'
 import { ApiError, apiErrorMessage } from '@/lib/api-error'
 
 type PersonaProfileProps = {
@@ -72,6 +72,12 @@ export function PersonaProfile({ personaIdentity }: PersonaProfileProps) {
             <Link to={`/personas/${persona.identity}/edit`}>
               <Pencil aria-hidden />
               Edit
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link to={`/write?persona=${persona.identity}`}>
+              <PenLine aria-hidden />
+              Write a post
             </Link>
           </Button>
           <DeletePersonaButton personaIdentity={persona.identity} personaName={persona.name} />
