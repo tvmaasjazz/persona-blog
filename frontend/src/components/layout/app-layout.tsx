@@ -7,8 +7,9 @@ import { SignInCard } from '@/features/auth/components/sign-in-card'
 import { UserMenu } from '@/features/auth/components/user-menu'
 import { cn } from '@/lib/utils'
 
-// A route's handle. A page that lays out its own right sidebar, like a persona's posts,
-// sets hasSidebar so the main column is wide enough for both.
+// A route's handle. A page that lays out its own right sidebar with PageWithSidebar,
+// like a persona and their posts, sets hasSidebar so the main area spans the space
+// right of the nav instead of the usual centred column.
 export type AppRouteHandle = {
   hasSidebar?: boolean
 }
@@ -87,7 +88,7 @@ export function AppLayout() {
       </nav>
 
       <div className="flex min-w-0 flex-1 justify-center gap-10 px-6 py-8">
-        <main className={cn('w-full min-w-0', hasSidebar ? 'max-w-[960px]' : 'max-w-[600px]')}>
+        <main className={cn('w-full min-w-0', !hasSidebar && 'max-w-[720px]')}>
           <Outlet />
         </main>
 
