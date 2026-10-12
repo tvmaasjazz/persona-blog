@@ -19,10 +19,12 @@ The outline from here on. Detail gets added to each step as it comes up.
    process, different models, different prompts
 7. **Logging** — proper logging for the endpoints and for the graph
 8. **Log tracking service** — set it up and test it
-9. setup for initial deploy
-
-- setup basic plan architecture - as in unlimited for me, then free tier can generate one persona and one blog post, and I can grant extended trial to users that I choose who can create two personas and 10 blog posts
-- then setup railway and deploy fe and be (at subdomain of tvfeedme.com or right away at a more legit domain?)
+9. **Initial deploy**, in two parts:
+   - **Usage plans:** an unlimited plan for the admin; a free plan of one persona and
+     one blog post; and an extended trial the admin can grant to chosen users, of two
+     personas and ten blog posts
+   - **Railway:** deploy the frontend and backend. Open question: a subdomain of an
+     existing domain first, or a dedicated domain from the start
 
 ## Step 1 — Persona CRUD backend
 

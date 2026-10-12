@@ -74,7 +74,7 @@ A short pointer to the owning file (`database.md` › Soft delete) is not duplic
      before step 8) are fine when the file says so or the plan schedules them.
    - section references like `database.md` › Soft delete: the heading must exist
    - commands in `CLAUDE.md`, skills, and agents: the script, module, or marker must
-     exist (`scripts/check_schema_drift.py`, the `migration` pytest marker)
+     exist (`scripts/db/check_schema_drift.py`, the `migration` pytest marker)
    - plan step numbers cited anywhere must match `plans/plan.md`
    - names of agents, skills, and commands must match a file in `.claude/`
 4. **Duplication.** A rule stated in full outside its owner (see the table). Say which

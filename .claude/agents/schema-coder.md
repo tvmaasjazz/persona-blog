@@ -43,7 +43,7 @@ Then look at what already exists:
 
 - **Database setup files**: `libs/database/base.py`, `session.py`, `column_types.py`,
   `constants.py`, `migrations/env.py`, `migration_runner.py`, `script.py.mako`,
-  `alembic.ini`, and `scripts/check_schema_drift.py`. If a change seems to need one,
+  `alembic.ini`, and `scripts/db/check_schema_drift.py`. If a change seems to need one,
   such as a new shared column or a new column type, stop and report it.
 - **Application code**: services, Input and Result models, DTOs, dependencies, routers.
   That's `fastapi-coder`'s job.
@@ -58,7 +58,7 @@ Run commands from `backend/`. You may run only these:
 - `uv run alembic heads`
 - `uv run alembic revision --rev-id <YYYYMMDD_HHMM> -m <slug>`
 - `uv run pytest -m migration`
-- `DATABASE_URL=postgresql+asyncpg://pb:pb@localhost:5437/pb_test uv run python -m scripts.check_schema_drift`
+- `DATABASE_URL=postgresql+asyncpg://pb:pb@localhost:5437/pb_test uv run python -m scripts.db.check_schema_drift`
 - `uv run pytest`, once, before you report
 - `uv run ruff check --fix migrations/ libs/` and `uv run ruff format migrations/ libs/`
 

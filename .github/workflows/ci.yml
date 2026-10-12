@@ -72,7 +72,7 @@ jobs:
           enable-cache: true
       - run: uv sync --locked
       - run: uv run alembic upgrade head
-      - run: uv run python -m scripts.check_schema_drift
+      - run: uv run python -m scripts.db.check_schema_drift
       - run: uv run pytest -m migration
 
   frontend:

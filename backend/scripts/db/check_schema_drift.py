@@ -2,7 +2,7 @@
 
 Run from backend/ against a database already at `alembic upgrade head`:
 
-    uv run python -m scripts.check_schema_drift
+    uv run python -m scripts.db.check_schema_drift
 """
 
 import asyncio

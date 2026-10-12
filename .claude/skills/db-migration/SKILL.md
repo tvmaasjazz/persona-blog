@@ -42,7 +42,7 @@ same steps.
 
    ```bash
    uv run pytest -m migration
-   DATABASE_URL=postgresql+asyncpg://pb:pb@localhost:5437/pb_test uv run python -m scripts.check_schema_drift
+   DATABASE_URL=postgresql+asyncpg://pb:pb@localhost:5437/pb_test uv run python -m scripts.db.check_schema_drift
    uv run pytest
    ```
 
