@@ -11,6 +11,9 @@ import { ApiError, apiErrorMessage } from '@/lib/api-error'
 
 type PersonaProfileProps = {
   personaIdentity: string
+  // The persona's posts, which the route composes from the blog-posts feature. They sit
+  // in a right column on wide screens and under the header on narrow ones.
+  posts: ReactNode
 }
 
 type ProfileFieldProps = {
@@ -32,7 +35,7 @@ function ProfileField({ label, value, className }: ProfileFieldProps): ReactNode
   )
 }
 
-export function PersonaProfile({ personaIdentity }: PersonaProfileProps) {
+export function PersonaProfile({ personaIdentity, posts }: PersonaProfileProps) {
   const { data: persona, isPending, error } = usePersona(personaIdentity)
 
   if (isPending) {
@@ -55,8 +58,8 @@ export function PersonaProfile({ personaIdentity }: PersonaProfileProps) {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-4">
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,600px)_320px] lg:justify-between lg:gap-x-10">
+      <header className="flex flex-col gap-4 lg:col-start-1">
         <div className="flex items-center gap-4">
           <PersonaAvatar name={persona.name} avatarUrl={persona.avatar_url} isLarge />
           <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
@@ -84,22 +87,29 @@ export function PersonaProfile({ personaIdentity }: PersonaProfileProps) {
         </div>
       </header>
 
-      <section className="flex flex-col gap-5">
-        <h2 className="text-lg font-bold">Voice</h2>
-        <ProfileField label="Background" value={persona.background} />
-        <ProfileField label="Writing style" value={persona.writing_style} />
-        <ProfileField
-          label="Sample writing"
-          value={persona.sample_writing}
-          className="font-serif whitespace-pre-wrap"
-        />
-      </section>
+      <aside className="flex flex-col gap-4 lg:sticky lg:top-8 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
+        <h2 className="text-lg font-bold">Posts</h2>
+        {posts}
+      </aside>
 
-      <section className="flex flex-col gap-5">
-        <h2 className="text-lg font-bold">Defaults</h2>
-        <ProfileField label="Default tone" value={persona.default_tone} />
-        <ProfileField label="Default target audience" value={persona.default_target_audience} />
-      </section>
+      <div className="flex flex-col gap-8 lg:col-start-1">
+        <section className="flex flex-col gap-5">
+          <h2 className="text-lg font-bold">Voice</h2>
+          <ProfileField label="Background" value={persona.background} />
+          <ProfileField label="Writing style" value={persona.writing_style} />
+          <ProfileField
+            label="Sample writing"
+            value={persona.sample_writing}
+            className="font-serif whitespace-pre-wrap"
+          />
+        </section>
+
+        <section className="flex flex-col gap-5">
+          <h2 className="text-lg font-bold">Defaults</h2>
+          <ProfileField label="Default tone" value={persona.default_tone} />
+          <ProfileField label="Default target audience" value={persona.default_target_audience} />
+        </section>
+      </div>
     </div>
   )
 }
