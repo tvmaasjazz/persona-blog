@@ -352,7 +352,7 @@ comments, and function bodies.
 CI applies all migrations to an empty database, then runs:
 
 ```bash
-uv run python -m scripts.check_schema_drift
+uv run python -m scripts.db.check_schema_drift
 ```
 
 The script compares the database with `BaseOrm.metadata` through Alembic's

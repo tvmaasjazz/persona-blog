@@ -129,11 +129,11 @@ After `down -v`, run `uv run alembic upgrade head` again.
 ### Backend, from `backend/`
 
 ```bash
-uv run ruff check --fix .                     # lint
-uv run ruff format .                          # format
-uv run pytest                                 # tests, against pb_test
-uv run pytest -m migration                    # migration stairway test
-uv run python -m scripts.check_schema_drift   # Orm classes vs the migrated schema
+uv run ruff check --fix .                        # lint
+uv run ruff format .                             # format
+uv run pytest                                    # tests, against pb_test
+uv run pytest -m migration                       # migration stairway test
+uv run python -m scripts.db.check_schema_drift   # Orm classes vs the migrated schema
 ```
 
 The tests need the Docker containers running. They use the `pb_test` database and
@@ -162,7 +162,7 @@ backend/
 ├── apps/api/        FastAPI app: routers, DTOs and dependencies, one folder per domain
 ├── libs/            the domain logic: services, LangGraph graphs and prompts, Orm classes
 ├── migrations/      hand-written .up.sql / .down.sql pairs, run through Alembic
-├── scripts/         the schema drift check, and e2e/ for end-to-end API scripts
+├── scripts/         db/ for the schema drift check, e2e/ for end-to-end API scripts
 └── tests/           pytest, against a real Postgres and Redis
 frontend/src/
 ├── features/        one folder per area: api hooks, components, form schemas

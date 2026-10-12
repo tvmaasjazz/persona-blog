@@ -60,7 +60,7 @@ backend/
 │       ├── tasks.py           # background task functions, if the domain has any
 │       └── constants.py
 ├── migrations/                # raw SQL; see database.md
-├── scripts/                   # developer and CI scripts: check_schema_drift.py
+├── scripts/                   # db/check_schema_drift.py, e2e/ API walkthroughs
 ├── alembic.ini
 └── pyproject.toml
 ```
