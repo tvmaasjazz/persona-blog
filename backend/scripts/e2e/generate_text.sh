@@ -3,7 +3,7 @@
 # outline, draft and humanize, with the draft held for review. Prints each step, the run
 # and step rows it wrote, and the LLM calls they cost. Run from backend/:
 #
-#   ./scripts/verify_generate_text.sh
+#   ./scripts/e2e/generate_text.sh
 #
 # It signs in by minting a session for the first non-system user, so no browser needed.
 # The LLM calls are real and billed to the OPENAI_API_KEY in .env. It refuses to run

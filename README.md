@@ -140,8 +140,9 @@ The tests need the Docker containers running. They use the `pb_test` database an
 Redis database 15, so they never touch your local data, and they stub the LLM, so they
 cost nothing.
 
-`scripts/verify_*.sh` walk each feature end to end against your running dev server:
-personas, generation with review, and blog posts. They sign in as you without a
+`scripts/e2e/` holds end-to-end scripts that walk each feature's API against your
+running dev server: personas, generation with review, and blog posts. Run one from
+`backend/` with `./scripts/e2e/personas.sh`. They sign in as you without a
 browser, so sign in through the app once first. The generation scripts make real
 OpenAI calls. They refuse to run unless `.env` points at a local development database.
 
@@ -161,7 +162,7 @@ backend/
 ├── apps/api/        FastAPI app: routers, DTOs and dependencies, one folder per domain
 ├── libs/            the domain logic: services, LangGraph graphs and prompts, Orm classes
 ├── migrations/      hand-written .up.sql / .down.sql pairs, run through Alembic
-├── scripts/         schema drift check and end-to-end verify scripts
+├── scripts/         the schema drift check, and e2e/ for end-to-end API scripts
 └── tests/           pytest, against a real Postgres and Redis
 frontend/src/
 ├── features/        one folder per area: api hooks, components, form schemas

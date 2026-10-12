@@ -53,12 +53,14 @@ the PR is ready to merge (see Pull requests).
 
 When something takes more than one command to check — curl calls that chain, a
 sequence that carries a value from one step to the next, setup followed by a query —
-it ships as one script in `backend/scripts/`, run with a single command. Never a list
-of commands to paste in order.
+it ships as one script, run with a single command. Never a list of commands to paste
+in order. A walk through a feature's API end to end goes in `backend/scripts/e2e/`,
+named for the feature (`e2e/blog_posts.sh`); any other script goes in
+`backend/scripts/`.
 
 The script prints each step and what came back, checks what it can and says which
 expectation failed, and fails early with the fix when a prerequisite is missing, such
-as a dev server that isn't running. `backend/scripts/verify_generate_text.sh` is the
+as a dev server that isn't running. `backend/scripts/e2e/generate_text.sh` is the
 pattern.
 
 ## Non-obvious stack choices

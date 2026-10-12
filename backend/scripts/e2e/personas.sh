@@ -3,7 +3,7 @@
 # lists them, reads one, updates one, and soft deletes the other. Prints each response
 # and checks what it can. Run from backend/:
 #
-#   ./scripts/verify_personas.sh
+#   ./scripts/e2e/personas.sh
 #
 # It signs in by minting a session for the first non-system user, so no browser needed.
 # It refuses to run unless .env points at a local development database.
@@ -30,7 +30,7 @@ pass() { printf '\033[32m  ok\033[0m %s\n' "$1" >&2; }
 
 read_json_field() { python3 -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
 # Builds a JSON object from key=value pairs: @NAME reads environment variable NAME as
-# a string, anything else is parsed as a JSON literal. See verify_generate_text.sh for
+# a string, anything else is parsed as a JSON literal. See generate_text.sh for
 # why the python is single-quoted and the pairs arrive as argv.
 json_body() {
   python3 -c '
