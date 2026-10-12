@@ -49,7 +49,7 @@ frontend/src/
 ├── components/
 │   ├── ui/                    # shadcn/ui, added with the CLI, never hand-created
 │   ├── form/                  # the form layer: useAppForm, field components
-│   └── layout/                # app-wide shell: AppLayout
+│   └── layout/                # app shell and page layouts: AppLayout, PageWithSidebar
 └── lib/
     ├── api-client.ts          # apiClient: the openapi-fetch instance
     ├── api-error.ts           # ApiError, createApiError, apiErrorMessage
@@ -63,6 +63,10 @@ A feature is one area of the product: `auth`, `personas`, `blog-posts`,
 `generate-text`. Name it after the backend domain it talks to when there is one, in
 kebab-case: backend `generate_text` is feature `generate-text`. Create only the
 subfolders a feature uses.
+
+A React hook that only one feature uses and that makes no API call goes in its
+`hooks/`, like `generate-text/hooks/use-unsaved-run-guard.ts`. Hooks that call the API
+stay in `api/`.
 
 Plain functions and constants that only one feature uses (no React, no API call) go
 in a kebab-case `.ts` file at the feature root, named for what it holds:
