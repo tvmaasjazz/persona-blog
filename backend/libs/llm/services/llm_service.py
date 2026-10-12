@@ -29,6 +29,11 @@ class LlmService:
         self._llm_provider_services = llm_provider_services
         self._llm_call_service = llm_call_service
         self._llm_settings = llm_settings
+        self._tier_settings_by_llm_type: dict[LlmType, LlmTierSettings] = {
+            LlmType.FAST: llm_settings.fast,
+            LlmType.STRONG: llm_settings.strong,
+            LlmType.THINKING: llm_settings.thinking,
+        }
 
     async def complete(
         self, llm_completion_input: LlmCompletionInput, auth_user: AuthUser
@@ -139,7 +144,7 @@ class LlmService:
         )
 
     def _resolve_tier(self, llm_type: LlmType) -> LlmTierSettings:
-        tier_settings = self._llm_settings.tiers.get(llm_type)
+        tier_settings = self._tier_settings_by_llm_type.get(llm_type)
         if tier_settings is None:
             raise NotImplementedError(f"No tier configured for {llm_type}")
         return tier_settings

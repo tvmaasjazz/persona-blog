@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from libs.llm.types import LlmProviderType, LlmType
+from libs.llm.types import LlmProviderType
 
 
 class LlmTierSettings(BaseModel):
@@ -14,35 +14,36 @@ class LlmTierSettings(BaseModel):
     request_timeout_seconds: int
 
 
+# One class per tier, each with its own defaults, so a single value can be overridden
+# on its own: LLM__STRONG__MODEL_NAME=gpt-4o-mini. Overriding a dict entry instead
+# would replace the whole tier.
+class FastLlmTierSettings(LlmTierSettings):
+    provider: LlmProviderType = LlmProviderType.OPENAI
+    model_name: str = "gpt-4o-mini"
+    max_output_tokens: int = 2048
+    request_timeout_seconds: int = 30
+
+
+class StrongLlmTierSettings(LlmTierSettings):
+    provider: LlmProviderType = LlmProviderType.OPENAI
+    model_name: str = "gpt-5.6-sol"
+    max_output_tokens: int = 4096
+    request_timeout_seconds: int = 60
+
+
+class ThinkingLlmTierSettings(LlmTierSettings):
+    provider: LlmProviderType = LlmProviderType.OPENAI
+    model_name: str = "o3"
+    max_output_tokens: int = 4096
+    request_timeout_seconds: int = 120
+
+
 class LlmModelPricingSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     input_usd_per_million_tokens: Decimal
     cached_input_usd_per_million_tokens: Decimal
     output_usd_per_million_tokens: Decimal
-
-
-def _default_tiers() -> dict[LlmType, LlmTierSettings]:
-    return {
-        LlmType.FAST: LlmTierSettings(
-            provider=LlmProviderType.OPENAI,
-            model_name="gpt-4o-mini",
-            max_output_tokens=2048,
-            request_timeout_seconds=30,
-        ),
-        LlmType.STRONG: LlmTierSettings(
-            provider=LlmProviderType.OPENAI,
-            model_name="gpt-5.6-sol",
-            max_output_tokens=4096,
-            request_timeout_seconds=60,
-        ),
-        LlmType.THINKING: LlmTierSettings(
-            provider=LlmProviderType.OPENAI,
-            model_name="o3",
-            max_output_tokens=4096,
-            request_timeout_seconds=120,
-        ),
-    }
 
 
 def _default_model_pricing() -> dict[str, LlmModelPricingSettings]:
@@ -68,7 +69,9 @@ def _default_model_pricing() -> dict[str, LlmModelPricingSettings]:
 class LlmSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    tiers: dict[LlmType, LlmTierSettings] = Field(default_factory=_default_tiers)
+    fast: FastLlmTierSettings = Field(default_factory=FastLlmTierSettings)
+    strong: StrongLlmTierSettings = Field(default_factory=StrongLlmTierSettings)
+    thinking: ThinkingLlmTierSettings = Field(default_factory=ThinkingLlmTierSettings)
     model_pricing: dict[str, LlmModelPricingSettings] = Field(
         default_factory=_default_model_pricing
     )

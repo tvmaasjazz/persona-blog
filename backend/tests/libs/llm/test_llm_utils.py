@@ -4,8 +4,8 @@ import pytest
 import structlog.testing
 
 from libs.llm.constants import LLM_EXCEPTION_BY_REASON, LLM_STATUS_BY_REASON
-from libs.llm.settings import LlmModelPricingSettings, LlmSettings, LlmTierSettings
-from libs.llm.types import LlmCallReasonType, LlmCallStatusType, LlmProviderType, LlmType
+from libs.llm.settings import FastLlmTierSettings, LlmModelPricingSettings, LlmSettings
+from libs.llm.types import LlmCallReasonType, LlmCallStatusType, LlmProviderType
 from libs.llm.utils import LlmUtils
 
 
@@ -32,14 +32,12 @@ def test_build_reason_exception_every_reason_has_an_exception(reason: LlmCallRea
 
 def test_compute_cost_bills_cached_input_tokens_at_the_cached_rate() -> None:
     llm_settings = LlmSettings(
-        tiers={
-            LlmType.FAST: LlmTierSettings(
-                provider=LlmProviderType.OPENAI,
-                model_name="test-model",
-                max_output_tokens=2048,
-                request_timeout_seconds=30,
-            )
-        },
+        fast=FastLlmTierSettings(
+            provider=LlmProviderType.OPENAI,
+            model_name="test-model",
+            max_output_tokens=2048,
+            request_timeout_seconds=30,
+        ),
         model_pricing={
             "test-model": LlmModelPricingSettings(
                 input_usd_per_million_tokens=Decimal("2.00"),
@@ -61,7 +59,7 @@ def test_compute_cost_bills_cached_input_tokens_at_the_cached_rate() -> None:
 
 
 def test_compute_cost_unpriced_model_returns_none_and_logs_warning() -> None:
-    llm_settings = LlmSettings(tiers={}, model_pricing={})
+    llm_settings = LlmSettings(model_pricing={})
 
     with structlog.testing.capture_logs() as captured_log_events:
         cost_usd = LlmUtils.compute_cost(
