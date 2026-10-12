@@ -240,6 +240,14 @@ the backend's. A section that needs sign-in is a layout route wrapped in
 `<RequireAuth>`, which renders the child route, redirects when signed out, and shows
 a loading state while the current user loads. Pages don't check auth themselves.
 
+`AppLayout` renders `<ScrollRestoration />`, so every navigation opens at the top. A
+page that changes in place, such as the run page when a new step comes back, scrolls
+to the top itself and says what changed in a toast.
+
+A route that needs something from the layout says so in its `handle`, typed as
+`AppRouteHandle` from `app-layout.tsx`. `hasSidebar` is the one field so far: the
+persona page sets it to get a main column wide enough for its posts sidebar.
+
 ## Naming
 
 | Kind                 | File                     | Name                        |
