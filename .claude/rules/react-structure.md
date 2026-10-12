@@ -44,7 +44,8 @@ frontend/src/
 │       ├── components/
 │       │   ├── require-auth.tsx        # RequireAuth route guard
 │       │   └── sign-in-card.tsx        # SignInCard
-│       └── hooks/             # hooks with no API call, if the feature has any
+│       ├── hooks/             # hooks with no API call, if the feature has any
+│       └── <what-it-holds>.ts # plain helpers for this feature only, like run-steps.ts
 ├── components/
 │   ├── ui/                    # shadcn/ui, added with the CLI, never hand-created
 │   ├── form/                  # the form layer: useAppForm, field components
@@ -62,6 +63,11 @@ A feature is one area of the product: `auth`, `personas`, `blog-posts`,
 `generate-text`. Name it after the backend domain it talks to when there is one, in
 kebab-case: backend `generate_text` is feature `generate-text`. Create only the
 subfolders a feature uses.
+
+Plain functions and constants that only one feature uses (no React, no API call) go
+in a kebab-case `.ts` file at the feature root, named for what it holds:
+`generate-text/run-steps.ts` holds the step names and the text built from a run. One
+used by more than one feature moves to `lib/`.
 
 A feature never imports from another feature. When a page needs two features, the
 route file in `routes/` composes them, the way a backend lib composes two services
@@ -160,7 +166,9 @@ to show. It uses `sonner`, through `toast` imported from `'sonner'`. The one
   page then navigates away. A short past-tense phrase: "Persona saved".
 - **Error:** an error that belongs to a field shows under that field, not in a toast,
   like a 409 name clash under Name. Anything else goes to `toast.error` with
-  `apiErrorMessage(error)` from `lib/api-error.ts`.
+  `apiErrorMessage(error)` from `lib/api-error.ts`. The exception is generating
+  text: a failed generate or resume call shows a fixed message, such as "Couldn't
+  write the post. Try again.", because its detail can carry provider internals.
 - **Queries don't toast.** A failed query renders an error state where its data
   would be.
 - **No toast for what is already on screen**, such as a dialog that closes or a list
@@ -241,12 +249,13 @@ the backend's. A section that needs sign-in is a layout route wrapped in
 a loading state while the current user loads. Pages don't check auth themselves.
 
 `AppLayout` renders `<ScrollRestoration />`, so every navigation opens at the top. A
-page that changes in place, such as the run page when a new step comes back, scrolls
-to the top itself and says what changed in a toast.
+page that changes in place scrolls to the top itself: the run page when a new step
+comes back, and the write form when it folds into its status card. When there's
+something new to look at, a toast says what.
 
 A route that needs something from the layout says so in its `handle`, typed as
-`AppRouteHandle` from `app-layout.tsx`. `hasSidebar` is the one field so far: the
-persona page sets it to get a main column wide enough for its posts sidebar.
+`AppRouteHandle` from `app-layout.tsx`. `hasSidebar` is the one field so far; see
+`react-styling.md` › Layout for what it does.
 
 ## Naming
 

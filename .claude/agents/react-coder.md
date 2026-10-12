@@ -28,8 +28,9 @@ types in `src/lib/api-schema.gen.ts`; never guess a request or response shape.
 
 The rules files say where each of these lives and how it is shaped.
 
-- **Feature code**: query options and hooks, mutation hooks, feature components, and
-  feature-only hooks under `src/features/<feature>/`
+- **Feature code**: query options and hooks, mutation hooks, feature components,
+  feature-only hooks, and plain feature helpers at the feature root, under
+  `src/features/<feature>/` (`react-structure.md` › Features)
 - **Pages** in `src/routes/`, and their entries in `src/app/router.tsx`. In the
   router, add the feature's routes and nothing else.
 - **Stub pages and nav links**, when the task says you are writing the shared layer

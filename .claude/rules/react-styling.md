@@ -69,7 +69,8 @@ Substack's columns, from the left:
 
 - **Nav rail**: 200px wide, pinned to the left edge of the window and full height,
   with icon plus label items and the primary "Create" button under the nav
-- **Main column**: about 600px wide, centred in the space right of the nav rail
+- **Main column**: about 600px wide, centred in the space right of the nav rail.
+  When the right sidebar shows, the two are centred together
 - **Right sidebar**: only on a page that has something for it, never an empty
   column. `AppLayout` shows one when signed out, holding the sign-in card (about
   370px). A page with its own sidebar, like a persona and their posts, sets
