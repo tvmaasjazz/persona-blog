@@ -17,7 +17,7 @@ from libs.llm.exceptions import (
 from libs.llm.results import LlmCompletionResult, LlmStructuredCompletionResult
 from libs.llm.services.llm_call_service import LlmCallService
 from libs.llm.services.llm_service import LlmService
-from libs.llm.settings import LlmModelPricingSettings, LlmSettings, LlmTierSettings
+from libs.llm.settings import FastLlmTierSettings, LlmModelPricingSettings, LlmSettings
 from libs.llm.types import (
     LlmCallReasonType,
     LlmCallStatusType,
@@ -43,14 +43,12 @@ def _build_llm_settings(
     provider: LlmProviderType = LlmProviderType.OPENAI,
 ) -> LlmSettings:
     return LlmSettings(
-        tiers={
-            LlmType.FAST: LlmTierSettings(
-                provider=provider,
-                model_name=model_name,
-                max_output_tokens=2048,
-                request_timeout_seconds=30,
-            )
-        },
+        fast=FastLlmTierSettings(
+            provider=provider,
+            model_name=model_name,
+            max_output_tokens=2048,
+            request_timeout_seconds=30,
+        ),
         model_pricing={
             model_name: LlmModelPricingSettings(
                 input_usd_per_million_tokens=input_usd_per_million_tokens,
@@ -164,14 +162,12 @@ async def test_complete_unpriced_model_records_null_cost_and_logs_warning(
     llm_provider_service_stub = LlmProviderServiceStub()
     llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_settings = LlmSettings(
-        tiers={
-            LlmType.FAST: LlmTierSettings(
-                provider=LlmProviderType.OPENAI,
-                model_name="unpriced-model",
-                max_output_tokens=2048,
-                request_timeout_seconds=30,
-            )
-        },
+        fast=FastLlmTierSettings(
+            provider=LlmProviderType.OPENAI,
+            model_name="unpriced-model",
+            max_output_tokens=2048,
+            request_timeout_seconds=30,
+        ),
         model_pricing={},
     )
     llm_service = LlmService(
@@ -369,35 +365,17 @@ async def test_complete_logs_llm_call_completed_with_token_counts(
     assert llm_call_completed_events[0]["reasoning_tokens"] == 5
 
 
-async def test_complete_unconfigured_tier_raises_not_implemented_error(
-    db_session_factory: async_sessionmaker[AsyncSession],
-) -> None:
-    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
-    llm_settings = LlmSettings(tiers={}, model_pricing={})
-    llm_service = LlmService(
-        llm_provider_services={},
-        llm_call_service=llm_call_service,
-        llm_settings=llm_settings,
-    )
-    llm_completion_input = build_llm_completion_input(llm_type=LlmType.FAST)
-
-    with pytest.raises(NotImplementedError):
-        await llm_service.complete(llm_completion_input, build_auth_user())
-
-
 async def test_complete_tier_provider_not_registered_raises_not_implemented_error(
     db_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     llm_call_service = LlmCallService(db_session_factory=db_session_factory)
     llm_settings = LlmSettings(
-        tiers={
-            LlmType.FAST: LlmTierSettings(
-                provider=LlmProviderType.ANTHROPIC,
-                model_name="claude-stub",
-                max_output_tokens=2048,
-                request_timeout_seconds=30,
-            )
-        },
+        fast=FastLlmTierSettings(
+            provider=LlmProviderType.ANTHROPIC,
+            model_name="claude-stub",
+            max_output_tokens=2048,
+            request_timeout_seconds=30,
+        ),
         model_pricing={},
     )
     llm_service = LlmService(
