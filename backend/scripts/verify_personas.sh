@@ -6,6 +6,7 @@
 #   ./scripts/verify_personas.sh
 #
 # It signs in by minting a session for the first non-system user, so no browser needed.
+# It refuses to run unless .env points at a local development database.
 # Persona names carry a timestamp, so running it again doesn't collide with the last run.
 
 set -euo pipefail
@@ -61,6 +62,31 @@ request() {
   pass "$description → $expected"
   echo "$body"
 }
+
+step "Checking this is a local development setup"
+case "$API_URL" in
+  http://localhost:* | http://127.0.0.1:*) ;;
+  *) fail "API_URL is $API_URL — these scripts only run against a local dev server" ;;
+esac
+# The session minting below writes to whatever database .env points at, so refuse
+# anything that isn't a local development database.
+if ! uv run python - <<'PY'
+from urllib.parse import urlparse
+
+from apps.api.core.config import AppSettings
+from apps.api.core.types import EnvironmentType
+
+app_settings = AppSettings()
+database_host = urlparse(app_settings.database_url).hostname
+if app_settings.environment is not EnvironmentType.DEVELOPMENT:
+    raise SystemExit(f"environment is {app_settings.environment}, not DEVELOPMENT")
+if database_host not in ("localhost", "127.0.0.1"):
+    raise SystemExit(f"database host is {database_host}, not localhost")
+PY
+then
+  fail "refusing to run outside local development — check environment and DATABASE_URL"
+fi
+pass "local development environment and database"
 
 step "Checking the dev server"
 if ! curl -sf --max-time 3 "$API_URL/health" >/dev/null; then
