@@ -10,10 +10,23 @@ type PersonaResponseDto = components['schemas']['PersonaResponseDto']
 type BlogPostCardProps = {
   blogPost: BlogPostResponseDto
   persona: PersonaResponseDto | undefined
+  isCompact?: boolean
 }
 
-export function BlogPostCard({ blogPost, persona }: BlogPostCardProps) {
+export function BlogPostCard({ blogPost, persona, isCompact = false }: BlogPostCardProps) {
   const personaName = persona?.name ?? 'Unknown persona'
+
+  if (isCompact) {
+    return (
+      <Link
+        to={`/posts/${blogPost.identity}`}
+        className="flex flex-col gap-2 rounded-2xl border bg-card p-4 hover:bg-accent"
+      >
+        <span className="font-bold break-words">{blogPost.title}</span>
+        <PostStatusBadges publishedAt={blogPost.published_at} isPublic={blogPost.is_public} />
+      </Link>
+    )
+  }
 
   return (
     <Link

@@ -13,16 +13,16 @@ export function PersonaPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <PersonaProfile personaIdentity={personaIdentity} />
-      <section className="flex flex-col gap-5">
-        <h2 className="text-lg font-bold">Posts</h2>
+    <PersonaProfile
+      personaIdentity={personaIdentity}
+      posts={
         <BlogPostList
           personaIdentity={personaIdentity}
           personas={personaList?.personas ?? []}
+          isCompact
           emptyState={<p className="text-muted-foreground">No posts from this persona yet.</p>}
         />
-      </section>
-    </div>
+      }
+    />
   )
 }

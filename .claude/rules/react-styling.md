@@ -65,14 +65,23 @@ it (a Google Fonts link or a `@fontsource` package) is decided when post pages l
 
 ## Layout
 
-Substack's three columns, from the left:
+Substack's columns, from the left:
 
-- **Nav rail**: 200px wide, icon plus label items, the primary "Create" button under
-  the nav
-- **Main column**: about 600px wide, centred in the remaining space
-- **Right sidebar**: about 370px wide, holding cards such as sign-in and lists
+- **Nav rail**: 200px wide, pinned to the left edge of the window and full height,
+  with icon plus label items and the primary "Create" button under the nav
+- **Main column**: 720px wide, centred in the space right of the nav rail. That's
+  about 75 characters a line of post text. When the signed-out sign-in card shows,
+  the two are centred together
+- **Right sidebar**: only on a page that has something for it, never an empty
+  column. `AppLayout` shows one when signed out, holding the sign-in card (about
+  370px). A page with its own sidebar, such as a persona's posts or a run's actions,
+  sets `hasSidebar` on its route (`react-structure.md` › Routing) and lays itself out
+  with `PageWithSidebar` (`components/layout/`). That pins a sticky 320px sidebar to
+  the right edge and centres the 720px column in the space between it and the nav
 
-Below `lg` the right sidebar drops out. Below `md` the nav rail collapses to icons.
+Below `lg` a page's sidebar moves into the main column, between the page's header and
+its content, so actions like Save stay near the top. Below `md` the nav rail collapses
+to icons.
 
 ## Components
 

@@ -9,10 +9,17 @@ type PersonaResponseDto = components['schemas']['PersonaResponseDto']
 type BlogPostListProps = {
   personaIdentity?: string
   personas: PersonaResponseDto[]
+  // For a sidebar listing one persona's posts: titles and status only.
+  isCompact?: boolean
   emptyState: ReactNode
 }
 
-export function BlogPostList({ personaIdentity, personas, emptyState }: BlogPostListProps) {
+export function BlogPostList({
+  personaIdentity,
+  personas,
+  isCompact = false,
+  emptyState,
+}: BlogPostListProps) {
   const { data: blogPostList, isPending, isError } = useBlogPostList(personaIdentity)
 
   if (isPending) {
@@ -40,6 +47,7 @@ export function BlogPostList({ personaIdentity, personas, emptyState }: BlogPost
           key={blogPost.identity}
           blogPost={blogPost}
           persona={personas.find((persona) => persona.identity === blogPost.persona_identity)}
+          isCompact={isCompact}
         />
       ))}
     </div>

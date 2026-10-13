@@ -1,5 +1,5 @@
 import { FileText, Home, Plus, Sparkles, Users } from 'lucide-react'
-import { Link, NavLink, Outlet } from 'react-router'
+import { Link, NavLink, Outlet, ScrollRestoration, useMatches } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { useCurrentUser } from '@/features/auth/api/current-user-query'
@@ -7,12 +7,25 @@ import { SignInCard } from '@/features/auth/components/sign-in-card'
 import { UserMenu } from '@/features/auth/components/user-menu'
 import { cn } from '@/lib/utils'
 
+// A route's handle. A page that lays out its own right sidebar with PageWithSidebar,
+// like a persona and their posts, sets hasSidebar so the main area spans the space
+// right of the nav instead of the usual centred column.
+export type AppRouteHandle = {
+  hasSidebar?: boolean
+}
+
 export function AppLayout() {
   const { data: user, isPending } = useCurrentUser()
+  const matches = useMatches()
+  const hasSidebar = matches.some(
+    (match) => (match.handle as AppRouteHandle | undefined)?.hasSidebar,
+  )
+  const isSignInCardShown = !isPending && !user
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[1200px] justify-center">
-      <nav className="flex w-16 shrink-0 flex-col border-r px-2 py-4 md:w-[200px] md:px-3">
+    <div className="flex min-h-screen">
+      <ScrollRestoration />
+      <nav className="sticky top-0 flex h-screen w-16 shrink-0 flex-col border-r px-2 py-4 md:w-[200px] md:px-3">
         <Sparkles aria-hidden className="mb-4 size-6 self-center text-primary-text md:self-start" />
         <ul className="flex flex-col gap-1">
           <li>
@@ -74,13 +87,17 @@ export function AppLayout() {
         </div>
       </nav>
 
-      <main className="w-full max-w-[600px] px-6 py-8">
-        <Outlet />
-      </main>
+      <div className="flex min-w-0 flex-1 justify-center gap-10 px-6 py-8">
+        <main className={cn('w-full min-w-0', !hasSidebar && 'max-w-[720px]')}>
+          <Outlet />
+        </main>
 
-      <aside className="hidden w-[370px] shrink-0 px-6 py-8 lg:block">
-        {isPending ? <div className="h-40 rounded-2xl bg-accent" /> : !user && <SignInCard />}
-      </aside>
+        {isSignInCardShown && (
+          <aside className="hidden w-[370px] shrink-0 lg:block">
+            <SignInCard />
+          </aside>
+        )}
+      </div>
     </div>
   )
 }

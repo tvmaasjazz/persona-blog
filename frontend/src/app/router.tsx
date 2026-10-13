@@ -1,6 +1,6 @@
 import { createBrowserRouter } from 'react-router'
 
-import { AppLayout } from '@/components/layout/app-layout'
+import { AppLayout, type AppRouteHandle } from '@/components/layout/app-layout'
 import { RequireAuth } from '@/features/auth/components/require-auth'
 import { BlogPostPage } from '@/routes/blog-post-page'
 import { BlogPostsPage } from '@/routes/blog-posts-page'
@@ -23,10 +23,18 @@ export const router = createBrowserRouter([
         children: [
           { path: '/personas', element: <PersonasPage /> },
           { path: '/personas/new', element: <NewPersonaPage /> },
-          { path: '/personas/:personaIdentity', element: <PersonaPage /> },
+          {
+            path: '/personas/:personaIdentity',
+            element: <PersonaPage />,
+            handle: { hasSidebar: true } satisfies AppRouteHandle,
+          },
           { path: '/personas/:personaIdentity/edit', element: <EditPersonaPage /> },
           { path: '/write', element: <WritePage /> },
-          { path: '/write/runs/:runIdentity', element: <GenerateTextRunPage /> },
+          {
+            path: '/write/runs/:runIdentity',
+            element: <GenerateTextRunPage />,
+            handle: { hasSidebar: true } satisfies AppRouteHandle,
+          },
           { path: '/posts', element: <BlogPostsPage /> },
           { path: '/posts/:blogPostIdentity', element: <BlogPostPage /> },
           { path: '/posts/:blogPostIdentity/edit', element: <EditBlogPostPage /> },

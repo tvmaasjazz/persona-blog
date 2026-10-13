@@ -16,14 +16,14 @@ function LoadedRun({ runIdentity }: LoadedRunProps) {
   const { data: personaList } = usePersonaList()
 
   if (isPending) {
-    return <div className="h-40 rounded-2xl bg-accent" />
+    return <div className="mx-auto h-40 max-w-[720px] rounded-2xl bg-accent" />
   }
 
   if (error) {
     const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
 
     return (
-      <div className="flex flex-col items-start gap-4">
+      <div className="mx-auto flex max-w-[720px] flex-col items-start gap-4">
         <p className="text-muted-foreground">
           {isNotFound ? 'Run not found' : apiErrorMessage(error)}
         </p>
@@ -42,12 +42,14 @@ function LoadedRun({ runIdentity }: LoadedRunProps) {
     <GenerateTextRunView
       run={run}
       personaName={persona?.name ?? null}
-      completedActions={
+      renderCompletedActions={({ onSaved, discardButton }) => (
         <SaveRunAsPostForm
           runIdentity={run.run_identity}
           isPersonaPublic={persona?.is_public ?? false}
+          onSaved={onSaved}
+          secondaryAction={discardButton}
         />
-      }
+      )}
     />
   )
 }

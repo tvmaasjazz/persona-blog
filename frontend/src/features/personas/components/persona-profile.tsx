@@ -2,6 +2,7 @@ import { Pencil, PenLine } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 
+import { PageWithSidebar } from '@/components/layout/page-with-sidebar'
 import { PersonaAvatar } from '@/components/persona-avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +12,9 @@ import { ApiError, apiErrorMessage } from '@/lib/api-error'
 
 type PersonaProfileProps = {
   personaIdentity: string
+  // The persona's posts, which the route composes from the blog-posts feature. They sit
+  // in a right column on wide screens and under the header on narrow ones.
+  posts: ReactNode
 }
 
 type ProfileFieldProps = {
@@ -32,18 +36,18 @@ function ProfileField({ label, value, className }: ProfileFieldProps): ReactNode
   )
 }
 
-export function PersonaProfile({ personaIdentity }: PersonaProfileProps) {
+export function PersonaProfile({ personaIdentity, posts }: PersonaProfileProps) {
   const { data: persona, isPending, error } = usePersona(personaIdentity)
 
   if (isPending) {
-    return <div className="h-40 rounded-2xl bg-accent" />
+    return <div className="mx-auto h-40 max-w-[720px] rounded-2xl bg-accent" />
   }
 
   if (error) {
     const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
 
     return (
-      <div className="flex flex-col items-start gap-4">
+      <div className="mx-auto flex max-w-[720px] flex-col items-start gap-4">
         <p className="text-muted-foreground">
           {isNotFound ? 'Persona not found' : apiErrorMessage(error)}
         </p>
@@ -55,51 +59,61 @@ export function PersonaProfile({ personaIdentity }: PersonaProfileProps) {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-4">
-        <div className="flex items-center gap-4">
-          <PersonaAvatar name={persona.name} avatarUrl={persona.avatar_url} isLarge />
-          <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
-            <h1 className="text-xl font-extrabold break-words">{persona.name}</h1>
-            <Badge variant={persona.is_public ? 'secondary' : 'outline'}>
-              {persona.is_public ? 'Public' : 'Private'}
-            </Badge>
+    <PageWithSidebar
+      header={
+        <header className="flex flex-col gap-4">
+          <div className="flex items-center gap-4">
+            <PersonaAvatar name={persona.name} avatarUrl={persona.avatar_url} isLarge />
+            <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
+              <h1 className="text-xl font-extrabold break-words">{persona.name}</h1>
+              <Badge variant={persona.is_public ? 'secondary' : 'outline'}>
+                {persona.is_public ? 'Public' : 'Private'}
+              </Badge>
+            </div>
           </div>
-        </div>
-        <p className="whitespace-pre-wrap">{persona.bio}</p>
-        <div className="flex items-center gap-2">
-          <Button asChild variant="secondary">
-            <Link to={`/personas/${persona.identity}/edit`}>
-              <Pencil aria-hidden />
-              Edit
-            </Link>
-          </Button>
-          <Button asChild>
-            <Link to={`/write?persona=${persona.identity}`}>
-              <PenLine aria-hidden />
-              Write a post
-            </Link>
-          </Button>
-          <DeletePersonaButton personaIdentity={persona.identity} personaName={persona.name} />
-        </div>
-      </header>
+          <p className="whitespace-pre-wrap">{persona.bio}</p>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="secondary">
+              <Link to={`/personas/${persona.identity}/edit`}>
+                <Pencil aria-hidden />
+                Edit
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link to={`/write?persona=${persona.identity}`}>
+                <PenLine aria-hidden />
+                Write a post
+              </Link>
+            </Button>
+            <DeletePersonaButton personaIdentity={persona.identity} personaName={persona.name} />
+          </div>
+        </header>
+      }
+      sidebar={
+        <>
+          <h2 className="text-lg font-bold">Posts</h2>
+          {posts}
+        </>
+      }
+    >
+      <div className="flex flex-col gap-8">
+        <section className="flex flex-col gap-5">
+          <h2 className="text-lg font-bold">Voice</h2>
+          <ProfileField label="Background" value={persona.background} />
+          <ProfileField label="Writing style" value={persona.writing_style} />
+          <ProfileField
+            label="Sample writing"
+            value={persona.sample_writing}
+            className="font-serif whitespace-pre-wrap"
+          />
+        </section>
 
-      <section className="flex flex-col gap-5">
-        <h2 className="text-lg font-bold">Voice</h2>
-        <ProfileField label="Background" value={persona.background} />
-        <ProfileField label="Writing style" value={persona.writing_style} />
-        <ProfileField
-          label="Sample writing"
-          value={persona.sample_writing}
-          className="font-serif whitespace-pre-wrap"
-        />
-      </section>
-
-      <section className="flex flex-col gap-5">
-        <h2 className="text-lg font-bold">Defaults</h2>
-        <ProfileField label="Default tone" value={persona.default_tone} />
-        <ProfileField label="Default target audience" value={persona.default_target_audience} />
-      </section>
-    </div>
+        <section className="flex flex-col gap-5">
+          <h2 className="text-lg font-bold">Defaults</h2>
+          <ProfileField label="Default tone" value={persona.default_tone} />
+          <ProfileField label="Default target audience" value={persona.default_target_audience} />
+        </section>
+      </div>
+    </PageWithSidebar>
   )
 }
