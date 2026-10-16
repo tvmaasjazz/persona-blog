@@ -3,7 +3,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
 import { createApiError } from '@/lib/api-error'
 
-const RUN_POLL_MS = 3000
+const MAX_POLL_BACKOFF_MS = 30_000
 
 async function findGenerateTextRun(runIdentity: string) {
   const { data, error, response } = await apiClient.GET('/generate-text/runs/{run_identity}', {
@@ -22,8 +22,15 @@ export function generateTextRunQueryOptions(runIdentity: string) {
     queryKey: ['generate-text', 'runs', runIdentity],
     queryFn: () => findGenerateTextRun(runIdentity),
     refetchInterval: (query) => {
-      const status = query.state.data?.status
-      return status === 'PENDING' || status === 'RUNNING' ? RUN_POLL_MS : false
+      const run = query.state.data
+      if (run?.status !== 'PENDING' && run?.status !== 'RUNNING') {
+        return false
+      }
+      // Each consecutive failed fetch doubles the wait, up to the cap.
+      return Math.min(
+        run.poll_interval_ms * 2 ** query.state.fetchFailureCount,
+        MAX_POLL_BACKOFF_MS,
+      )
     },
   })
 }

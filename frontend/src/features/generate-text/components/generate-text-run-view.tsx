@@ -1,3 +1,4 @@
+import { LoaderCircle } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -10,8 +11,13 @@ import { LeaveUnsavedRunDialog } from '@/features/generate-text/components/leave
 import { RunInputsSummary } from '@/features/generate-text/components/run-inputs-summary'
 import { RunReviewActions } from '@/features/generate-text/components/run-review-actions'
 import { RunStepTracker } from '@/features/generate-text/components/run-step-tracker'
+import { useRunReadyNotice } from '@/features/generate-text/hooks/use-run-ready-notice'
 import { useUnsavedRunGuard } from '@/features/generate-text/hooks/use-unsaved-run-guard'
-import { describeSteps, findReviewStepName } from '@/features/generate-text/run-steps'
+import {
+  describeSteps,
+  findReviewStepName,
+  findRunStepName,
+} from '@/features/generate-text/run-steps'
 import type { components } from '@/lib/api-schema.gen'
 
 type GenerateTextRunResponseDto = components['schemas']['GenerateTextRunResponseDto']
@@ -60,6 +66,22 @@ function RunContent({ run }: RunPartProps) {
   }
 }
 
+// Shown while the run is in the background; the page polls until it pauses or finishes.
+function RunWorkingCard({ run }: RunPartProps) {
+  const stepName = (findRunStepName(run.last_step) ?? 'Post').toLowerCase()
+  return (
+    <section className="flex flex-col gap-2 rounded-2xl border bg-card p-5">
+      <h2 className="flex items-center gap-2 font-bold" role="status">
+        <LoaderCircle aria-hidden className="size-4 animate-spin" />
+        Writing the {stepName}…
+      </h2>
+      <p className="text-sm text-muted-foreground">
+        It keeps going if you leave. Come back to this page to pick it up.
+      </p>
+    </section>
+  )
+}
+
 type RunActionsProps = RunPartProps & {
   completedActions: ReactNode
 }
@@ -96,7 +118,7 @@ function RunActions({ run, completedActions }: RunActionsProps) {
         </Button>
       )
     default:
-      return null
+      return <RunWorkingCard run={run} />
   }
 }
 
@@ -106,6 +128,7 @@ export function GenerateTextRunView({
   renderCompletedActions,
 }: GenerateTextRunViewProps) {
   const navigate = useNavigate()
+  useRunReadyNotice(run)
   const { blocker, allowLeave } = useUnsavedRunGuard(run.status === 'COMPLETED')
 
   function discardRun() {

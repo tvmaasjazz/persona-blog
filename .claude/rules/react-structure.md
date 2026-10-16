@@ -253,9 +253,10 @@ the backend's. A section that needs sign-in is a layout route wrapped in
 a loading state while the current user loads. Pages don't check auth themselves.
 
 `AppLayout` renders `<ScrollRestoration />`, so every navigation opens at the top. A
-page that changes in place scrolls to the top itself: the run page when a new step
-comes back, and the write form when it folds into its status card. When there's
-something new to look at, a toast says what.
+page that changes in place scrolls to the top itself: the run page when its polled
+status goes from working to paused or finished (`useRunReadyNotice`), and the write
+form when it folds into its status card. When there's something new to look at, a
+toast says what.
 
 A route that needs something from the layout says so in its `handle`, typed as
 `AppRouteHandle` from `app-layout.tsx`. `hasSidebar` is the one field so far; see
