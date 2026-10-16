@@ -443,6 +443,8 @@ The run only stays cheap and non-blocking if every step in it is async, end to e
 
 ### Deploys and restarts
 
+A follow-up PR, after polling lands.
+
 A run can take minutes, longer than any deploy should wait. So a stopping process
 finishes the node it's on, saves, and hands the rest of the run to a live process.
 No run is lost, and at most one node is redone.
@@ -460,9 +462,15 @@ No run is lost, and at most one node is redone.
 
 **The app's side:**
 
-- [ ] **Ownership.** A running run has an owner and a lease: `lease_owner` (the worker
-  process) and `lease_expires_at`, renewed by a heartbeat every ~15s. Only the owner
-  runs it
+- [ ] **Ownership.** Only a `RUNNING` run has a lease: `lease_owner` (the worker
+  process: Railway's replica ID or the hostname, the PID and a random suffix) and
+  `lease_expires_at` (60s), renewed by a heartbeat every 15s. A paused, completed or
+  failed run has none, so a resume can land on any instance: it claims the lease in
+  the same `UPDATE … WHERE status = 'AWAITING_REVIEW'` that sets `RUNNING`, which also
+  turns a second resume into a 409
+- [ ] **Owner check.** The heartbeat renews with `WHERE lease_owner = me`. If that
+  changes no rows, another instance has taken the run, so the task stops instead of
+  running alongside it
 - [ ] **Graceful stop.** Lifespan shutdown sets a stop flag. Each run task finishes the
   node it's on (bounded by STRONG's 120s timeout), stops before the next one, and
   releases its lease (`lease_expires_at = now()`). The run stays `RUNNING`
