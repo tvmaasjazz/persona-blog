@@ -1,3 +1,5 @@
+import random
+
 from openai import (
     APIConnectionError,
     APIStatusError,
@@ -27,6 +29,27 @@ class OpenAiLlmUtils:
         if provider_input.system_prompt is None:
             return {}
         return {"instructions": provider_input.system_prompt}
+
+    @staticmethod
+    def build_reasoning_kwargs(
+        provider_input: LlmProviderCompletionInput,
+    ) -> dict[str, dict[str, str]]:
+        if provider_input.reasoning_effort is None:
+            return {}
+        return {"reasoning": {"effort": provider_input.reasoning_effort.lower()}}
+
+    @staticmethod
+    def is_retryable_error(openai_error: OpenAIError) -> bool:
+        # APITimeoutError subclasses APIConnectionError, so it is ruled out first.
+        if isinstance(openai_error, APITimeoutError):
+            return False
+        return isinstance(openai_error, RateLimitError | InternalServerError | APIConnectionError)
+
+    @staticmethod
+    def compute_retry_delay_seconds(
+        attempt: int, base_delay_seconds: float, max_delay_seconds: float
+    ) -> float:
+        return random.uniform(0, min(max_delay_seconds, base_delay_seconds * 2**attempt))
 
     @staticmethod
     def build_provider_completion_result(

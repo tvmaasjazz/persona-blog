@@ -59,7 +59,10 @@ async def get_auth_user(request: Request, background_tasks: BackgroundTasks) -> 
 # Worth revisiting if a third arrives and the shape has settled.
 def get_llm_service(request: Request) -> LlmService:
     app_settings: AppSettings = request.app.state.settings
-    openai_llm_service = OpenAiLlmService(openai_client=request.app.state.openai_client)
+    openai_llm_service = OpenAiLlmService(
+        openai_client=request.app.state.openai_client,
+        llm_settings=app_settings.llm,
+    )
     llm_call_service = LlmCallService(db_session_factory=request.app.state.db_session_factory)
     return LlmService(
         llm_provider_services={LlmProviderType.OPENAI: openai_llm_service},

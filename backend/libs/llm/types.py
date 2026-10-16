@@ -14,6 +14,15 @@ class LlmProviderType(StrEnum):
     ANTHROPIC = "ANTHROPIC"
 
 
+class LlmReasoningEffortType(StrEnum):
+    """Sent to OpenAI lowercased, which is how its API spells these."""
+
+    MINIMAL = "MINIMAL"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
 class LlmCallStatusType(StrEnum):
     """The coarse outcome of a call. LlmCallReasonType carries the detail."""
 
