@@ -373,12 +373,14 @@ STRONG model. Background runs remove the HTTP side of the risk; this fixes the L
 - [x] The frontend client sets no global timeout: `apiClient` (`openapi-fetch`) has none
 - [ ] Confirm it from `pb_llm_call`: the failed STRONG calls carry a timeout
   `error_code` and a `duration_ms` near 60000
-- [ ] Raise STRONG's `request_timeout_seconds` to 90–120
-- [ ] The OpenAI SDK also retries a timed-out call (`LLM__MAX_RETRIES`, default 2), so
-  one slow STRONG step can take three times its timeout and be paid for each time.
-  Decide whether timeouts are retried
-- [ ] Move FAST off `gpt-4o-mini` (the 4o family is being retired) to `gpt-5-nano`,
-  and add its price to `model_pricing` (check it on OpenAI's pricing page)
+- [ ] Raise STRONG's `request_timeout_seconds` to 120
+- [ ] Don't retry a timed-out call. The OpenAI SDK retries timeouts as part of
+  `max_retries`, so turn its retries off and retry 429s and 5xx errors ourselves, with
+  backoff and jitter
+- [ ] Move FAST off `gpt-4o-mini` (the 4o family is being retired) to `gpt-5.4-nano`
+  ($0.20 / $1.25 per 1M tokens), and add its price to `model_pricing`
+- [ ] Check STRONG's `gpt-5.6-sol` price in `model_pricing` ($4 / $20) against
+  OpenAI's page: sources list it at $5 / $30, with $4 / $20 as a promotion
 - [ ] GPT-5 models are reasoning models, and `max_output_tokens` includes their
   reasoning tokens, so FAST's 2048 can run out before any outline is written. Raise it,
   or send a low `reasoning.effort` per tier
@@ -398,7 +400,7 @@ steer it.
 | Steps for the progress UI     | `pb_generate_text_step` rows, one per node attempt       |
 | Output                        | The latest step's output, and `content_item_id` once saved as a post |
 | Error                         | `error_code`, `error_message`                            |
-| Heartbeat                     | `updated_at`                                             |
+| Heartbeat                     | A lease for running runs (see Deploys and restarts)     |
 
 **Decided:**
 
@@ -429,15 +431,65 @@ The run only stays cheap and non-blocking if every step in it is async, end to e
 
 **Running the work in the background:**
 
-- [ ] Start the run with `asyncio.create_task(...)` and keep a reference in a
-  module-level `set`, removed on completion. Python can garbage-collect a task nobody
-  references
-- [ ] Wrap the run body in `try` / `except`: set `FAILED` and the error on any exception;
-  on `asyncio.CancelledError`, set `CANCELLED` and re-raise
-- [ ] Update `status`, the current step and `updated_at` as each node starts and
-  finishes
-- [ ] On startup, find runs stuck in `RUNNING` with a stale `updated_at` (their worker
-  died in a deploy), and mark them `FAILED` or resume them from the checkpoint
+- [ ] Start the run with `asyncio.create_task(...)` in the API process, and keep a
+  reference in a set the app owns, removed on completion. Python can garbage-collect a
+  task nobody references
+- [ ] Wrap the run body in `try` / `except`: set `FAILED` and the error on any
+  exception. A task cancelled at shutdown is handed off, not failed (see Deploys and
+  restarts)
+- [ ] Run the graph with `astream(..., stream_mode="updates")` instead of `ainvoke`,
+  so the task can stop cleanly between nodes. LangGraph saves a checkpoint after every
+  node
+
+### Deploys and restarts
+
+A run can take minutes, longer than any deploy should wait. So a stopping process
+finishes the node it's on, saves, and hands the rest of the run to a live process.
+No run is lost, and at most one node is redone.
+
+**What happens on a Railway deploy:**
+
+1. The new deployment starts and passes its healthcheck (`/health`)
+2. Traffic moves to it. The old one keeps running for `overlapSeconds`; one report
+   says requests can still reach the old one during that window, so test it
+3. The old one gets `SIGTERM`, then `SIGKILL` after `drainingSeconds`. The default may
+   be 0, an immediate kill, so set it explicitly
+4. On `SIGTERM`, granian stops accepting connections, finishes in-flight HTTP requests,
+   then runs each worker's lifespan shutdown. Background tasks are invisible to it:
+   draining them is the app's job
+
+**The app's side:**
+
+- [ ] **Ownership.** A running run has an owner and a lease: `lease_owner` (the worker
+  process) and `lease_expires_at`, renewed by a heartbeat every ~15s. Only the owner
+  runs it
+- [ ] **Graceful stop.** Lifespan shutdown sets a stop flag. Each run task finishes the
+  node it's on (bounded by STRONG's 120s timeout), stops before the next one, and
+  releases its lease (`lease_expires_at = now()`). The run stays `RUNNING`
+- [ ] **Bounded wait.** Shutdown waits for the tasks with a deadline shorter than
+  `drainingSeconds`, then cancels what's left. A cancelled task's node is lost, but
+  its last checkpoint isn't
+- [ ] **Pick-up.** A sweeper, on startup and every ~30s, claims `RUNNING` runs whose
+  lease has expired (`FOR UPDATE SKIP LOCKED`, so two workers or replicas never claim
+  the same run) and resumes each from its checkpoint (`ainvoke(None, config)`). This
+  also covers a crash or a `SIGKILL`: the lease runs out and another process picks the
+  run up
+- [ ] **Paused runs need nothing.** An `AWAITING_REVIEW` run has no task; its state is
+  in the database and the Redis checkpoint, so a resume can land on any worker
+- [ ] A run whose resume keeps failing after a few pick-ups is marked `FAILED`, so a
+  poisoned run can't loop forever
+
+**Railway and granian settings:**
+
+- [ ] `healthcheckPath = "/health"`, `overlapSeconds` short (~10s), `drainingSeconds`
+  above the app's drain deadline (for example a 150s deadline and 180s draining), set
+  in Railway's config-as-code file
+- [ ] Start granian directly (exec form in the Dockerfile, or `exec` in a script), so
+  it's PID 1 and gets `SIGTERM`. A wrapper like a shell script swallows it
+- [ ] Leave `--workers-lifetime` and `--workers-max-rss` off at first: each recycles a
+  worker, which stops its runs. The handoff makes it safe, but there's no need for it
+- [ ] `--workers-kill-timeout` above the drain deadline, so granian only kills a worker
+  that hangs past it
 
 **Confirm the graph is fully async:**
 
@@ -468,8 +520,8 @@ The run only stays cheap and non-blocking if every step in it is async, end to e
 Treat every LLM call as a slow, flaky, rate-limited dependency that costs money.
 
 - [x] A timeout on every call: each tier's `request_timeout_seconds`
-- [x] Retries with backoff on 429s and 5xx errors: the OpenAI SDK's own retries,
-  `LLM__MAX_RETRIES` (default 2). Confirm it doesn't retry 4xx input errors
+- [ ] Retries with backoff and jitter on 429s and 5xx errors, done by us, not the SDK,
+  so timeouts and 4xx input errors are never retried (Phase 1)
 - [ ] A shared `asyncio.Semaphore` capping concurrent calls per worker, sized to the
   provider's rate limits
 - [x] Tokens and cost recorded per call (`pb_llm_call`), per step and per run
@@ -506,7 +558,7 @@ Assume any worker can restart mid-run and any request can land on any replica.
   Postgres or Redis
 - [ ] A `/health` endpoint set as Railway's healthcheck, so new deploys only take traffic
   once ready (`/health` exists)
-- [ ] The stuck-run recovery from Phase 3 handles runs killed by a redeploy
+- [ ] The handoff in Deploys and restarts covers runs a redeploy stops
 - [ ] Size the database connection pool for workers × replicas, so it stays under
   Postgres's connection limit
 - [ ] Secrets (API keys, the database URL) only in Railway variables
@@ -526,9 +578,12 @@ it overlaps Steps 8, 9 and 10.
 - [ ] A per-user rate limit on starting runs, and input size limits
 - [ ] Per-user token or cost quotas (with the usage plans in 6c)
 
+**Decided:** the graph runs in the API process with `asyncio.create_task`; a job queue
+can come later (see Later). STRONG's timeout is 120s, and timeouts aren't retried.
+
 **Open questions:**
 
-- Where the graph runs once the request returns: a task in the API process
-  (`asyncio.create_task`) first, with startup recovery for runs a deploy kills
-  (recommended), or a job queue with its own worker process from the start
-- STRONG's new timeout (120s recommended), and whether a timed-out call is retried
+- Lease columns (`lease_owner`, `lease_expires_at`), or `updated_at` staleness as the
+  lease
+- Railway's `overlapSeconds` and `drainingSeconds`, and whether requests reach the old
+  deployment during overlap. Settle both when deploying (Step 10)
