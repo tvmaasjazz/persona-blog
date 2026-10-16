@@ -10,19 +10,25 @@ The outline from here on. Detail gets added to each step as it comes up.
 3. **Blog post CRUD — backend**, in two PRs: Markdown output first (3a), then the
    `content_item` and `blog_post` tables and CRUD (3b)
 4. **Blog post CRUD — frontend**
-5. **Avatar upload** — replaces the avatar URL field with a real upload:
+5. **Background runs and polling** — generation stops being tied to one HTTP request:
+   the request starts a run, the run works in the background, and the frontend polls
+   it. Details in Step 5 below
+6. **Avatar upload** — replaces the avatar URL field with a real upload:
    - **Backend:** store images in S3 and add an upload route that returns the stored
      image's URL
    - **Frontend:** the persona form uploads the chosen image, then sends the returned
      URL as `avatar_url` on create or update
-6. **Testing and fine tuning** — try adding or removing steps in the generate text
-   process, different models, different prompts
-7. **Logging** — proper logging for the endpoints and for the graph
-8. **Log tracking service** — set it up and test it
-9. **Initial deploy**, in two parts:
-   - **Usage plans:** an unlimited plan for the admin; a free plan of one persona and
+     6.a - voice to text + llm based endpoint to fill out the persona info sections?
+     6b. - basic homepage which fetches a feed situation? like add feed and search? maybe save this for later after
+     initial deploy, and add a fillerv fopr now or just gray it out and start with my personas
+     6c - - **Usage plans:** an unlimited plan for the admin; a free plan of one persona and
      one blog post; and an extended trial the admin can grant to chosen users, of two
-     personas and ten blog posts
+     personas and ten blog posts (figure out full user system and how to handle for now woith no payment but consider for later as well)
+7. **Testing and fine tuning** — try adding or removing steps in the generate text
+   process, different models, different prompts
+8. **Logging** — proper logging for the endpoints and for the graph
+9. **Log tracking service** — set it up and test it
+10. **Initial deploy**, in two parts:
    - **Railway:** deploy the frontend and backend. Open question: a subdomain of an
      existing domain first, or a dedicated domain from the start
 
@@ -135,7 +141,7 @@ click. Name and bio are required. Blank optional fields are sent as `null`. A 40
 the name shows under the Name field. Built on TanStack Form and Zod: see
 `react-structure.md` › Forms.
 
-**Avatar:** a plain image URL for now, with an initial as the fallback. Step 5
+**Avatar:** a plain image URL for now, with an initial as the fallback. Step 6
 replaces it with an upload.
 
 **Delete:** a confirmation dialog on the profile page. On success, a toast and back to
@@ -270,13 +276,13 @@ enabled and goes to `/write`.
 
 **Routes**, all behind `RequireAuth`:
 
-| Path                       | Page                                                           |
-| -------------------------- | -------------------------------------------------------------- |
-| `/write`                   | The generate form. `?persona=<identity>` preselects a persona  |
-| `/write/runs/:runIdentity` | One run: review a step, or save the finished post              |
-| `/posts`                   | Your posts as cards, filtered by persona, with an empty state  |
-| `/posts/:blogPostIdentity` | The rendered post with **Edit**, **Delete** and publishing     |
-| `/posts/:blogPostIdentity/edit` | Title, subtitle, visibility and publish time              |
+| Path                            | Page                                                          |
+| ------------------------------- | ------------------------------------------------------------- |
+| `/write`                        | The generate form. `?persona=<identity>` preselects a persona |
+| `/write/runs/:runIdentity`      | One run: review a step, or save the finished post             |
+| `/posts`                        | Your posts as cards, filtered by persona, with an empty state |
+| `/posts/:blogPostIdentity`      | The rendered post with **Edit**, **Delete** and publishing    |
+| `/posts/:blogPostIdentity/edit` | Title, subtitle, visibility and publish time                  |
 
 The persona profile gains **Write a post** (to `/write?persona=...`) and a list of that
 persona's posts.
@@ -340,3 +346,189 @@ plugin. The title and subtitle come from their own fields.
 **Open:** a blog post response carries `persona_identity` but not the persona's name or
 avatar, so the list joins against your personas query. When other users' public posts
 can be browsed, the response should carry the persona summary instead.
+
+## Step 5 — Background runs and polling
+
+Generation stops being tied to an HTTP request. The request only starts a run, the run
+works in the background, and the frontend polls until it finishes or pauses. Today
+`POST /generate-text/blog-post` and `.../resume` hold the request open until the graph
+pauses or ends, which can run past a proxy's idle timeout.
+
+Human review is just another status: the run stops at `AWAITING_REVIEW`, the user
+reviews, and `POST /generate-text/runs/{run_identity}/resume` continues it from the
+saved checkpoint. A closed tab no longer matters; the run finishes and the user comes
+back to it.
+
+**Names here.** The source to-do used generic names. This plan maps them onto what
+exists: the run is `pb_generate_text_run`, `queued` is `PENDING`, `paused` is
+`AWAITING_REVIEW`, and the routes stay under `/generate-text`. Items already true of
+the code are ticked.
+
+### Phase 1: The 60s cutoff, and the models
+
+The cutoff seen so far is most likely the LLM call's own timeout, not the HTTP layer:
+the STRONG tier's `request_timeout_seconds` is 60, and it only failed on the expensive
+STRONG model. Background runs remove the HTTP side of the risk; this fixes the LLM side.
+
+- [x] The frontend client sets no global timeout: `apiClient` (`openapi-fetch`) has none
+- [ ] Confirm it from `pb_llm_call`: the failed STRONG calls carry a timeout
+  `error_code` and a `duration_ms` near 60000
+- [ ] Raise STRONG's `request_timeout_seconds` to 90–120
+- [ ] The OpenAI SDK also retries a timed-out call (`LLM__MAX_RETRIES`, default 2), so
+  one slow STRONG step can take three times its timeout and be paid for each time.
+  Decide whether timeouts are retried
+- [ ] Move FAST off `gpt-4o-mini` (the 4o family is being retired) to `gpt-5-nano`,
+  and add its price to `model_pricing` (check it on OpenAI's pricing page)
+- [ ] GPT-5 models are reasoning models, and `max_output_tokens` includes their
+  reasoning tokens, so FAST's 2048 can run out before any outline is written. Raise it,
+  or send a low `reasoning.effort` per tier
+
+### Phase 2: Run model and endpoints
+
+The database row is the source of truth for every run; endpoints only start, read and
+steer it.
+
+**`pb_generate_text_run` already holds most of it:**
+
+| Need                          | Where it is                                              |
+| ----------------------------- | -------------------------------------------------------- |
+| Run ID and LangGraph thread   | `identity`, already the `thread_id`                      |
+| Who and with what             | `created_by_id`, `persona_id`, `prompt_text`, `tone`, `target_audience`, `additional_context`, `options` |
+| Status                        | `status`: `PENDING`, `RUNNING`, `AWAITING_REVIEW`, `COMPLETED`, `FAILED`, `CANCELLED` |
+| Steps for the progress UI     | `pb_generate_text_step` rows, one per node attempt       |
+| Output                        | The latest step's output, and `content_item_id` once saved as a post |
+| Error                         | `error_code`, `error_message`                            |
+| Heartbeat                     | `updated_at`                                             |
+
+**Decided:**
+
+- No idempotency key. A resume already answers 409 unless the run is paused, so a
+  repeated resume can't run twice. A repeated start is a double click, which the
+  disabled button stops; if that ever isn't enough, the client can send the run's
+  identity, which already exists, rather than a new column
+- No `current_step` column. A step row is written as `RUNNING` when its node starts, so
+  the newest step row is the current step, and a second copy could drift from it
+
+- No cancel for now. A paused run costs nothing while it waits, and a running one
+  finishes in about a minute. Revisit with the usage plans (6c)
+
+**Endpoints:**
+
+- [ ] `POST /generate-text/blog-post`: insert the row, start the background run, return
+  `202 Accepted` with the run
+- [x] `GET /generate-text/runs/{run_identity}`: returns status, the last step and its
+  output, and checks the run belongs to the caller
+- [ ] `GET /generate-text/runs/{run_identity}` also returns the list of steps for the
+  progress UI
+- [ ] `POST /generate-text/runs/{run_identity}/resume`: takes the review decision, sets
+  `RUNNING`, continues from the checkpoint in the background, and returns `202`
+
+### Phase 3: Background execution and LangGraph async audit
+
+The run only stays cheap and non-blocking if every step in it is async, end to end.
+
+**Running the work in the background:**
+
+- [ ] Start the run with `asyncio.create_task(...)` and keep a reference in a
+  module-level `set`, removed on completion. Python can garbage-collect a task nobody
+  references
+- [ ] Wrap the run body in `try` / `except`: set `FAILED` and the error on any exception;
+  on `asyncio.CancelledError`, set `CANCELLED` and re-raise
+- [ ] Update `status`, the current step and `updated_at` as each node starts and
+  finishes
+- [ ] On startup, find runs stuck in `RUNNING` with a stale `updated_at` (their worker
+  died in a deploy), and mark them `FAILED` or resume them from the checkpoint
+
+**Confirm the graph is fully async:**
+
+- [x] The graph runs with `await graph.ainvoke(...)`
+- [x] Every node is an `async def`
+- [x] LLM calls inside nodes use the async client (`AsyncOpenAI`)
+- [x] DB access inside nodes uses the async session; no sync `requests`, file I/O or
+  `time.sleep` anywhere in `libs/` or `apps/`
+- [x] Checkpointer: keep `AsyncRedisSaver`. It already works across workers; Railway's
+  Redis needs persistence on, so a restart doesn't drop paused runs
+- [x] `config = {"configurable": {"thread_id": ...}}` uses the run's identity, so the
+  checkpoint and the run row share an ID
+- [x] Human review uses LangGraph's `interrupt()`, and resume calls the graph again with
+  `Command(resume=...)` and the same `thread_id`
+
+**Prove it doesn't block:**
+
+- [ ] During a running generation, hit `/health` repeatedly; it should answer in
+  milliseconds
+- [ ] Run locally with `PYTHONASYNCIODEBUG=1`; asyncio logs any step that holds the loop
+  for more than 100ms
+- [ ] An event loop lag monitor, started in `lifespan` in development: a task that
+  sleeps a fixed interval, measures how late it wakes, and logs any delay over a
+  threshold. Leave it running during a long real generation
+
+### Phase 4: LLM call hygiene
+
+Treat every LLM call as a slow, flaky, rate-limited dependency that costs money.
+
+- [x] A timeout on every call: each tier's `request_timeout_seconds`
+- [x] Retries with backoff on 429s and 5xx errors: the OpenAI SDK's own retries,
+  `LLM__MAX_RETRIES` (default 2). Confirm it doesn't retry 4xx input errors
+- [ ] A shared `asyncio.Semaphore` capping concurrent calls per worker, sized to the
+  provider's rate limits
+- [x] Tokens and cost recorded per call (`pb_llm_call`), per step and per run
+- [x] Provider request IDs are stored on each call (`provider_request_reference`)
+
+### Phase 5: Frontend polling
+
+The frontend starts a run once, then only reads it, so a refresh, a closed tab or a
+dropped connection costs nothing.
+
+- [ ] **Write post** sends an idempotency key, then goes straight to
+  `/write/runs/:runIdentity` instead of waiting on the request
+- [x] Poll `GET /generate-text/runs/{run_identity}` while the status is `PENDING` or
+  `RUNNING` (React Query's `refetchInterval`, which also handles cleanup)
+- [ ] Poll at the interval the run response gives: a backend setting,
+  `GENERATE_TEXT__POLL_INTERVAL_MS`, 2000 by default, so it can change per deploy
+  without rebuilding the frontend
+- [x] Stop polling on `COMPLETED`, `FAILED`, `CANCELLED` or `AWAITING_REVIEW`
+- [ ] Show progress from the steps ("Outlining…", "Drafting…") in the step tracker
+- [ ] `AWAITING_REVIEW` shows the review UI; submitting calls `/resume`, which returns at
+  once, and polling restarts
+- [ ] Back off on errors (for example 3s, then 6s, then 12s) instead of hammering a
+  failing API
+- [x] On page load with a run identity in the URL, the run page reads that run and polls
+  it
+
+### Phase 6: Deploy readiness on Railway
+
+Assume any worker can restart mid-run and any request can land on any replica.
+
+- [ ] Granian `--workers` read from an env var (start with 2; raise toward the vCPU count
+  if CPU nears one core)
+- [ ] No in-memory state that matters: runs, checkpoints and progress all live in
+  Postgres or Redis
+- [ ] A `/health` endpoint set as Railway's healthcheck, so new deploys only take traffic
+  once ready (`/health` exists)
+- [ ] The stuck-run recovery from Phase 3 handles runs killed by a redeploy
+- [ ] Size the database connection pool for workers × replicas, so it stays under
+  Postgres's connection limit
+- [ ] Secrets (API keys, the database URL) only in Railway variables
+
+### Later
+
+Worth doing once the core flow works; none of it changes the API shape above. Some of
+it overlaps Steps 8, 9 and 10.
+
+- [ ] Move runs to a job queue with a separate worker process (`arq` on Redis, Celery,
+  or a Postgres-backed queue), so API deploys never touch running work
+- [ ] An optional SSE progress stream, `GET /generate-text/runs/{run_identity}/events`
+  (heartbeats, a final `done` event, `Last-Event-ID`), with polling as the fallback
+- [ ] Structured logs carrying the request ID and run ID on every line (Step 8)
+- [ ] Metrics: run duration per step, LLM latency, tokens, failure rate, runs in
+  progress (Step 9)
+- [ ] A per-user rate limit on starting runs, and input size limits
+- [ ] Per-user token or cost quotas (with the usage plans in 6c)
+
+**Open questions:**
+
+- Where the graph runs once the request returns: a task in the API process
+  (`asyncio.create_task`) first, with startup recovery for runs a deploy kills
+  (recommended), or a job queue with its own worker process from the start
+- STRONG's new timeout (120s recommended), and whether a timed-out call is retried
