@@ -486,6 +486,12 @@ No run is lost, and at most one node is redone.
   in the database and the Redis checkpoint, so a resume can land on any worker
 - [ ] A run whose resume keeps failing after a few pick-ups is marked `FAILED`, so a
   poisoned run can't loop forever
+- [ ] **Instant handoff** (a follow-up after the lease PR). A stopping process that
+  releases a run mid-way pushes its identity onto a Redis list. Each live worker waits
+  on that list (`BLPOP`) and claims the run at once, so the user doesn't wait for the
+  next sweep. The database claim stays the lock and the sweeper stays the backup: a
+  duplicate or stale message claims nothing. A stopping worker stops reading the list
+  before it releases its own runs
 
 **Railway and granian settings:**
 
