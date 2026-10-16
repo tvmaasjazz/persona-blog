@@ -7,7 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.llm.inputs import LlmCompletionInput, LlmProviderCompletionInput
 from libs.llm.results import LlmCompletionResult, LlmProviderCompletionResult
-from libs.llm.types import LlmCallReasonType, LlmCallStatusType, LlmProviderType, LlmType
+from libs.llm.types import (
+    LlmCallReasonType,
+    LlmCallStatusType,
+    LlmProviderType,
+    LlmReasoningEffortType,
+    LlmType,
+)
 
 
 def build_llm_completion_input(
@@ -32,6 +38,7 @@ def build_llm_provider_completion_input(
     user_prompt: str = "Say hello.",
     max_output_tokens: int = 2048,
     request_timeout_seconds: int = 30,
+    reasoning_effort: LlmReasoningEffortType | None = None,
 ) -> LlmProviderCompletionInput:
     return LlmProviderCompletionInput(
         model_name=model_name,
@@ -39,6 +46,7 @@ def build_llm_provider_completion_input(
         user_prompt=user_prompt,
         max_output_tokens=max_output_tokens,
         request_timeout_seconds=request_timeout_seconds,
+        reasoning_effort=reasoning_effort,
     )
 
 
