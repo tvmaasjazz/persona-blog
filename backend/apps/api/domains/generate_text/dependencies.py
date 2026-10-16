@@ -46,6 +46,8 @@ def get_generate_text_service(request: Request, llm_service: LlmServiceDep) -> G
         run_service=generate_text_run_service,
         step_service=generate_text_step_service,
         checkpointer=graph_checkpointer,
+        background_task_service=request.app.state.background_task_service,
+        generate_text_settings=app_settings.generate_text,
     )
 
 

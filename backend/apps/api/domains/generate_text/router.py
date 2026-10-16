@@ -16,7 +16,7 @@ from apps.api.domains.generate_text.dtos import (
 generate_text_router = APIRouter(prefix="/generate-text", tags=["generate-text"])
 
 
-@generate_text_router.post("/blog-post")
+@generate_text_router.post("/blog-post", status_code=202)
 async def generate_blog_post(
     dto: GenerateBlogPostDto,
     find_user_persona_result: GenerateTextPersonaDep,
@@ -39,7 +39,7 @@ async def find_generate_text_run(
     return GenerateTextRunResponseDto.from_result(find_generate_text_run_result)
 
 
-@generate_text_router.post("/runs/{run_identity}/resume")
+@generate_text_router.post("/runs/{run_identity}/resume", status_code=202)
 async def resume_generate_text(
     run_identity: UUID,
     resume_generate_text_dto: ResumeGenerateTextDto,
