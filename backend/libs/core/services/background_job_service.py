@@ -10,10 +10,7 @@ logger = structlog.get_logger(__name__)
 class BackgroundJobService:
     """Runs background jobs: work that outlives the request that started it, such as a
     graph run. Each job is an asyncio task on this process's event loop. Python only keeps
-    a weak reference to a running task, so this holds a strong one until the job is done.
-
-    Not FastAPI's BackgroundTasks, which run short after-response tasks as part of the
-    request."""
+    a weak reference to a running task, so this holds a strong one until the job is done."""
 
     def __init__(self) -> None:
         self._running_job_tasks: set[asyncio.Task[Any]] = set()

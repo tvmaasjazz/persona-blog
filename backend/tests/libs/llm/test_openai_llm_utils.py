@@ -48,7 +48,7 @@ def test_build_reasoning_kwargs_no_effort_returns_empty_dict() -> None:
         pytest.param(LlmReasoningEffortType.HIGH, "high", id="high"),
     ],
 )
-def test_build_reasoning_kwargs_effort_returns_lowercase_effort(
+def test_build_reasoning_kwargs_effort_returns_openai_effort(
     reasoning_effort: LlmReasoningEffortType, expected_effort: str
 ) -> None:
     provider_input = build_llm_provider_completion_input(reasoning_effort=reasoning_effort)
@@ -56,6 +56,17 @@ def test_build_reasoning_kwargs_effort_returns_lowercase_effort(
     reasoning_kwargs = OpenAiLlmUtils.build_reasoning_kwargs(provider_input)
 
     assert reasoning_kwargs == {"reasoning": {"effort": expected_effort}}
+
+
+@pytest.mark.parametrize("reasoning_effort", list(LlmReasoningEffortType))
+def test_build_reasoning_kwargs_every_effort_has_an_openai_value(
+    reasoning_effort: LlmReasoningEffortType,
+) -> None:
+    provider_input = build_llm_provider_completion_input(reasoning_effort=reasoning_effort)
+
+    reasoning_kwargs = OpenAiLlmUtils.build_reasoning_kwargs(provider_input)
+
+    assert reasoning_kwargs["reasoning"]["effort"] in {"minimal", "low", "medium", "high"}
 
 
 @pytest.mark.parametrize(

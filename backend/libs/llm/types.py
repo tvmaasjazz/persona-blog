@@ -15,13 +15,13 @@ class LlmProviderType(StrEnum):
 
 
 class LlmReasoningEffortType(StrEnum):
-    """Mirrors OpenAI's `reasoning.effort` values, so each value is OpenAI's own
-    spelling."""
+    """How hard a reasoning model thinks before answering. Provider-neutral: each provider
+    service maps it to its own API's values."""
 
-    MINIMAL = "minimal"
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+    MINIMAL = "MINIMAL"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
 
 
 class LlmCallStatusType(StrEnum):

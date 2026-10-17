@@ -20,7 +20,15 @@ from libs.llm.exceptions import (
 )
 from libs.llm.inputs import LlmProviderCompletionInput
 from libs.llm.results import LlmProviderCompletionResult
-from libs.llm.types import LlmCallReasonType
+from libs.llm.types import LlmCallReasonType, LlmReasoningEffortType
+
+# OpenAI's spelling of each reasoning effort, for the Responses API's reasoning.effort.
+OPENAI_REASONING_EFFORT_BY_TYPE: dict[LlmReasoningEffortType, str] = {
+    LlmReasoningEffortType.MINIMAL: "minimal",
+    LlmReasoningEffortType.LOW: "low",
+    LlmReasoningEffortType.MEDIUM: "medium",
+    LlmReasoningEffortType.HIGH: "high",
+}
 
 
 class OpenAiLlmUtils:
@@ -36,7 +44,14 @@ class OpenAiLlmUtils:
     ) -> dict[str, dict[str, str]]:
         if provider_input.reasoning_effort is None:
             return {}
-        return {"reasoning": {"effort": provider_input.reasoning_effort.value}}
+        openai_reasoning_effort = OPENAI_REASONING_EFFORT_BY_TYPE.get(
+            provider_input.reasoning_effort
+        )
+        if openai_reasoning_effort is None:
+            raise NotImplementedError(
+                f"No OpenAI reasoning effort for {provider_input.reasoning_effort}"
+            )
+        return {"reasoning": {"effort": openai_reasoning_effort}}
 
     @staticmethod
     def is_retryable_error(openai_error: OpenAIError) -> bool:
