@@ -33,7 +33,7 @@ The rules files say where each of these lives and how it is shaped.
 - **Domain library code** — services, including a `<Domain>ValidationService` for
   validation guards (`fastapi-structure.md` › Services › Validation guards), Input and
   Result models, domain settings,
-  constants, enums (`types.py`), background tasks (`tasks.py`), prompts, exceptions,
+  constants, enums (`types.py`), after-response tasks (`after_response_tasks.py`), prompts, exceptions,
   `Utils` classes in `libs/<domain>/utils/` (and `libs/core/utils/` for ones with no
   domain)
 - **LangGraph workflow files**, for a domain whose work is a graph: the layout and what

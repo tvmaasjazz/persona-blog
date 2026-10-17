@@ -91,6 +91,16 @@ class TextType(StrEnum):
 Write the value out explicitly. Never `auto()` — in a `StrEnum` it produces the
 lowercased member name, which breaks the rule silently.
 
+The one exception: an enum that mirrors values an outside API defines keeps
+UPPER_SNAKE member names, but each value is exactly the API's own spelling, so nothing
+converts it on the way out. Our own enums are our choice, so they stay UPPER_SNAKE.
+
+```python
+class LlmReasoningEffortType(StrEnum):  # OpenAI's reasoning.effort values
+    LOW = "low"
+    HIGH = "high"
+```
+
 This carries into the database: Postgres enum labels match the members exactly
 (`database.md` › Enums). SQLAlchemy's `Enum` column persists member *names* by
 default while Pydantic serializes *values* — when the two are identical, that
