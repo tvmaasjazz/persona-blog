@@ -149,8 +149,6 @@ class GenerateTextService:
 
         generate_text_graph = graph_builder.build_graph(find_run_result.options, self._checkpointer)
         graph_run_config = {"configurable": {"thread_id": str(run_identity)}}
-        state_snapshot = await generate_text_graph.aget_state(graph_run_config)
-        generate_text_state = GenerateTextState.model_validate(state_snapshot.values)
 
         is_claimed = await self._run_service.claim_paused_run(find_run_result.id)
         if not is_claimed:
@@ -158,29 +156,26 @@ class GenerateTextService:
                 f"Generate text run {run_identity} is not awaiting review"
             )
 
-        if generate_text_state.current_step_id is not None:
-            human_decision = (
-                HumanDecisionType.APPROVED
-                if resume_generate_text_input.is_approved
-                else HumanDecisionType.REJECTED
+        try:
+            await self._record_review_decision(
+                find_run_result.id, resume_generate_text_input, auth_user
             )
-            try:
-                await self._step_service.record_decision(
-                    generate_text_state.current_step_id,
-                    human_decision,
-                    resume_generate_text_input.feedback_text,
-                    auth_user,
-                    datetime.now(UTC),
-                )
-            except Exception as record_decision_exception:
-                # The run is already claimed as RUNNING, and no task exists yet to move it
-                # on, so it's failed here rather than left RUNNING forever.
-                await self._run_service.fail_run(
-                    find_run_result.id,
-                    type(record_decision_exception).__name__,
-                    str(record_decision_exception),
-                )
-                raise
+        except Exception as record_decision_exception:
+            # The run is already claimed as RUNNING, and no task exists yet to move it
+            # on, so it's failed here rather than left RUNNING forever.
+            await self._run_service.fail_run(
+                find_run_result.id,
+                type(record_decision_exception).__name__,
+                str(record_decision_exception),
+            )
+            raise
+
+        # Read before the task starts: once it runs it writes steps of its own, and the
+        # response would depend on how far it had got.
+        claimed_run_result = find_run_result.model_copy(
+            update={"status": GenerateTextRunStatusType.RUNNING}
+        )
+        resume_run_result = await self._build_run_result_from_steps(claimed_run_result)
 
         resume_payload = resume_generate_text_input.model_dump()
         self._background_task_service.start(
@@ -192,11 +187,32 @@ class GenerateTextService:
                 should_start_run=False,
             )
         )
-        # The row was claimed as RUNNING above; the task may already have moved it on.
-        claimed_run_result = find_run_result.model_copy(
-            update={"status": GenerateTextRunStatusType.RUNNING}
+        return resume_run_result
+
+    async def _record_review_decision(
+        self,
+        run_id: int,
+        resume_generate_text_input: ResumeGenerateTextInput,
+        auth_user: AuthUser,
+    ) -> None:
+        """Records the decision on the step the run is paused on. That step is read from the
+        step rows, not the checkpoint: a review node interrupts before its state update is
+        saved, so the checkpoint never holds its step."""
+        awaiting_review_step_id = await self._step_service.find_awaiting_review_step_id(run_id)
+        if awaiting_review_step_id is None:
+            return
+        human_decision = (
+            HumanDecisionType.APPROVED
+            if resume_generate_text_input.is_approved
+            else HumanDecisionType.REJECTED
         )
-        return await self._build_run_result_from_steps(claimed_run_result)
+        await self._step_service.record_decision(
+            awaiting_review_step_id,
+            human_decision,
+            resume_generate_text_input.feedback_text,
+            auth_user,
+            datetime.now(UTC),
+        )
 
     async def _run_graph_in_background(
         self,

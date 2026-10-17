@@ -106,6 +106,20 @@ class GenerateTextStepService:
             step_record.updated_by_id = auth_user.id
             await db_session.flush()
 
+    async def find_awaiting_review_step_id(self, run_id: int) -> int | None:
+        """The step a paused run is waiting on, or None when no step is paused."""
+        async with self._db_session_factory() as db_session:
+            query = (
+                select(GenerateTextStepOrm.id)
+                .where(
+                    GenerateTextStepOrm.run_id == run_id,
+                    GenerateTextStepOrm.status == GenerateTextStepStatusType.AWAITING_REVIEW,
+                )
+                .order_by(GenerateTextStepOrm.step_number.desc())
+                .limit(1)
+            )
+            return await db_session.scalar(query)
+
     @staticmethod
     async def _find_awaiting_review_step(
         db_session: AsyncSession, run_id: int, step_name: str
