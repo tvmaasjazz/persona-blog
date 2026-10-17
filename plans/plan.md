@@ -373,15 +373,15 @@ STRONG model. Background runs remove the HTTP side of the risk; this fixes the L
 - [x] The frontend client sets no global timeout: `apiClient` (`openapi-fetch`) has none
 - [ ] Confirm it from `pb_llm_call`: the failed STRONG calls carry a timeout
   `error_code` and a `duration_ms` near 60000
-- [ ] Raise STRONG's `request_timeout_seconds` to 120
-- [ ] Don't retry a timed-out call. The OpenAI SDK retries timeouts as part of
+- [x] Raise STRONG's `request_timeout_seconds` to 120
+- [x] Don't retry a timed-out call. The OpenAI SDK retries timeouts as part of
   `max_retries`, so turn its retries off and retry 429s and 5xx errors ourselves, with
   backoff and jitter
-- [ ] Move FAST off `gpt-4o-mini` (the 4o family is being retired) to `gpt-5.4-nano`
+- [x] Move FAST off `gpt-4o-mini` (the 4o family is being retired) to `gpt-5.4-nano`
   ($0.20 / $1.25 per 1M tokens), and add its price to `model_pricing`
 - [ ] Check STRONG's `gpt-5.6-sol` price in `model_pricing` ($4 / $20) against
   OpenAI's page: sources list it at $5 / $30, with $4 / $20 as a promotion
-- [ ] GPT-5 models are reasoning models, and `max_output_tokens` includes their
+- [x] GPT-5 models are reasoning models, and `max_output_tokens` includes their
   reasoning tokens, so FAST's 2048 can run out before any outline is written. Raise it,
   or send a low `reasoning.effort` per tier
 
@@ -416,13 +416,13 @@ steer it.
 
 **Endpoints:**
 
-- [ ] `POST /generate-text/blog-post`: insert the row, start the background run, return
+- [x] `POST /generate-text/blog-post`: insert the row, start the background run, return
   `202 Accepted` with the run
 - [x] `GET /generate-text/runs/{run_identity}`: returns status, the last step and its
   output, and checks the run belongs to the caller
 - [ ] `GET /generate-text/runs/{run_identity}` also returns the list of steps for the
   progress UI
-- [ ] `POST /generate-text/runs/{run_identity}/resume`: takes the review decision, sets
+- [x] `POST /generate-text/runs/{run_identity}/resume`: takes the review decision, sets
   `RUNNING`, continues from the checkpoint in the background, and returns `202`
 
 ### Phase 3: Background execution and LangGraph async audit
@@ -431,12 +431,12 @@ The run only stays cheap and non-blocking if every step in it is async, end to e
 
 **Running the work in the background:**
 
-- [ ] Start the run with `asyncio.create_task(...)` in the API process, and keep a
-  reference in a set the app owns, removed on completion. Python can garbage-collect a
-  task nobody references
-- [ ] Wrap the run body in `try` / `except`: set `FAILED` and the error on any
-  exception. A task cancelled at shutdown is handed off, not failed (see Deploys and
-  restarts)
+- [x] Start the run as a background job with `BackgroundJobService.start()`, which runs
+  it with `asyncio.create_task` in the API process and holds a reference until it's
+  done. Python can garbage-collect a task nobody references
+- [x] Wrap the run body in `try` / `except`: set `FAILED` and the error on any
+  exception. For now a job cancelled at shutdown is marked `FAILED` (`ServerShutdown`);
+  the lease PR hands it off instead (see Deploys and restarts)
 - [ ] Run the graph with `astream(..., stream_mode="updates")` instead of `ainvoke`,
   so the task can stop cleanly between nodes. LangGraph saves a checkpoint after every
   node
@@ -474,8 +474,8 @@ No run is lost, and at most one node is redone.
 - [ ] **Graceful stop.** Lifespan shutdown sets a stop flag. Each run task finishes the
   node it's on (bounded by STRONG's 120s timeout), stops before the next one, and
   releases its lease (`lease_expires_at = now()`). The run stays `RUNNING`
-- [ ] **Bounded wait.** Shutdown waits for the tasks with a deadline shorter than
-  `drainingSeconds`, then cancels what's left. A cancelled task's node is lost, but
+- [x] **Bounded wait.** Shutdown waits for the jobs with a deadline shorter than
+  `drainingSeconds`, then cancels what's left. A cancelled job's node is lost, but
   its last checkpoint isn't
 - [ ] **Pick-up.** A sweeper, on startup and every ~30s, claims `RUNNING` runs whose
   lease has expired (`FOR UPDATE SKIP LOCKED`, so two workers or replicas never claim
@@ -525,7 +525,7 @@ No run is lost, and at most one node is redone.
   milliseconds
 - [ ] Run locally with `PYTHONASYNCIODEBUG=1`; asyncio logs any step that holds the loop
   for more than 100ms
-- [ ] An event loop lag monitor, started in `lifespan` in development: a task that
+- [x] An event loop lag monitor, started in `lifespan` in development: a task that
   sleeps a fixed interval, measures how late it wakes, and logs any delay over a
   threshold. Leave it running during a long real generation
 
@@ -534,7 +534,7 @@ No run is lost, and at most one node is redone.
 Treat every LLM call as a slow, flaky, rate-limited dependency that costs money.
 
 - [x] A timeout on every call: each tier's `request_timeout_seconds`
-- [ ] Retries with backoff and jitter on 429s and 5xx errors, done by us, not the SDK,
+- [x] Retries with backoff and jitter on 429s and 5xx errors, done by us, not the SDK,
   so timeouts and 4xx input errors are never retried (Phase 1)
 - [ ] A shared `asyncio.Semaphore` capping concurrent calls per worker, sized to the
   provider's rate limits
@@ -546,18 +546,18 @@ Treat every LLM call as a slow, flaky, rate-limited dependency that costs money.
 The frontend starts a run once, then only reads it, so a refresh, a closed tab or a
 dropped connection costs nothing.
 
-- [ ] **Write post** sends an idempotency key, then goes straight to
+- [x] **Write post** goes straight to
   `/write/runs/:runIdentity` instead of waiting on the request
 - [x] Poll `GET /generate-text/runs/{run_identity}` while the status is `PENDING` or
   `RUNNING` (React Query's `refetchInterval`, which also handles cleanup)
-- [ ] Poll at the interval the run response gives: a backend setting,
+- [x] Poll at the interval the run response gives: a backend setting,
   `GENERATE_TEXT__POLL_INTERVAL_MS`, 2000 by default, so it can change per deploy
   without rebuilding the frontend
 - [x] Stop polling on `COMPLETED`, `FAILED`, `CANCELLED` or `AWAITING_REVIEW`
-- [ ] Show progress from the steps ("Outlining…", "Drafting…") in the step tracker
-- [ ] `AWAITING_REVIEW` shows the review UI; submitting calls `/resume`, which returns at
+- [x] Show progress from the steps ("Outlining…", "Drafting…") in the step tracker
+- [x] `AWAITING_REVIEW` shows the review UI; submitting calls `/resume`, which returns at
   once, and polling restarts
-- [ ] Back off on errors (for example 3s, then 6s, then 12s) instead of hammering a
+- [x] Back off on errors (for example 3s, then 6s, then 12s) instead of hammering a
   failing API
 - [x] On page load with a run identity in the URL, the run page reads that run and polls
   it

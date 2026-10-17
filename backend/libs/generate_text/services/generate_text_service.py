@@ -222,8 +222,8 @@ class GenerateTextService:
         run_id: int,
         should_start_run: bool,
     ) -> None:
-        """Runs as a background task, so nothing here may use the request's resources.
-        A failure is recorded on the run and re-raised for the task holder to log; a
+        """Runs as a background job, so nothing here may use the request's resources.
+        A failure is recorded on the run and re-raised for BackgroundJobService to log; a
         cancellation means the process is shutting down."""
         try:
             if should_start_run:

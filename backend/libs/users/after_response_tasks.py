@@ -16,7 +16,7 @@ async def record_user_activity(
 ) -> None:
     """Runs after the response is sent, so it opens its own session and transaction.
 
-    A request's session is already closed by the time a background task runs.
+    A request's session is already closed by the time an after-response task runs.
     """
     async with db_session_factory() as db_session, db_session.begin():
         user_activity_service = UserActivityService(

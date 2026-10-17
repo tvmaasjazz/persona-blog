@@ -47,6 +47,8 @@ backend/tests/
 ├── payloads/
 │   └── weather_api.py       # third-party response bodies, as builder functions
 ├── libs/
+│   ├── core/
+│   │   └── test_background_job_service.py   # one module per libs/core service or Utils
 │   └── users/
 │       ├── conftest.py      # only if the domain's lib tests share fixtures
 │       ├── test_services.py
@@ -56,6 +58,7 @@ backend/tests/
 │   ├── core/
 │   │   ├── test_config.py
 │   │   ├── test_exception_handlers.py
+│   │   ├── test_event_loop_monitor.py
 │   │   └── test_dependencies.py
 │   ├── users/
 │   │   ├── conftest.py
@@ -106,6 +109,7 @@ backend/tests/
 | `apps/api/lifespan.py`               | `tests/api/test_lifespan.py`           | Resources created at startup and closed at shutdown (§7) |
 | `libs/<d>/after_response_tasks.py`   | `tests/libs/<d>/test_after_response_tasks.py` | Call the task directly with the `db_session_factory` and `redis_client` fixtures, and assert the persisted effect |
 | A service method that starts a background job | That service's test file, and the route's | Drain the job before asserting (see Async) |
+| `apps/api/core/event_loop_monitor.py` | `tests/api/core/test_event_loop_monitor.py` | A blocked loop logs `event_loop_lag`; an idle one logs nothing. Pass a short sample and a generous threshold. The one test allowed to block and sleep (see Async) |
 | Middleware                           | `tests/api/test_<module>.py`           | Observable effect on a real route (§9) |
 | `libs/database/orm/*.py`             | None                                   | Service database tests cover them; CI's drift check catches mismatches with migrations |
 | `migrations/`                        | `tests/migrations/test_revisions.py`   | One file covers every revision (§10) |
@@ -222,7 +226,8 @@ calls.
 - Never use `asyncio.run()`, `loop.run_until_complete()`, `time.sleep()`, or
   `asyncio.sleep()` in a test. If a test has to wait for something, it isn't
   controlling that thing. The one exception is the event loop lag monitor's own test,
-  which has to block the loop for real, because lag only exists when it's blocked.
+  which may block the loop and sleep, because lag only exists when the loop is really
+  blocked.
 - A test that starts a background job waits for it with
   `await background_job_service.drain(...)` before asserting or touching the database
   again. The job and the test share one test connection, which can't serve two

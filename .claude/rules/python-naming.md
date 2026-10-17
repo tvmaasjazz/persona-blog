@@ -101,8 +101,9 @@ class LlmReasoningEffortType(StrEnum):  # OpenAI's reasoning.effort values
     HIGH = "high"
 ```
 
-This carries into the database: Postgres enum labels match the members exactly
-(`database.md` › Enums). SQLAlchemy's `Enum` column persists member *names* by
+For our own enums, this carries into the database: Postgres enum labels match the
+members exactly (`database.md` › Enums). A mirrored enum is never an Orm column, since
+its persisted names and serialized values would differ. SQLAlchemy's `Enum` column persists member *names* by
 default while Pydantic serializes *values* — when the two are identical, that
 difference stops being a source of bugs.
 
