@@ -29,6 +29,7 @@ class AppSettings(BaseSettings):
     google_client_id: str
     google_client_secret: str
     openai_api_key: str = Field(min_length=1)
+    railway_replica_id: str | None = None
     auth: AuthSettings = Field(default_factory=AuthSettings)
     background_jobs: BackgroundJobSettings = Field(default_factory=BackgroundJobSettings)
     generate_text: GenerateTextSettings = Field(default_factory=GenerateTextSettings)

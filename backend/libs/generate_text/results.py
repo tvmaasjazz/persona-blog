@@ -63,6 +63,17 @@ class FindGenerateTextRunByIdentityResult(BaseModel):
     created_by_id: int
 
 
+class ClaimExpiredGenerateTextRunResult(BaseModel):
+    id: int
+    identity: UUID
+    status: GenerateTextRunStatusType
+    pickup_count: int
+    text_type: TextType
+    graph_version: str
+    options: dict[str, Any]
+    created_by_id: int
+
+
 class CreateGenerateTextStepResult(BaseModel):
     id: int
     identity: UUID

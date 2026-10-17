@@ -6,7 +6,7 @@ from libs.core.services import BackgroundJobService
 
 
 async def test_start_task_runs_to_completion() -> None:
-    background_job_service = BackgroundJobService()
+    background_job_service = BackgroundJobService(worker_id="test-worker")
     finished_labels: list[str] = []
 
     async def finish_after_yield() -> None:
@@ -20,7 +20,7 @@ async def test_start_task_runs_to_completion() -> None:
 
 
 async def test_start_task_exception_is_logged_and_does_not_propagate() -> None:
-    background_job_service = BackgroundJobService()
+    background_job_service = BackgroundJobService(worker_id="test-worker")
     task_failure = ValueError("boom")
 
     async def raise_failure() -> None:
@@ -41,7 +41,7 @@ async def test_start_task_exception_is_logged_and_does_not_propagate() -> None:
 
 
 async def test_drain_waits_for_tasks_that_finish_within_timeout() -> None:
-    background_job_service = BackgroundJobService()
+    background_job_service = BackgroundJobService(worker_id="test-worker")
     finished_labels: list[str] = []
     cancelled_labels: list[str] = []
 
@@ -63,7 +63,7 @@ async def test_drain_waits_for_tasks_that_finish_within_timeout() -> None:
 
 
 async def test_drain_cancels_tasks_still_running_after_timeout() -> None:
-    background_job_service = BackgroundJobService()
+    background_job_service = BackgroundJobService(worker_id="test-worker")
     never_set_event = asyncio.Event()
     cancelled_labels: list[str] = []
 
@@ -81,3 +81,31 @@ async def test_drain_cancels_tasks_still_running_after_timeout() -> None:
 
     assert cancelled_labels == ["stuck"]
     assert [log_event["event"] for log_event in captured_log_events] == []
+
+
+def test_worker_id_returns_id_given_at_construction() -> None:
+    background_job_service = BackgroundJobService(worker_id="replica-pid42-ab12")
+
+    assert background_job_service.worker_id == "replica-pid42-ab12"
+
+
+def test_is_stopping_new_service_is_false() -> None:
+    background_job_service = BackgroundJobService(worker_id="test-worker")
+
+    assert background_job_service.is_stopping is False
+
+
+def test_request_stop_sets_is_stopping() -> None:
+    background_job_service = BackgroundJobService(worker_id="test-worker")
+
+    background_job_service.request_stop()
+
+    assert background_job_service.is_stopping is True
+
+
+async def test_drain_does_not_set_is_stopping() -> None:
+    background_job_service = BackgroundJobService(worker_id="test-worker")
+
+    await background_job_service.drain(timeout_seconds=0)
+
+    assert background_job_service.is_stopping is False

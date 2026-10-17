@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import BackgroundTasks, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.datastructures import State
 
 from apps.api.core.config import AppSettings
 from libs.auth.constants import SESSION_COOKIE_NAME
@@ -57,18 +58,23 @@ async def get_auth_user(request: Request, after_response_tasks: BackgroundTasks)
 # Two domains reach an LLM now, dev_llm and generate_text, and domains can't import each
 # other — so the alternative to core/ is each of them rebuilding the same provider map.
 # Worth revisiting if a third arrives and the shape has settled.
-def get_llm_service(request: Request) -> LlmService:
-    app_settings: AppSettings = request.app.state.settings
+def build_llm_service(app_state: State) -> LlmService:
+    """Takes the app state rather than a Request, so the run sweeper can build one too."""
+    app_settings: AppSettings = app_state.settings
     openai_llm_service = OpenAiLlmService(
-        openai_client=request.app.state.openai_client,
+        openai_client=app_state.openai_client,
         llm_settings=app_settings.llm,
     )
-    llm_call_service = LlmCallService(db_session_factory=request.app.state.db_session_factory)
+    llm_call_service = LlmCallService(db_session_factory=app_state.db_session_factory)
     return LlmService(
         llm_provider_services={LlmProviderType.OPENAI: openai_llm_service},
         llm_call_service=llm_call_service,
         llm_settings=app_settings.llm,
     )
+
+
+def get_llm_service(request: Request) -> LlmService:
+    return build_llm_service(request.app.state)
 
 
 LlmServiceDep = Annotated[LlmService, Depends(get_llm_service)]

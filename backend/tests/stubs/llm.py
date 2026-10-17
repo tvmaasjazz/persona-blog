@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from pydantic import BaseModel
@@ -46,6 +47,9 @@ class LlmServiceStub(LlmService):
         self.complete_result = build_llm_completion_result()
         self.complete_results: list[LlmCompletionResult] | None = None
         self.complete_error: Exception | None = None
+        self.complete_is_blocked = False
+        self.complete_started_event = asyncio.Event()
+        self.complete_unblock_event = asyncio.Event()
         self.complete_structured_inputs: list[LlmCompletionInput] = []
         self.complete_structured_result: LlmStructuredCompletionResult[Any] | None = None
         self.complete_structured_error: Exception | None = None
@@ -54,6 +58,9 @@ class LlmServiceStub(LlmService):
         self, llm_completion_input: LlmCompletionInput, auth_user: AuthUser
     ) -> LlmCompletionResult:
         self.complete_inputs.append(llm_completion_input)
+        self.complete_started_event.set()
+        if self.complete_is_blocked:
+            await self.complete_unblock_event.wait()
         if self.complete_error is not None:
             raise self.complete_error
         if self.complete_results is not None:

@@ -445,6 +445,30 @@ The run only stays cheap and non-blocking if every step in it is async, end to e
 
 A follow-up PR, after polling lands.
 
+**Decided for the lease PR:**
+
+- **Created leased.** A run is inserted with its creator's lease, so the sweeper never
+  takes a run whose job is about to start. A run claimed for resume takes the lease in
+  the same update. Pausing, completing or failing clears it.
+- **Stop between steps.** On shutdown, each job finishes the step it's on, LLM call
+  included, then stops before the next one and releases the run. The drain deadline
+  (`BACKGROUND_JOBS__SHUTDOWN_DRAIN_SECONDS`) rises from 30 to 150, above STRONG's 120s
+  timeout, so a step always has time to finish.
+- **Deadline as a safety net.** A job still running at the deadline (something hung) is
+  cancelled and its run released, not failed. Another instance redoes that step from
+  the last checkpoint.
+- **Orphaned start.** A `PENDING` run whose lease expires never started, so it has no
+  checkpoint to resume from. The sweeper marks it `FAILED`; the run page offers Try
+  again.
+- **A lost resume.** If a process dies after claiming a resume but before the graph
+  takes the decision, the checkpoint is still at the interrupt. The picked-up run pauses
+  for review again; the decision is already saved on the step, and the user approves
+  again.
+- **Timings,** as `GenerateTextSettings`: lease 60s, heartbeat 15s, sweep every 30s,
+  and a run picked up more than 3 times is marked `FAILED`.
+- **Instant handoff** stays the next PR. Until then, a released run waits for the next
+  sweep, up to 30s.
+
 A run can take minutes, longer than any deploy should wait. So a stopping process
 finishes the node it's on, saves, and hands the rest of the run to a live process.
 No run is lost, and at most one node is redone.
