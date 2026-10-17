@@ -36,7 +36,7 @@ class OpenAiLlmUtils:
     ) -> dict[str, dict[str, str]]:
         if provider_input.reasoning_effort is None:
             return {}
-        return {"reasoning": {"effort": provider_input.reasoning_effort.lower()}}
+        return {"reasoning": {"effort": provider_input.reasoning_effort.value}}
 
     @staticmethod
     def is_retryable_error(openai_error: OpenAIError) -> bool:

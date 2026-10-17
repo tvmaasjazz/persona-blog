@@ -15,12 +15,13 @@ class LlmProviderType(StrEnum):
 
 
 class LlmReasoningEffortType(StrEnum):
-    """Sent to OpenAI lowercased, which is how its API spells these."""
+    """Mirrors OpenAI's `reasoning.effort` values, so each value is OpenAI's own
+    spelling."""
 
-    MINIMAL = "MINIMAL"
-    LOW = "LOW"
-    MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
+    MINIMAL = "minimal"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
 class LlmCallStatusType(StrEnum):
