@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import Depends, Request
+from starlette.datastructures import State
 
 from apps.api.core.config import AppSettings
 from apps.api.core.dependencies import AuthUserDep, LlmServiceDep
@@ -16,18 +17,20 @@ from libs.generate_text.services import (
     GenerateTextService,
     GenerateTextStepService,
 )
+from libs.llm.services import LlmService
 from libs.personas.results import FindUserPersonaResult
 from libs.personas.services import PersonaService
 
 
-def get_generate_text_service(request: Request, llm_service: LlmServiceDep) -> GenerateTextService:
-    graph_checkpointer = request.app.state.graph_checkpointer
+def build_generate_text_service(app_state: State, llm_service: LlmService) -> GenerateTextService:
+    """Takes the app state rather than a Request, so the run sweeper can build one too."""
+    graph_checkpointer = app_state.graph_checkpointer
     if graph_checkpointer is None:
         # lifespan says why: RediSearch only indexes Redis database 0.
         raise ServiceUnavailableException("Text generation is unavailable")
 
-    app_settings: AppSettings = request.app.state.settings
-    db_session_factory = request.app.state.db_session_factory
+    app_settings: AppSettings = app_state.settings
+    db_session_factory = app_state.db_session_factory
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     generate_text_step_service = GenerateTextStepService(db_session_factory=db_session_factory)
     generate_text_instrumentation_service = GenerateTextInstrumentationService(
@@ -46,9 +49,13 @@ def get_generate_text_service(request: Request, llm_service: LlmServiceDep) -> G
         run_service=generate_text_run_service,
         step_service=generate_text_step_service,
         checkpointer=graph_checkpointer,
-        background_job_service=request.app.state.background_job_service,
+        background_job_service=app_state.background_job_service,
         generate_text_settings=app_settings.generate_text,
     )
+
+
+def get_generate_text_service(request: Request, llm_service: LlmServiceDep) -> GenerateTextService:
+    return build_generate_text_service(request.app.state, llm_service)
 
 
 GenerateTextServiceDep = Annotated[GenerateTextService, Depends(get_generate_text_service)]
