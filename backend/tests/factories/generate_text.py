@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -40,6 +41,8 @@ def build_create_generate_text_run_input(
     target_audience: str | None = None,
     additional_context: str | None = None,
     options: dict[str, Any] | None = None,
+    lease_owner: str = "test-worker",
+    lease_expires_at: datetime = datetime(2099, 1, 2, 3, 4, 5, tzinfo=UTC),
 ) -> CreateGenerateTextRunInput:
     return CreateGenerateTextRunInput(
         text_type=text_type,
@@ -51,6 +54,8 @@ def build_create_generate_text_run_input(
         target_audience=target_audience,
         additional_context=additional_context,
         options=options if options is not None else {},
+        lease_owner=lease_owner,
+        lease_expires_at=lease_expires_at,
     )
 
 
@@ -71,6 +76,11 @@ async def insert_generate_text_run_row(
     content_item_id: int | None = None,
     error_code: str | None = None,
     error_message: str | None = None,
+    lease_owner: str | None = None,
+    lease_expires_at: datetime | None = None,
+    pickup_count: int = 0,
+    deleted_at: datetime | None = None,
+    deleted_by_id: int | None = None,
 ) -> GenerateTextRunOrm:
     run_record = GenerateTextRunOrm(
         text_type=text_type,
@@ -86,6 +96,11 @@ async def insert_generate_text_run_row(
         content_item_id=content_item_id,
         error_code=error_code,
         error_message=error_message,
+        lease_owner=lease_owner,
+        lease_expires_at=lease_expires_at,
+        pickup_count=pickup_count,
+        deleted_at=deleted_at,
+        deleted_by_id=deleted_by_id,
         created_by_id=created_by_id,
         updated_by_id=created_by_id,
     )

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -5,7 +6,7 @@ import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
@@ -55,6 +56,12 @@ from tests.stubs.generate_text import (
 from tests.stubs.llm import LlmServiceStub
 
 DRAIN_TIMEOUT_SECONDS = 30
+# A lease this long (about 95 years) ends after LONG_LEASE_BOUND, and a lease released
+# "now" ends before it, so a test can tell the two apart without reading the clock.
+LONG_LEASE_SECONDS = 3_000_000_000
+LONG_LEASE_BOUND = datetime(2100, 1, 1, tzinfo=UTC)
+EXPIRED_LEASE_EXPIRES_AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+OTHER_WORKER_LEASE_EXPIRES_AT = datetime(2099, 1, 2, 3, 4, 5, tzinfo=UTC)
 
 
 class _InvalidBlogPostOptionsInput(BaseModel):
@@ -118,6 +125,8 @@ def _build_generate_text_service(
 def _build_generate_text_service_with_stub_registry(
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    *,
+    generate_text_settings: GenerateTextSettings | None = None,
 ) -> tuple[GenerateTextService, GenerateTextGraphBuilderRegistryStub]:
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     step_service = GenerateTextStepService(db_session_factory=db_session_factory)
@@ -128,7 +137,7 @@ def _build_generate_text_service_with_stub_registry(
         step_service=step_service,
         checkpointer=InMemorySaver(),
         background_job_service=background_job_service,
-        generate_text_settings=GenerateTextSettings(),
+        generate_text_settings=generate_text_settings or GenerateTextSettings(),
     )
     return generate_text_service, graph_builder_registry_stub
 
@@ -557,7 +566,7 @@ async def test_resume_generate_text_record_decision_fails_marks_run_failed_and_r
     assert run_record.error_message == "decision write failed"
 
 
-async def test_generate_text_graph_invoke_fails_with_no_step_marks_run_failed(
+async def test_generate_text_graph_stream_fails_with_no_step_marks_run_failed(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
@@ -568,7 +577,7 @@ async def test_generate_text_graph_invoke_fails_with_no_step_marks_run_failed(
         _build_generate_text_service_with_stub_registry(db_session_factory, background_job_service)
     )
     graph_builder_stub = graph_builder_registry_stub.get_by_text_type_result
-    graph_builder_stub.build_graph_result.ainvoke_error = RuntimeError("checkpointer unreachable")
+    graph_builder_stub.build_graph_result.astream_error = RuntimeError("checkpointer unreachable")
     generate_text_input = build_generate_text_input(options=_build_all_auto_approved_options())
 
     await generate_text_service.generate_text(
@@ -585,7 +594,7 @@ async def test_generate_text_graph_invoke_fails_with_no_step_marks_run_failed(
     assert run_record.finished_at is not None
 
 
-async def test_generate_text_task_cancelled_mid_run_marks_run_failed_with_server_shutdown(
+async def test_generate_text_task_cancelled_mid_run_releases_lease_and_keeps_run_running(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
@@ -593,24 +602,63 @@ async def test_generate_text_task_cancelled_mid_run_marks_run_failed_with_server
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
     generate_text_service, graph_builder_registry_stub = (
-        _build_generate_text_service_with_stub_registry(db_session_factory, background_job_service)
+        _build_generate_text_service_with_stub_registry(
+            db_session_factory,
+            background_job_service,
+            generate_text_settings=GenerateTextSettings(lease_seconds=LONG_LEASE_SECONDS),
+        )
     )
     graph_stub = graph_builder_registry_stub.get_by_text_type_result.build_graph_result
-    graph_stub.ainvoke_is_blocked = True
+    graph_stub.astream_is_blocked = True
     generate_text_input = build_generate_text_input(options=_build_all_auto_approved_options())
     await generate_text_service.generate_text(
         generate_text_input, find_user_persona_result, auth_user
     )
-    await graph_stub.ainvoke_started_event.wait()
+    await graph_stub.astream_started_event.wait()
 
     await background_job_service.drain(0)
 
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.created_by_id == auth_user.id)
     run_record = await db_session.scalar(run_query)
     assert run_record is not None
-    assert run_record.status == GenerateTextRunStatusType.FAILED
-    assert run_record.error_code == "ServerShutdown"
-    assert run_record.finished_at is not None
+    assert run_record.status == GenerateTextRunStatusType.RUNNING
+    assert run_record.error_code is None
+    assert run_record.finished_at is None
+    assert run_record.lease_owner == "test-worker"
+    assert run_record.lease_expires_at is not None
+    assert run_record.lease_expires_at < LONG_LEASE_BOUND
+
+
+async def test_generate_text_creates_run_leased_to_worker(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
+    generate_text_service, graph_builder_registry_stub = (
+        _build_generate_text_service_with_stub_registry(
+            db_session_factory,
+            background_job_service,
+            generate_text_settings=GenerateTextSettings(lease_seconds=LONG_LEASE_SECONDS),
+        )
+    )
+    graph_stub = graph_builder_registry_stub.get_by_text_type_result.build_graph_result
+    graph_stub.astream_is_blocked = True
+    generate_text_input = build_generate_text_input(options=_build_all_auto_approved_options())
+
+    await generate_text_service.generate_text(
+        generate_text_input, find_user_persona_result, auth_user
+    )
+
+    await graph_stub.astream_started_event.wait()
+    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.created_by_id == auth_user.id)
+    run_record = await db_session.scalar(run_query)
+    await background_job_service.drain(0)
+    assert run_record is not None
+    assert run_record.lease_owner == "test-worker"
+    assert run_record.lease_expires_at is not None
+    assert run_record.lease_expires_at > LONG_LEASE_BOUND
 
 
 async def test_generate_text_draft_never_validates_fails_run_and_records_error_on_step(
@@ -729,3 +777,429 @@ async def test_resume_generate_text_run_without_checkpoint_raises_not_paused_exc
         await generate_text_service.resume_generate_text(
             run_record.identity, build_resume_generate_text_input(), auth_user
         )
+
+
+async def test_resume_generate_text_leases_claimed_run_to_worker(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        graph_version="stub-version",
+        status=GenerateTextRunStatusType.AWAITING_REVIEW,
+    )
+    await db_session.commit()
+    generate_text_service, graph_builder_registry_stub = (
+        _build_generate_text_service_with_stub_registry(
+            db_session_factory,
+            background_job_service,
+            generate_text_settings=GenerateTextSettings(lease_seconds=LONG_LEASE_SECONDS),
+        )
+    )
+    graph_stub = graph_builder_registry_stub.get_by_text_type_result.build_graph_result
+    graph_stub.astream_is_blocked = True
+
+    await generate_text_service.resume_generate_text(
+        run_record.identity, build_resume_generate_text_input(), auth_user
+    )
+
+    await graph_stub.astream_started_event.wait()
+    await db_session.refresh(run_record)
+    await background_job_service.drain(0)
+    assert run_record.status == GenerateTextRunStatusType.RUNNING
+    assert run_record.lease_owner == "test-worker"
+    assert run_record.lease_expires_at is not None
+    assert run_record.lease_expires_at > LONG_LEASE_BOUND
+
+
+async def test_generate_text_stop_requested_during_step_saves_step_and_releases_lease(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="# Final\n\nFinal text.")
+    llm_service_stub.complete_is_blocked = True
+    generate_text_service = _build_generate_text_service(
+        db_session_factory,
+        llm_service_stub,
+        background_job_service,
+        generate_text_settings=GenerateTextSettings(lease_seconds=LONG_LEASE_SECONDS),
+    )
+    await generate_text_service.generate_text(
+        build_generate_text_input(options=_build_all_auto_approved_options()),
+        find_user_persona_result,
+        auth_user,
+    )
+    await llm_service_stub.complete_started_event.wait()
+
+    background_job_service.request_stop()
+    llm_service_stub.complete_unblock_event.set()
+
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
+    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.created_by_id == auth_user.id)
+    run_record = await db_session.scalar(run_query)
+    assert run_record is not None
+    assert run_record.status == GenerateTextRunStatusType.RUNNING
+    assert run_record.finished_at is None
+    assert run_record.lease_owner == "test-worker"
+    assert run_record.lease_expires_at is not None
+    assert run_record.lease_expires_at < LONG_LEASE_BOUND
+    step_query = (
+        select(GenerateTextStepOrm)
+        .where(GenerateTextStepOrm.run_id == run_record.id)
+        .order_by(GenerateTextStepOrm.step_number)
+    )
+    step_scalars = await db_session.scalars(step_query)
+    step_records = step_scalars.all()
+    assert [step_record.step_name for step_record in step_records] == ["GENERATE_OUTLINE"]
+    assert step_records[0].status == GenerateTextStepStatusType.SUCCEEDED
+    assert step_records[0].output == {"text": "# Final\n\nFinal text."}
+    assert len(llm_service_stub.complete_inputs) == 1
+
+
+async def test_generate_text_lease_lost_to_another_worker_cancels_job_without_releasing(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
+    generate_text_service, graph_builder_registry_stub = (
+        _build_generate_text_service_with_stub_registry(
+            db_session_factory,
+            background_job_service,
+            generate_text_settings=GenerateTextSettings(
+                lease_seconds=LONG_LEASE_SECONDS, lease_heartbeat_seconds=1
+            ),
+        )
+    )
+    graph_stub = graph_builder_registry_stub.get_by_text_type_result.build_graph_result
+    graph_stub.astream_is_blocked = True
+    await generate_text_service.generate_text(
+        build_generate_text_input(options=_build_all_auto_approved_options()),
+        find_user_persona_result,
+        auth_user,
+    )
+    await graph_stub.astream_started_event.wait()
+    take_lease_statement = (
+        update(GenerateTextRunOrm)
+        .where(GenerateTextRunOrm.created_by_id == auth_user.id)
+        .values(lease_owner="other-worker", lease_expires_at=OTHER_WORKER_LEASE_EXPIRES_AT)
+    )
+    await db_session.execute(take_lease_statement)
+    await db_session.commit()
+
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
+
+    run_query = (
+        select(GenerateTextRunOrm)
+        .where(GenerateTextRunOrm.created_by_id == auth_user.id)
+        .execution_options(populate_existing=True)
+    )
+    run_record = await db_session.scalar(run_query)
+    assert graph_stub.astream_is_cancelled is True
+    assert run_record is not None
+    assert run_record.status == GenerateTextRunStatusType.RUNNING
+    assert run_record.lease_owner == "other-worker"
+    assert run_record.lease_expires_at == OTHER_WORKER_LEASE_EXPIRES_AT
+
+
+async def test_pick_up_expired_run_released_run_resumes_from_checkpoint_to_completion(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="# Final\n\nFinal text.")
+    llm_service_stub.complete_is_blocked = True
+    graph_checkpointer = InMemorySaver()
+    stopping_generate_text_service = _build_generate_text_service(
+        db_session_factory,
+        llm_service_stub,
+        background_job_service,
+        checkpointer=graph_checkpointer,
+    )
+    await stopping_generate_text_service.generate_text(
+        build_generate_text_input(options=_build_all_auto_approved_options()),
+        find_user_persona_result,
+        auth_user,
+    )
+    await llm_service_stub.complete_started_event.wait()
+    background_job_service.request_stop()
+    llm_service_stub.complete_unblock_event.set()
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
+    picking_up_job_service = BackgroundJobService(worker_id="other-worker")
+    picking_up_generate_text_service = _build_generate_text_service(
+        db_session_factory,
+        llm_service_stub,
+        picking_up_job_service,
+        checkpointer=graph_checkpointer,
+    )
+
+    is_picked_up = await picking_up_generate_text_service.pick_up_expired_run()
+
+    await picking_up_job_service.drain(DRAIN_TIMEOUT_SECONDS)
+    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.created_by_id == auth_user.id)
+    run_record = await db_session.scalar(run_query)
+    assert is_picked_up is True
+    assert run_record is not None
+    assert run_record.status == GenerateTextRunStatusType.COMPLETED
+    assert run_record.pickup_count == 1
+    assert run_record.lease_owner is None
+    assert run_record.lease_expires_at is None
+    assert run_record.finished_at is not None
+    step_query = (
+        select(GenerateTextStepOrm.step_name)
+        .where(GenerateTextStepOrm.run_id == run_record.id)
+        .order_by(GenerateTextStepOrm.step_number)
+    )
+    step_name_scalars = await db_session.scalars(step_query)
+    step_names = step_name_scalars.all()
+    assert step_names == ["GENERATE_OUTLINE", "GENERATE_DRAFT"]
+    assert len(llm_service_stub.complete_inputs) == 2
+
+
+async def test_pick_up_expired_run_resumes_with_no_graph_input_under_new_lease(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        graph_version="stub-version",
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_service, graph_builder_registry_stub = (
+        _build_generate_text_service_with_stub_registry(
+            db_session_factory,
+            background_job_service,
+            generate_text_settings=GenerateTextSettings(lease_seconds=LONG_LEASE_SECONDS),
+        )
+    )
+    graph_stub = graph_builder_registry_stub.get_by_text_type_result.build_graph_result
+    graph_stub.astream_is_blocked = True
+
+    is_picked_up = await generate_text_service.pick_up_expired_run()
+
+    await graph_stub.astream_started_event.wait()
+    await db_session.refresh(run_record)
+    await background_job_service.drain(0)
+    assert is_picked_up is True
+    assert graph_stub.astream_inputs == [None]
+    assert run_record.status == GenerateTextRunStatusType.RUNNING
+    assert run_record.lease_owner == "test-worker"
+    assert run_record.lease_expires_at is not None
+    assert run_record.lease_expires_at > LONG_LEASE_BOUND
+
+
+async def test_pick_up_expired_run_at_pickup_limit_still_resumes_run(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        graph_version="stub-version",
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+        pickup_count=2,
+    )
+    await db_session.commit()
+    generate_text_service, _ = _build_generate_text_service_with_stub_registry(
+        db_session_factory,
+        background_job_service,
+        generate_text_settings=GenerateTextSettings(max_run_pickups=3),
+    )
+
+    is_picked_up = await generate_text_service.pick_up_expired_run()
+
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await db_session.refresh(run_record)
+    assert is_picked_up is True
+    assert run_record.status == GenerateTextRunStatusType.COMPLETED
+    assert run_record.pickup_count == 3
+
+
+async def test_pick_up_expired_run_nothing_expired_returns_false(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="live-worker",
+        lease_expires_at=OTHER_WORKER_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_service = _build_generate_text_service(
+        db_session_factory, LlmServiceStub(), background_job_service
+    )
+
+    is_picked_up = await generate_text_service.pick_up_expired_run()
+
+    assert is_picked_up is False
+
+
+async def test_pick_up_expired_run_stopping_returns_false_and_claims_nothing(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_service = _build_generate_text_service(
+        db_session_factory, LlmServiceStub(), background_job_service
+    )
+    background_job_service.request_stop()
+
+    is_picked_up = await generate_text_service.pick_up_expired_run()
+
+    await db_session.refresh(run_record)
+    assert is_picked_up is False
+    assert run_record.lease_owner == "dead-worker"
+    assert run_record.pickup_count == 0
+
+
+async def test_pick_up_expired_run_pending_run_fails_as_never_started(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.PENDING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_service = _build_generate_text_service(
+        db_session_factory, LlmServiceStub(), background_job_service
+    )
+
+    is_picked_up = await generate_text_service.pick_up_expired_run()
+
+    await db_session.refresh(run_record)
+    assert is_picked_up is True
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "RunNeverStarted"
+    assert run_record.lease_owner is None
+    assert run_record.lease_expires_at is None
+    assert run_record.finished_at is not None
+
+
+async def test_pick_up_expired_run_picked_up_too_often_fails_run(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        graph_version="2026-10-07.2",
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+        pickup_count=3,
+    )
+    await db_session.commit()
+    generate_text_service = _build_generate_text_service(
+        db_session_factory,
+        LlmServiceStub(),
+        background_job_service,
+        generate_text_settings=GenerateTextSettings(max_run_pickups=3),
+    )
+
+    is_picked_up = await generate_text_service.pick_up_expired_run()
+
+    await db_session.refresh(run_record)
+    assert is_picked_up is True
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "RunPickedUpTooOften"
+    assert run_record.pickup_count == 4
+    assert run_record.lease_owner is None
+
+
+async def test_pick_up_expired_run_graph_version_mismatch_fails_run(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        graph_version="stale-version",
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_service = _build_generate_text_service(
+        db_session_factory, LlmServiceStub(), background_job_service
+    )
+
+    is_picked_up = await generate_text_service.pick_up_expired_run()
+
+    await db_session.refresh(run_record)
+    assert is_picked_up is True
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "GenerateTextRunVersionMismatchException"
+    assert run_record.lease_owner is None
+
+
+async def test_pick_up_expired_run_unbuildable_graph_fails_run(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        graph_version="2026-10-07.2",
+        status=GenerateTextRunStatusType.RUNNING,
+        options={"draft": 5},
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_service = _build_generate_text_service(
+        db_session_factory, LlmServiceStub(), background_job_service
+    )
+
+    is_picked_up = await generate_text_service.pick_up_expired_run()
+
+    await db_session.refresh(run_record)
+    assert is_picked_up is True
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "GenerateTextOptionsInvalidException"
+    assert run_record.lease_owner is None
