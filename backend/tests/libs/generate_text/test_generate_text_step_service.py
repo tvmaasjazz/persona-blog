@@ -339,3 +339,53 @@ async def test_complete_step_not_found_raises_not_found_exception(
 
     with pytest.raises(NotFoundException):
         await step_service.complete_step(999999, "output", 1)
+
+
+async def test_find_awaiting_review_step_id_returns_paused_step_id(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
+    await insert_generate_text_step_row(
+        db_session,
+        run_id=run_id,
+        created_by_id=auth_user.id,
+        step_number=1,
+        step_name="GENERATE_DRAFT",
+        status=GenerateTextStepStatusType.SUCCEEDED,
+    )
+    paused_step_record = await insert_generate_text_step_row(
+        db_session,
+        run_id=run_id,
+        created_by_id=auth_user.id,
+        step_number=2,
+        step_name="REVIEW_DRAFT",
+        status=GenerateTextStepStatusType.AWAITING_REVIEW,
+    )
+    await db_session.commit()
+
+    awaiting_review_step_id = await step_service.find_awaiting_review_step_id(run_id)
+
+    assert awaiting_review_step_id == paused_step_record.id
+
+
+async def test_find_awaiting_review_step_id_no_paused_step_returns_none(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    run_id = await _insert_run_id(db_session, run_service, auth_user)
+    await insert_generate_text_step_row(
+        db_session,
+        run_id=run_id,
+        created_by_id=auth_user.id,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+    )
+    await db_session.commit()
+
+    awaiting_review_step_id = await step_service.find_awaiting_review_step_id(run_id)
+
+    assert awaiting_review_step_id is None
