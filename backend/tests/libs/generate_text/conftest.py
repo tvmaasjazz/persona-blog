@@ -1,8 +1,8 @@
 import pytest
 
-from libs.core.services import BackgroundTaskService
+from libs.core.services import BackgroundJobService
 
 
 @pytest.fixture
-def background_task_service() -> BackgroundTaskService:
-    return BackgroundTaskService()
+def background_job_service() -> BackgroundJobService:
+    return BackgroundJobService()

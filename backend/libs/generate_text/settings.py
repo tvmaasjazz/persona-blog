@@ -8,4 +8,3 @@ class GenerateTextSettings(BaseModel):
     checkpoint_ttl_minutes: int = 10080
     max_output_format_retries: int = 1
     poll_interval_ms: int = 2000
-    shutdown_drain_seconds: int = 30

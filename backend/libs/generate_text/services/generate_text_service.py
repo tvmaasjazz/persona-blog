@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
-from libs.core.services import BackgroundTaskService
+from libs.core.services import BackgroundJobService
 from libs.generate_text.constants import SERVER_SHUTDOWN_ERROR_CODE, SERVER_SHUTDOWN_ERROR_MESSAGE
 from libs.generate_text.exceptions import (
     GenerateTextRunNotPausedException,
@@ -49,14 +49,14 @@ class GenerateTextService:
         run_service: GenerateTextRunService,
         step_service: GenerateTextStepService,
         checkpointer: BaseCheckpointSaver,
-        background_task_service: BackgroundTaskService,
+        background_job_service: BackgroundJobService,
         generate_text_settings: GenerateTextSettings,
     ) -> None:
         self._graph_builder_registry = graph_builder_registry
         self._run_service = run_service
         self._step_service = step_service
         self._checkpointer = checkpointer
-        self._background_task_service = background_task_service
+        self._background_job_service = background_job_service
         self._generate_text_settings = generate_text_settings
 
     async def generate_text[OptionsT: BaseModel](
@@ -109,7 +109,7 @@ class GenerateTextService:
         # The run's identity is its LangGraph thread id, so no separate thread_id needs
         # to be minted or stored.
         graph_run_config = {"configurable": {"thread_id": str(create_run_result.identity)}}
-        self._background_task_service.start(
+        self._background_job_service.start(
             self._run_graph_in_background(
                 generate_text_graph,
                 initial_state,
@@ -178,7 +178,7 @@ class GenerateTextService:
         resume_run_result = await self._build_run_result_from_steps(claimed_run_result)
 
         resume_payload = resume_generate_text_input.model_dump()
-        self._background_task_service.start(
+        self._background_job_service.start(
             self._run_graph_in_background(
                 generate_text_graph,
                 Command(resume=resume_payload),

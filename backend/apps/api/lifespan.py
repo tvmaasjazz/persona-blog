@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from apps.api.core.event_loop_monitor import monitor_event_loop_lag
 from apps.api.core.logging import configure_logging
 from apps.api.core.types import EnvironmentType
-from libs.core.services import BackgroundTaskService
+from libs.core.services import BackgroundJobService
 from libs.database.session import create_db_session_factory
 
 logger = structlog.get_logger(__name__)
@@ -27,8 +27,8 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     redis_client = Redis.from_url(app_settings.redis_url)
     http_client = AsyncClient()
     openai_client = AsyncOpenAI(api_key=app_settings.openai_api_key, max_retries=0)
-    background_task_service = BackgroundTaskService()
-    fastapi_app.state.background_task_service = background_task_service
+    background_job_service = BackgroundJobService()
+    fastapi_app.state.background_job_service = background_job_service
     fastapi_app.state.db_engine = db_engine
     fastapi_app.state.db_session_factory = create_db_session_factory(db_engine)
     fastapi_app.state.redis_client = redis_client
@@ -71,7 +71,7 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         # Before the clients close: a running graph still needs them.
-        await background_task_service.drain(app_settings.generate_text.shutdown_drain_seconds)
+        await background_job_service.drain(app_settings.background_jobs.shutdown_drain_seconds)
         if event_loop_monitor_task is not None:
             event_loop_monitor_task.cancel()
             await asyncio.gather(event_loop_monitor_task, return_exceptions=True)

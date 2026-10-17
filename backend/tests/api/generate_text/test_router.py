@@ -6,7 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from libs.core.services import BackgroundTaskService
+from libs.core.services import BackgroundJobService
 from libs.database.orm import PersonaOrm, UserOrm
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.generate_text.types import GenerateTextRunStatusType
@@ -30,7 +30,7 @@ async def _create_persona(api_client: AsyncClient) -> str:
 async def _create_review_pending_run(
     api_client: AsyncClient,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
     persona_identity: str,
 ) -> str:
     llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
@@ -42,7 +42,7 @@ async def _create_review_pending_run(
             "options": {"draft": {"is_auto_approved": False}},
         },
     )
-    await background_task_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
     return generate_blog_post_response.json()["run_identity"]
 
 
@@ -50,7 +50,7 @@ async def test_generate_blog_post_default_options_returns_202_with_pending_run(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     llm_service_stub.complete_result = build_llm_completion_result(
@@ -66,7 +66,7 @@ async def test_generate_blog_post_default_options_returns_202_with_pending_run(
         },
     )
 
-    await background_task_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
     assert generate_blog_post_response.status_code == 202
     assert generate_blog_post_response.json() == {
         "run_identity": ANY,
@@ -101,7 +101,7 @@ async def test_generate_blog_post_default_options_completes_run_in_background(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     llm_service_stub.complete_result = build_llm_completion_result(
@@ -116,7 +116,7 @@ async def test_generate_blog_post_default_options_completes_run_in_background(
         },
     )
     run_identity = generate_blog_post_response.json()["run_identity"]
-    await background_task_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
 
     find_generate_text_run_response = await api_client.get(f"/generate-text/runs/{run_identity}")
 
@@ -155,7 +155,7 @@ async def test_generate_blog_post_persists_run_row_with_persona_tone_and_target_
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
     db_session: AsyncSession,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     llm_service_stub.complete_result = build_llm_completion_result(
@@ -173,7 +173,7 @@ async def test_generate_blog_post_persists_run_row_with_persona_tone_and_target_
         },
     )
 
-    await background_task_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
     run_identity = UUID(generate_blog_post_response.json()["run_identity"])
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.identity == run_identity)
     run_record = await db_session.scalar(run_query)
@@ -192,7 +192,7 @@ async def test_generate_blog_post_step_not_auto_approved_pauses_run_for_review_i
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
@@ -205,7 +205,7 @@ async def test_generate_blog_post_step_not_auto_approved_pauses_run_for_review_i
         },
     )
     run_identity = generate_blog_post_response.json()["run_identity"]
-    await background_task_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
 
     find_generate_text_run_response = await api_client.get(f"/generate-text/runs/{run_identity}")
 
@@ -310,7 +310,7 @@ async def test_generate_blog_post_draft_never_validates_returns_202_and_fails_ru
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
     db_session: AsyncSession,
 ) -> None:
     persona_identity = await _create_persona(api_client)
@@ -325,7 +325,7 @@ async def test_generate_blog_post_draft_never_validates_returns_202_and_fails_ru
         },
     )
 
-    await background_task_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
     run_identity = UUID(generate_blog_post_response.json()["run_identity"])
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.identity == run_identity)
     run_record = await db_session.scalar(run_query)
@@ -394,11 +394,11 @@ async def test_find_generate_text_run_returns_run_response(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     run_identity = await _create_review_pending_run(
-        api_client, llm_service_stub, background_task_service, persona_identity
+        api_client, llm_service_stub, background_job_service, persona_identity
     )
 
     find_generate_text_run_response = await api_client.get(f"/generate-text/runs/{run_identity}")
@@ -437,7 +437,7 @@ async def test_generate_blog_post_echoes_every_input_in_response(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     llm_service_stub.complete_result = build_llm_completion_result(
@@ -459,7 +459,7 @@ async def test_generate_blog_post_echoes_every_input_in_response(
         },
     )
 
-    await background_task_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
     response_body = generate_blog_post_response.json()
     assert generate_blog_post_response.status_code == 202
     assert response_body["persona_identity"] == persona_identity
@@ -544,11 +544,11 @@ async def test_find_generate_text_run_another_users_run_returns_404(
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
     other_user_client: AsyncClient,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     run_identity = await _create_review_pending_run(
-        api_client, llm_service_stub, background_task_service, persona_identity
+        api_client, llm_service_stub, background_job_service, persona_identity
     )
 
     find_generate_text_run_response = await other_user_client.get(
@@ -562,11 +562,11 @@ async def test_resume_generate_text_approval_returns_202_with_running_run(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     run_identity = await _create_review_pending_run(
-        api_client, llm_service_stub, background_task_service, persona_identity
+        api_client, llm_service_stub, background_job_service, persona_identity
     )
 
     resume_generate_text_response = await api_client.post(
@@ -574,7 +574,7 @@ async def test_resume_generate_text_approval_returns_202_with_running_run(
         json={"is_approved": True, "feedback_text": None},
     )
 
-    await background_task_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
     assert resume_generate_text_response.status_code == 202
     assert resume_generate_text_response.json() == {
         "run_identity": run_identity,
@@ -609,17 +609,17 @@ async def test_resume_generate_text_approval_completes_run_in_background(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     run_identity = await _create_review_pending_run(
-        api_client, llm_service_stub, background_task_service, persona_identity
+        api_client, llm_service_stub, background_job_service, persona_identity
     )
     await api_client.post(
         f"/generate-text/runs/{run_identity}/resume",
         json={"is_approved": True, "feedback_text": None},
     )
-    await background_task_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
 
     find_generate_text_run_response = await api_client.get(f"/generate-text/runs/{run_identity}")
 
@@ -657,11 +657,11 @@ async def test_resume_generate_text_rejection_rewrites_and_pauses_run_again(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     run_identity = await _create_review_pending_run(
-        api_client, llm_service_stub, background_task_service, persona_identity
+        api_client, llm_service_stub, background_job_service, persona_identity
     )
     llm_service_stub.complete_result = build_llm_completion_result(
         content="# Draft\n\nA revised draft."
@@ -670,7 +670,7 @@ async def test_resume_generate_text_rejection_rewrites_and_pauses_run_again(
         f"/generate-text/runs/{run_identity}/resume",
         json={"is_approved": False, "feedback_text": "Make it shorter."},
     )
-    await background_task_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
 
     find_generate_text_run_response = await api_client.get(f"/generate-text/runs/{run_identity}")
 
@@ -730,11 +730,11 @@ async def test_resume_generate_text_missing_is_approved_returns_422(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     run_identity = await _create_review_pending_run(
-        api_client, llm_service_stub, background_task_service, persona_identity
+        api_client, llm_service_stub, background_job_service, persona_identity
     )
 
     resume_generate_text_response = await api_client.post(
@@ -751,11 +751,11 @@ async def test_resume_generate_text_another_users_run_returns_404(
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
     other_user_client: AsyncClient,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     run_identity = await _create_review_pending_run(
-        api_client, llm_service_stub, background_task_service, persona_identity
+        api_client, llm_service_stub, background_job_service, persona_identity
     )
 
     resume_generate_text_response = await other_user_client.post(
@@ -770,17 +770,17 @@ async def test_resume_generate_text_finished_run_returns_409(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
-    background_task_service: BackgroundTaskService,
+    background_job_service: BackgroundJobService,
 ) -> None:
     persona_identity = await _create_persona(api_client)
     run_identity = await _create_review_pending_run(
-        api_client, llm_service_stub, background_task_service, persona_identity
+        api_client, llm_service_stub, background_job_service, persona_identity
     )
     await api_client.post(
         f"/generate-text/runs/{run_identity}/resume",
         json={"is_approved": True, "feedback_text": None},
     )
-    await background_task_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
 
     resume_generate_text_response = await api_client.post(
         f"/generate-text/runs/{run_identity}/resume",
