@@ -174,7 +174,8 @@ export function GenerateTextRunView({
             />
             <p className="text-sm text-muted-foreground">
               {run.llm_call_count} LLM calls · {run.input_tokens + run.output_tokens} tokens · $
-              {run.cost_usd}
+              {/* A Decimal over JSON: a zero cost can arrive as "0E-10". */}
+              {Number(run.cost_usd).toFixed(4)}
             </p>
           </>
         }
