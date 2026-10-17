@@ -457,7 +457,7 @@ No run is lost, and at most one node is redone.
 3. The old one gets `SIGTERM`, then `SIGKILL` after `drainingSeconds`. The default may
    be 0, an immediate kill, so set it explicitly
 4. On `SIGTERM`, granian stops accepting connections, finishes in-flight HTTP requests,
-   then runs each worker's lifespan shutdown. Background tasks are invisible to it:
+   then runs each worker's lifespan shutdown. Background jobs are invisible to it:
    draining them is the app's job
 
 **The app's side:**
