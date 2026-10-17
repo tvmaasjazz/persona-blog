@@ -14,6 +14,16 @@ class LlmProviderType(StrEnum):
     ANTHROPIC = "ANTHROPIC"
 
 
+class LlmReasoningEffortType(StrEnum):
+    """How hard a reasoning model thinks before answering. Provider-neutral: each provider
+    service maps it to its own API's values."""
+
+    MINIMAL = "MINIMAL"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
 class LlmCallStatusType(StrEnum):
     """The coarse outcome of a call. LlmCallReasonType carries the detail."""
 

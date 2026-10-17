@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -9,6 +10,8 @@ from pydantic import BaseModel
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
+from libs.core.services import BackgroundJobService
+from libs.generate_text.constants import SERVER_SHUTDOWN_ERROR_CODE, SERVER_SHUTDOWN_ERROR_MESSAGE
 from libs.generate_text.exceptions import (
     GenerateTextRunNotPausedException,
     GenerateTextRunVersionMismatchException,
@@ -21,6 +24,7 @@ from libs.generate_text.inputs import (
 from libs.generate_text.results import FindGenerateTextRunByIdentityResult, GenerateTextRunResult
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
+from libs.generate_text.settings import GenerateTextSettings
 from libs.generate_text.states import GenerateTextState
 from libs.generate_text.types import GenerateTextRunStatusType, HumanDecisionType
 from libs.personas.results import FindUserPersonaResult
@@ -45,11 +49,15 @@ class GenerateTextService:
         run_service: GenerateTextRunService,
         step_service: GenerateTextStepService,
         checkpointer: BaseCheckpointSaver,
+        background_job_service: BackgroundJobService,
+        generate_text_settings: GenerateTextSettings,
     ) -> None:
         self._graph_builder_registry = graph_builder_registry
         self._run_service = run_service
         self._step_service = step_service
         self._checkpointer = checkpointer
+        self._background_job_service = background_job_service
+        self._generate_text_settings = generate_text_settings
 
     async def generate_text[OptionsT: BaseModel](
         self,
@@ -95,17 +103,22 @@ class GenerateTextService:
             additional_context=generate_text_input.additional_context,
         )
 
-        await self._run_service.start_run(create_run_result.id)
+        # Read before the task starts, so the caller is told PENDING whatever the task does.
+        find_run_result = await self._run_service.find_run_by_identity(create_run_result.identity)
 
         # The run's identity is its LangGraph thread id, so no separate thread_id needs
         # to be minted or stored.
         graph_run_config = {"configurable": {"thread_id": str(create_run_result.identity)}}
-        await self._invoke_graph(
-            generate_text_graph, initial_state, graph_run_config, create_run_result.id
+        self._background_job_service.start(
+            self._run_graph_in_background(
+                generate_text_graph,
+                initial_state,
+                graph_run_config,
+                create_run_result.id,
+                should_start_run=True,
+            )
         )
-
-        state_snapshot = await generate_text_graph.aget_state(graph_run_config)
-        return await self._finish(create_run_result.id, create_run_result.identity, state_snapshot)
+        return self._build_run_result(find_run_result, last_step=None, content="")
 
     async def find_generate_text_run(
         self, run_identity: UUID, auth_user: AuthUser
@@ -126,11 +139,6 @@ class GenerateTextService:
         if find_run_result.created_by_id != auth_user.id:
             raise NotFoundException(f"Generate text run {run_identity} not found")
 
-        if find_run_result.status != GenerateTextRunStatusType.AWAITING_REVIEW:
-            raise GenerateTextRunNotPausedException(
-                f"Generate text run {run_identity} is not awaiting review"
-            )
-
         graph_builder = self._graph_builder_registry.get_by_text_type(find_run_result.text_type)
         if find_run_result.graph_version != graph_builder.graph_version:
             # The checkpoint is shaped by a topology that no longer exists.
@@ -141,33 +149,98 @@ class GenerateTextService:
 
         generate_text_graph = graph_builder.build_graph(find_run_result.options, self._checkpointer)
         graph_run_config = {"configurable": {"thread_id": str(run_identity)}}
-        state_snapshot = await generate_text_graph.aget_state(graph_run_config)
-        generate_text_state = GenerateTextState.model_validate(state_snapshot.values)
 
-        if generate_text_state.current_step_id is not None:
-            human_decision = (
-                HumanDecisionType.APPROVED
-                if resume_generate_text_input.is_approved
-                else HumanDecisionType.REJECTED
+        is_claimed = await self._run_service.claim_paused_run(find_run_result.id)
+        if not is_claimed:
+            raise GenerateTextRunNotPausedException(
+                f"Generate text run {run_identity} is not awaiting review"
             )
-            await self._step_service.record_decision(
-                generate_text_state.current_step_id,
-                human_decision,
-                resume_generate_text_input.feedback_text,
-                auth_user,
-                datetime.now(UTC),
+
+        try:
+            await self._record_review_decision(
+                find_run_result.id, resume_generate_text_input, auth_user
             )
+        except Exception as record_decision_exception:
+            # The run is already claimed as RUNNING, and no task exists yet to move it
+            # on, so it's failed here rather than left RUNNING forever.
+            await self._run_service.fail_run(
+                find_run_result.id,
+                type(record_decision_exception).__name__,
+                str(record_decision_exception),
+            )
+            raise
+
+        # Read before the task starts: once it runs it writes steps of its own, and the
+        # response would depend on how far it had got.
+        claimed_run_result = find_run_result.model_copy(
+            update={"status": GenerateTextRunStatusType.RUNNING}
+        )
+        resume_run_result = await self._build_run_result_from_steps(claimed_run_result)
 
         resume_payload = resume_generate_text_input.model_dump()
-        await self._invoke_graph(
-            generate_text_graph,
-            Command(resume=resume_payload),
-            graph_run_config,
-            find_run_result.id,
+        self._background_job_service.start(
+            self._run_graph_in_background(
+                generate_text_graph,
+                Command(resume=resume_payload),
+                graph_run_config,
+                find_run_result.id,
+                should_start_run=False,
+            )
+        )
+        return resume_run_result
+
+    async def _record_review_decision(
+        self,
+        run_id: int,
+        resume_generate_text_input: ResumeGenerateTextInput,
+        auth_user: AuthUser,
+    ) -> None:
+        """Records the decision on the step the run is paused on. That step is read from the
+        step rows, not the checkpoint: a review node interrupts before its state update is
+        saved, so the checkpoint never holds its step."""
+        awaiting_review_step_id = await self._step_service.find_awaiting_review_step_id(run_id)
+        if awaiting_review_step_id is None:
+            return
+        human_decision = (
+            HumanDecisionType.APPROVED
+            if resume_generate_text_input.is_approved
+            else HumanDecisionType.REJECTED
+        )
+        await self._step_service.record_decision(
+            awaiting_review_step_id,
+            human_decision,
+            resume_generate_text_input.feedback_text,
+            auth_user,
+            datetime.now(UTC),
         )
 
-        new_state_snapshot = await generate_text_graph.aget_state(graph_run_config)
-        return await self._finish(find_run_result.id, run_identity, new_state_snapshot)
+    async def _run_graph_in_background(
+        self,
+        generate_text_graph: CompiledStateGraph,
+        graph_input: object,
+        graph_run_config: dict[str, object],
+        run_id: int,
+        should_start_run: bool,
+    ) -> None:
+        """Runs as a background job, so nothing here may use the request's resources.
+        A failure is recorded on the run and re-raised for BackgroundJobService to log; a
+        cancellation means the process is shutting down."""
+        try:
+            if should_start_run:
+                await self._run_service.start_run(run_id)
+            await self._invoke_graph(generate_text_graph, graph_input, graph_run_config, run_id)
+            state_snapshot = await generate_text_graph.aget_state(graph_run_config)
+            await self._finish(run_id, state_snapshot)
+        except asyncio.CancelledError:
+            await self._run_service.fail_run(
+                run_id, SERVER_SHUTDOWN_ERROR_CODE, SERVER_SHUTDOWN_ERROR_MESSAGE
+            )
+            raise
+        except Exception as background_exception:
+            await self._run_service.fail_run(
+                run_id, type(background_exception).__name__, str(background_exception)
+            )
+            raise
 
     async def _invoke_graph(
         self,
@@ -187,18 +260,11 @@ class GenerateTextService:
             )
             raise
 
-    async def _finish(
-        self, run_id: int, run_identity: UUID, state_snapshot: StateSnapshot
-    ) -> GenerateTextRunResult:
+    async def _finish(self, run_id: int, state_snapshot: StateSnapshot) -> None:
         if state_snapshot.next:
             await self._run_service.record_awaiting_review(run_id)
         else:
             await self._run_service.complete_run(run_id)
-
-        find_run_result = await self._run_service.find_run_by_identity(run_identity)
-        # The wrapper has already written the steps this run produced, so they answer both
-        # where it sits and what it wrote — the same source the GET route reads.
-        return await self._build_run_result_from_steps(find_run_result)
 
     async def _build_run_result_from_steps(
         self, find_run_result: FindGenerateTextRunByIdentityResult
@@ -216,9 +282,11 @@ class GenerateTextService:
             content=find_latest_step_result.content,
         )
 
-    @staticmethod
     def _build_run_result(
-        find_run_result: FindGenerateTextRunByIdentityResult, last_step: str | None, content: str
+        self,
+        find_run_result: FindGenerateTextRunByIdentityResult,
+        last_step: str | None,
+        content: str,
     ) -> GenerateTextRunResult:
         return GenerateTextRunResult(
             run_identity=find_run_result.identity,
@@ -241,4 +309,5 @@ class GenerateTextService:
             cost_usd=find_run_result.cost_usd,
             started_at=find_run_result.started_at,
             finished_at=find_run_result.finished_at,
+            poll_interval_ms=self._generate_text_settings.poll_interval_ms,
         )

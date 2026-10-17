@@ -352,3 +352,64 @@ async def test_find_run_by_identity_not_found_raises_not_found_exception(
 
     with pytest.raises(NotFoundException):
         await generate_text_run_service.find_run_by_identity(uuid4())
+
+
+async def test_claim_paused_run_awaiting_review_returns_true_and_sets_running(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.AWAITING_REVIEW
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    is_claimed = await generate_text_run_service.claim_paused_run(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert is_claimed is True
+    assert run_record.status == GenerateTextRunStatusType.RUNNING
+
+
+async def test_claim_paused_run_already_claimed_returns_false(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.AWAITING_REVIEW
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    await generate_text_run_service.claim_paused_run(run_record.id)
+
+    is_claimed = await generate_text_run_service.claim_paused_run(run_record.id)
+
+    assert is_claimed is False
+
+
+@pytest.mark.parametrize(
+    "run_status",
+    [
+        pytest.param(GenerateTextRunStatusType.PENDING, id="pending"),
+        pytest.param(GenerateTextRunStatusType.RUNNING, id="running"),
+        pytest.param(GenerateTextRunStatusType.COMPLETED, id="completed"),
+        pytest.param(GenerateTextRunStatusType.FAILED, id="failed"),
+    ],
+)
+async def test_claim_paused_run_not_awaiting_review_returns_false_and_keeps_status(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    run_status: GenerateTextRunStatusType,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=run_status
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    is_claimed = await generate_text_run_service.claim_paused_run(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert is_claimed is False
+    assert run_record.status == run_status

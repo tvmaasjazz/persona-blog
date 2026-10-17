@@ -32,6 +32,7 @@ class GenerateTextRunResult(BaseModel):
     cost_usd: Decimal
     started_at: datetime | None
     finished_at: datetime | None
+    poll_interval_ms: int
 
 
 class CreateGenerateTextRunResult(BaseModel):

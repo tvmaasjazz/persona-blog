@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
@@ -56,6 +56,21 @@ class GenerateTextRunService:
             run_record.status = GenerateTextRunStatusType.RUNNING
             run_record.started_at = datetime.now(UTC)
             await db_session.flush()
+
+    async def claim_paused_run(self, run_id: int) -> bool:
+        """One statement tests and sets the status, so of two resumes that arrive together
+        exactly one changes a row and gets True."""
+        claim_statement = (
+            update(GenerateTextRunOrm)
+            .where(
+                GenerateTextRunOrm.id == run_id,
+                GenerateTextRunOrm.status == GenerateTextRunStatusType.AWAITING_REVIEW,
+            )
+            .values(status=GenerateTextRunStatusType.RUNNING)
+        )
+        async with self._db_session_factory() as db_session, db_session.begin():
+            claim_result = await db_session.execute(claim_statement)
+        return claim_result.rowcount == 1
 
     async def complete_run(self, run_id: int) -> None:
         async with self._db_session_factory() as db_session, db_session.begin():

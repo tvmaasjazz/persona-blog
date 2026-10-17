@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.database.orm import UserOrm
+from libs.users.after_response_tasks import record_user_activity
 from libs.users.settings import UserSettings
-from libs.users.tasks import record_user_activity
 from tests.factories.users import insert_user_row
 
 

@@ -1,3 +1,5 @@
+import random
+
 from openai import (
     APIConnectionError,
     APIStatusError,
@@ -18,7 +20,15 @@ from libs.llm.exceptions import (
 )
 from libs.llm.inputs import LlmProviderCompletionInput
 from libs.llm.results import LlmProviderCompletionResult
-from libs.llm.types import LlmCallReasonType
+from libs.llm.types import LlmCallReasonType, LlmReasoningEffortType
+
+# OpenAI's spelling of each reasoning effort, for the Responses API's reasoning.effort.
+OPENAI_REASONING_EFFORT_BY_TYPE: dict[LlmReasoningEffortType, str] = {
+    LlmReasoningEffortType.MINIMAL: "minimal",
+    LlmReasoningEffortType.LOW: "low",
+    LlmReasoningEffortType.MEDIUM: "medium",
+    LlmReasoningEffortType.HIGH: "high",
+}
 
 
 class OpenAiLlmUtils:
@@ -27,6 +37,34 @@ class OpenAiLlmUtils:
         if provider_input.system_prompt is None:
             return {}
         return {"instructions": provider_input.system_prompt}
+
+    @staticmethod
+    def build_reasoning_kwargs(
+        provider_input: LlmProviderCompletionInput,
+    ) -> dict[str, dict[str, str]]:
+        if provider_input.reasoning_effort is None:
+            return {}
+        openai_reasoning_effort = OPENAI_REASONING_EFFORT_BY_TYPE.get(
+            provider_input.reasoning_effort
+        )
+        if openai_reasoning_effort is None:
+            raise NotImplementedError(
+                f"No OpenAI reasoning effort for {provider_input.reasoning_effort}"
+            )
+        return {"reasoning": {"effort": openai_reasoning_effort}}
+
+    @staticmethod
+    def is_retryable_error(openai_error: OpenAIError) -> bool:
+        # APITimeoutError subclasses APIConnectionError, so it is ruled out first.
+        if isinstance(openai_error, APITimeoutError):
+            return False
+        return isinstance(openai_error, RateLimitError | InternalServerError | APIConnectionError)
+
+    @staticmethod
+    def compute_retry_delay_seconds(
+        attempt: int, base_delay_seconds: float, max_delay_seconds: float
+    ) -> float:
+        return random.uniform(0, min(max_delay_seconds, base_delay_seconds * 2**attempt))
 
     @staticmethod
     def build_provider_completion_result(

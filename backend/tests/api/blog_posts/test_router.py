@@ -7,6 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from libs.core.services import BackgroundJobService
 from libs.database.orm import BlogPostOrm, ContentItemOrm, GenerateTextRunOrm, UserOrm
 from libs.generate_text.types import GenerateTextRunStatusType, GenerateTextStepStatusType
 from tests.factories.blog_posts import VALID_BLOG_POST_BODY, insert_blog_post_row
@@ -19,6 +20,7 @@ from tests.factories.llm import build_llm_completion_result
 from tests.factories.personas import insert_persona_row
 from tests.stubs.llm import LlmServiceStub
 
+DRAIN_TIMEOUT_SECONDS = 30
 VALID_GENERATE_TEXT_RUN_OUTPUT = (
     "# The Title\n*A subtitle.*\n\nA paragraph.\n\n## A Section\n\nMore text."
 )
@@ -27,6 +29,7 @@ VALID_GENERATE_TEXT_RUN_OUTPUT = (
 async def _create_completed_run(
     api_client: AsyncClient,
     llm_service_stub: LlmServiceStub,
+    background_job_service: BackgroundJobService,
     persona_identity: str,
     *,
     content: str = VALID_GENERATE_TEXT_RUN_OUTPUT,
@@ -40,6 +43,7 @@ async def _create_completed_run(
             "options": {},
         },
     )
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
     return generate_blog_post_response.json()["run_identity"]
 
 
@@ -224,12 +228,15 @@ async def test_create_blog_post_from_generate_text_run_returns_identity_and_pers
     signed_in_user: UserOrm,
     llm_service_stub: LlmServiceStub,
     db_session: AsyncSession,
+    background_job_service: BackgroundJobService,
 ) -> None:
     create_persona_response = await api_client.post(
         "/personas", json={"name": "Marta Quill", "bio": "Writes about slow mornings."}
     )
     persona_identity = create_persona_response.json()["identity"]
-    run_identity = await _create_completed_run(api_client, llm_service_stub, persona_identity)
+    run_identity = await _create_completed_run(
+        api_client, llm_service_stub, background_job_service, persona_identity
+    )
 
     create_blog_post_response = await api_client.post(
         "/blog-posts/from-generate-text-run", json={"generate_text_run_identity": run_identity}
@@ -263,13 +270,18 @@ async def test_create_blog_post_from_generate_text_run_returns_identity_and_pers
 
 
 async def test_create_blog_post_from_generate_text_run_already_saved_returns_409(
-    api_client: AsyncClient, signed_in_user: UserOrm, llm_service_stub: LlmServiceStub
+    api_client: AsyncClient,
+    signed_in_user: UserOrm,
+    llm_service_stub: LlmServiceStub,
+    background_job_service: BackgroundJobService,
 ) -> None:
     create_persona_response = await api_client.post(
         "/personas", json={"name": "Marta Quill", "bio": "Writes about slow mornings."}
     )
     persona_identity = create_persona_response.json()["identity"]
-    run_identity = await _create_completed_run(api_client, llm_service_stub, persona_identity)
+    run_identity = await _create_completed_run(
+        api_client, llm_service_stub, background_job_service, persona_identity
+    )
     await api_client.post(
         "/blog-posts/from-generate-text-run", json={"generate_text_run_identity": run_identity}
     )
@@ -312,13 +324,18 @@ async def test_create_blog_post_from_generate_text_run_invalid_output_returns_42
 
 
 async def test_create_blog_post_from_generate_text_run_is_public_on_private_persona_returns_422(
-    api_client: AsyncClient, signed_in_user: UserOrm, llm_service_stub: LlmServiceStub
+    api_client: AsyncClient,
+    signed_in_user: UserOrm,
+    llm_service_stub: LlmServiceStub,
+    background_job_service: BackgroundJobService,
 ) -> None:
     create_persona_response = await api_client.post(
         "/personas", json={"name": "Marta Quill", "bio": "Writes about slow mornings."}
     )
     persona_identity = create_persona_response.json()["identity"]
-    run_identity = await _create_completed_run(api_client, llm_service_stub, persona_identity)
+    run_identity = await _create_completed_run(
+        api_client, llm_service_stub, background_job_service, persona_identity
+    )
 
     create_blog_post_response = await api_client.post(
         "/blog-posts/from-generate-text-run",
@@ -333,13 +350,14 @@ async def test_create_blog_post_from_generate_text_run_another_users_run_returns
     signed_in_user: UserOrm,
     other_user_client: AsyncClient,
     llm_service_stub: LlmServiceStub,
+    background_job_service: BackgroundJobService,
 ) -> None:
     other_create_persona_response = await other_user_client.post(
         "/personas", json={"name": "Other Persona", "bio": "Writes essays."}
     )
     other_persona_identity = other_create_persona_response.json()["identity"]
     other_run_identity = await _create_completed_run(
-        other_user_client, llm_service_stub, other_persona_identity
+        other_user_client, llm_service_stub, background_job_service, other_persona_identity
     )
 
     create_blog_post_response = await api_client.post(
@@ -388,14 +406,19 @@ async def test_create_blog_post_from_generate_text_run_naive_published_at_return
 
 
 async def test_create_blog_post_from_generate_text_run_is_public_and_published_at_round_trip(
-    api_client: AsyncClient, signed_in_user: UserOrm, llm_service_stub: LlmServiceStub
+    api_client: AsyncClient,
+    signed_in_user: UserOrm,
+    llm_service_stub: LlmServiceStub,
+    background_job_service: BackgroundJobService,
 ) -> None:
     create_persona_response = await api_client.post(
         "/personas",
         json={"name": "Marta Quill", "bio": "Writes about slow mornings.", "is_public": True},
     )
     persona_identity = create_persona_response.json()["identity"]
-    run_identity = await _create_completed_run(api_client, llm_service_stub, persona_identity)
+    run_identity = await _create_completed_run(
+        api_client, llm_service_stub, background_job_service, persona_identity
+    )
 
     create_blog_post_response = await api_client.post(
         "/blog-posts/from-generate-text-run",

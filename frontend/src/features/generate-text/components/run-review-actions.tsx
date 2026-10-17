@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useResumeGenerateText } from '@/features/generate-text/api/use-resume-generate-text'
 import { RequestChangesForm } from '@/features/generate-text/components/request-changes-form'
-import { describeRunReady, findReviewStepName } from '@/features/generate-text/run-steps'
+import { findReviewStepName } from '@/features/generate-text/run-steps'
 
 type RunReviewActionsProps = {
   runIdentity: string
@@ -24,16 +24,10 @@ export function RunReviewActions({ runIdentity, lastStep }: RunReviewActionsProp
       return
     }
     try {
-      const run = await resumeGenerateText.mutateAsync({
+      await resumeGenerateText.mutateAsync({
         runIdentity,
         resume: { is_approved: isApproved, feedback_text: feedbackText },
       })
-      // The next step replaces this one in place, so start reading it from the top.
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      const runReadyMessage = describeRunReady(run)
-      if (runReadyMessage) {
-        toast.success(runReadyMessage)
-      }
     } catch {
       toast.error("Couldn't continue the run. Try again.")
     }
@@ -67,9 +61,6 @@ export function RunReviewActions({ runIdentity, lastStep }: RunReviewActionsProp
           onSend={(feedbackText) => resume(false, feedbackText)}
           onCancel={() => setIsRequestingChanges(false)}
         />
-      )}
-      {isWorking && (
-        <p className="text-sm text-muted-foreground">Working… this can take a minute or more.</p>
       )}
     </section>
   )

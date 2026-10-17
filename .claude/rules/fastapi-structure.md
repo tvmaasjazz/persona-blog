@@ -16,6 +16,7 @@ backend/
 │       │   ├── config.py      # root AppSettings
 │       │   ├── dependencies.py# global deps: db session, current user
 │       │   ├── dtos.py        # IdentityResponseDto, EmptyResponseDto
+│       │   ├── event_loop_monitor.py # development-only event loop lag monitor
 │       │   ├── exception_handlers.py # standard exception → status code map
 │       │   ├── logging.py     # configure_logging(), called once from lifespan
 │       │   └── types.py       # app-wide enums: EnvironmentType
@@ -31,6 +32,10 @@ backend/
 │   ├── core/
 │   │   ├── exceptions.py      # standard exceptions: NotFoundException, ...
 │   │   ├── results.py         # Results returned by the domain-free Utils below
+│   │   ├── settings.py        # BackgroundJobSettings
+│   │   ├── services/          # domain-free services that live as long as the app
+│   │   │   ├── __init__.py
+│   │   │   └── background_job_service.py # BackgroundJobService
 │   │   └── utils/             # domain-free Utils: DateTimeUtils, MarkdownUtils
 │   ├── database/              # tables, Orm classes: see database.md
 │   │   ├── base.py            # BaseOrm: shared columns every table inherits
@@ -57,7 +62,7 @@ backend/
 │       ├── prompts.py         # ...Prompt classes, if the domain uses an LLM
 │       ├── exceptions.py      # UserEmailTakenException, if the domain needs its own
 │       ├── types.py           # every StrEnum the domain owns
-│       ├── tasks.py           # background task functions, if the domain has any
+│       ├── after_response_tasks.py # after-response task functions, if any
 │       └── constants.py
 ├── migrations/                # raw SQL; see database.md
 ├── scripts/                   # db/check_schema_drift.py, e2e/ API walkthroughs
@@ -171,6 +176,11 @@ orchestration; the shaping of what it passes and returns moves out. Utilities wi
 domain at all, like `DateTimeUtils`, live in `libs/core/utils/`, and a `Result` one of
 them returns lives in `libs/core/results.py`.
 
+Retrying a call splits the same way. Deciding whether an error is worth retrying, and
+how long to wait, are pure calculations on the provider's `Utils`
+(`OpenAiLlmUtils.is_retryable_error`, `compute_retry_delay_seconds`). The loop that
+waits and calls again stays in the service.
+
 ### LangGraph workflows
 
 A domain whose work is a graph keeps it under `libs/<domain>/`:
@@ -233,14 +243,29 @@ failure.
 The service owns the graph's lifecycle, not its shape: it asks the registry for the
 builder, calls `build_graph`, runs it, reads the snapshot, and maps it to a `Result`.
 
-### Background tasks
+### After-response tasks and background jobs
 
-Work that runs after the response is sent is a function in `libs/<domain>/tasks.py`,
-scheduled with FastAPI's `BackgroundTasks` from the dependency or route that knows it's
-needed. A task takes a session factory and opens its own session and transaction: a
-request's session is closed by the time the task runs. That, and a record that must
-survive the caller's rollback (below), are the only places a lib creates a session.
-It's also why a task is a function rather than a service.
+Two kinds of work happen outside a route's own response, and they're named apart so
+they're never confused:
+
+- **After-response task:** short work that runs once the response is sent, as part of
+  the same request, such as recording a user's activity. Scheduled with FastAPI's
+  `BackgroundTasks`, in a parameter named `after_response_tasks`.
+- **Background job:** work that runs for minutes and outlives the request, such as a
+  graph run. A private method on its domain service, started with
+  `BackgroundJobService.start()` (`libs/core/services/`) and drained at shutdown, for
+  up to `BACKGROUND_JOBS__SHUTDOWN_DRAIN_SECONDS`.
+
+An after-response task is a function in `libs/<domain>/after_response_tasks.py`,
+scheduled from the dependency or route that knows it's needed. It takes a session
+factory and opens its own session and transaction, because the request's session is
+closed by the time it runs. That's also why it's a function rather than a service.
+
+A background job outlives the request's session too, so every service it calls takes
+the session factory and opens a short session per write, like `GenerateTextRunService`.
+
+A lib creates a session in only three places: an after-response task, the services a
+background job calls, and a record that must survive the caller's rollback (below).
 
 Everything else a task needs — the Redis client, the domain's settings, the values it
 acts on — is passed in, so `libs/` still never imports `AppSettings`. The caller also
@@ -606,7 +631,9 @@ key and other server-side defaults:
 ```
 
 Updates: load the Orm, mutate attributes, `flush()`. Use `update()` statements only
-for bulk operations. Deletes are updates too: set `deleted_at` and `deleted_by_id`.
+for bulk operations, and for an atomic claim, where the `WHERE` clause is the check:
+`claim_paused_run` sets `RUNNING` only where the status is still `AWAITING_REVIEW`, and
+reports whether it changed a row. Deletes are updates too: set `deleted_at` and `deleted_by_id`.
 
 ## Configuration and constants
 

@@ -136,7 +136,8 @@ CREATE INDEX pb_persona_created_by_id_created_at_idx
 ### Enums
 
 Postgres enum labels are `UPPER_SNAKE` and match the Python `StrEnum` members
-exactly (`python-naming.md` › Enums). The type is `pb_` plus the class name in
+exactly. That holds for our own enums only; an enum that mirrors an outside API's values
+is never a column (`python-naming.md` › Enums). The type is `pb_` plus the class name in
 snake_case: `AuthProviderType` → `pb_auth_provider_type`.
 
 ```sql

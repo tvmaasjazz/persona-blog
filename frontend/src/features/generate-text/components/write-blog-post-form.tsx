@@ -15,7 +15,7 @@ import {
   generateBlogPostFormSchema,
   type GenerateBlogPostFormValues,
 } from '@/features/generate-text/generate-blog-post-form-schema'
-import { describeRunReady, describeSteps } from '@/features/generate-text/run-steps'
+import { describeSteps } from '@/features/generate-text/run-steps'
 
 type WriteBlogPostFormProps = {
   personas: PersonaChoice[]
@@ -34,10 +34,6 @@ export function WriteBlogPostForm({ personas, initialValues }: WriteBlogPostForm
       window.scrollTo({ top: 0 })
       try {
         const run = await generateBlogPost.mutateAsync(generateBlogPostFormSchema.parse(value))
-        const runReadyMessage = describeRunReady(run)
-        if (runReadyMessage) {
-          toast.success(runReadyMessage)
-        }
         navigate(`/write/runs/${run.run_identity}`)
       } catch {
         toast.error("Couldn't write the post. Try again.")
@@ -57,7 +53,7 @@ export function WriteBlogPostForm({ personas, initialValues }: WriteBlogPostForm
           status={
             <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
               <LoaderCircle aria-hidden className="size-4 animate-spin" />
-              This can take a minute or more. Keep this page open.
+              Starting your post…
             </p>
           }
           personaName={persona?.name ?? ''}

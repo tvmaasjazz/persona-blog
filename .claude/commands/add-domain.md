@@ -45,7 +45,11 @@ domain needs from this list:
   - `settings.py` — only if the domain has tunable values
   - `constants.py` — only if the domain has values that must not be overridden
   - `types.py` — only if the domain has enums; all of them go here
-  - `tasks.py` — only if the domain has work that runs after a response
+  - `after_response_tasks.py` — only if the domain has short work that runs after a
+    response (`fastapi-structure.md` › After-response tasks and background jobs)
+  - If the domain starts work that outlives the request, its service takes
+    `BackgroundJobService` and starts it as a background job; tell `be-test-writer` to
+    drain it before asserting
   - `prompts.py` — only if the domain calls an LLM; a `prompts/` package, one module per
     class, once it has more than one (`fastapi-structure.md` › Prompts)
   - `exceptions.py` — only if the domain needs exceptions callers must tell apart

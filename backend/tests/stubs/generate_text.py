@@ -1,16 +1,20 @@
+import asyncio
+from datetime import datetime
 from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
+from libs.auth.results import AuthUser
 from libs.generate_text.graphs.base_generate_text_graph_builder import BaseGenerateTextGraphBuilder
 from libs.generate_text.graphs.generate_text_graph_builder_registry import (
     GenerateTextGraphBuilderRegistry,
 )
 from libs.generate_text.prompts import BaseGenerateTextPrompt
 from libs.generate_text.results import BuildPromptResult
+from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
 from libs.generate_text.states import GenerateTextState
-from libs.generate_text.types import TextType
+from libs.generate_text.types import HumanDecisionType, TextType
 
 
 class GenerateTextPromptStub(BaseGenerateTextPrompt):
@@ -40,10 +44,15 @@ class GenerateTextPromptStub(BaseGenerateTextPrompt):
 class GenerateTextGraphStub(CompiledStateGraph):
     def __init__(self) -> None:
         self.ainvoke_error: Exception | None = None
+        self.ainvoke_is_blocked = False
+        self.ainvoke_started_event = asyncio.Event()
 
     async def ainvoke(
         self, graph_input: object, graph_run_config: dict[str, object]
     ) -> dict[str, object]:
+        self.ainvoke_started_event.set()
+        if self.ainvoke_is_blocked:
+            await asyncio.Event().wait()
         if self.ainvoke_error is not None:
             raise self.ainvoke_error
         return {}
@@ -68,3 +77,25 @@ class GenerateTextGraphBuilderRegistryStub(GenerateTextGraphBuilderRegistry):
 
     def get_by_text_type(self, text_type: TextType) -> BaseGenerateTextGraphBuilder:
         return self.get_by_text_type_result
+
+
+class GenerateTextStepServiceStub(GenerateTextStepService):
+    def __init__(self) -> None:
+        self.find_awaiting_review_step_id_inputs: list[int] = []
+        self.find_awaiting_review_step_id_result: int | None = 1
+        self.record_decision_error: Exception | None = None
+
+    async def find_awaiting_review_step_id(self, run_id: int) -> int | None:
+        self.find_awaiting_review_step_id_inputs.append(run_id)
+        return self.find_awaiting_review_step_id_result
+
+    async def record_decision(
+        self,
+        step_id: int,
+        human_decision: HumanDecisionType,
+        human_feedback: str | None,
+        auth_user: AuthUser,
+        decided_at: datetime,
+    ) -> None:
+        if self.record_decision_error is not None:
+            raise self.record_decision_error

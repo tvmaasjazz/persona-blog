@@ -11,6 +11,7 @@ from apps.api.app_factory import create_app
 from apps.api.core.config import AppSettings
 from apps.api.core.dependencies import get_llm_service
 from libs.auth.services import AuthSessionService
+from libs.core.services import BackgroundJobService
 from libs.database.orm import UserOrm
 from tests.factories.users import insert_user_row
 from tests.stubs.llm import LlmServiceStub
@@ -80,3 +81,8 @@ def llm_service_stub(fastapi_app: FastAPI) -> LlmServiceStub:
     llm_service_stub = LlmServiceStub()
     fastapi_app.dependency_overrides[get_llm_service] = lambda: llm_service_stub
     return llm_service_stub
+
+
+@pytest.fixture
+def background_job_service(fastapi_app: FastAPI) -> BackgroundJobService:
+    return fastapi_app.state.background_job_service

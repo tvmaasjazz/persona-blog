@@ -86,6 +86,7 @@ class GenerateTextRunResponseDto(BaseModel):
     cost_usd: Decimal
     started_at: datetime | None
     finished_at: datetime | None
+    poll_interval_ms: int
 
     @classmethod
     def from_result(cls, result: GenerateTextRunResult) -> GenerateTextRunResponseDto:
@@ -110,4 +111,5 @@ class GenerateTextRunResponseDto(BaseModel):
             cost_usd=result.cost_usd,
             started_at=result.started_at,
             finished_at=result.finished_at,
+            poll_interval_ms=result.poll_interval_ms,
         )

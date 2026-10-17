@@ -14,14 +14,21 @@ from libs.llm.exceptions import (
     LlmTruncatedException,
     LlmUnavailableException,
 )
+from libs.llm.inputs import LlmProviderCompletionInput
 from libs.llm.results import LlmCompletionResult, LlmStructuredCompletionResult
 from libs.llm.services.llm_call_service import LlmCallService
 from libs.llm.services.llm_service import LlmService
-from libs.llm.settings import FastLlmTierSettings, LlmModelPricingSettings, LlmSettings
+from libs.llm.settings import (
+    FastLlmTierSettings,
+    LlmModelPricingSettings,
+    LlmSettings,
+    StrongLlmTierSettings,
+)
 from libs.llm.types import (
     LlmCallReasonType,
     LlmCallStatusType,
     LlmProviderType,
+    LlmReasoningEffortType,
     LlmType,
 )
 from tests.factories.auth import build_auth_user
@@ -387,3 +394,83 @@ async def test_complete_tier_provider_not_registered_raises_not_implemented_erro
 
     with pytest.raises(NotImplementedError):
         await llm_service.complete(llm_completion_input, build_auth_user())
+
+
+async def test_complete_passes_tier_reasoning_effort_to_provider(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    llm_provider_service_stub = LlmProviderServiceStub()
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
+    llm_settings = LlmSettings(
+        fast=FastLlmTierSettings(
+            provider=LlmProviderType.OPENAI,
+            model_name="test-model",
+            max_output_tokens=2048,
+            request_timeout_seconds=30,
+            reasoning_effort=LlmReasoningEffortType.HIGH,
+        ),
+        model_pricing={},
+    )
+    llm_service = LlmService(
+        llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
+        llm_call_service=llm_call_service,
+        llm_settings=llm_settings,
+    )
+    llm_completion_input = build_llm_completion_input(
+        llm_type=LlmType.FAST, system_prompt="Be brief.", user_prompt="Say hi."
+    )
+
+    await llm_service.complete(llm_completion_input, auth_user)
+
+    assert llm_provider_service_stub.complete_inputs == [
+        LlmProviderCompletionInput(
+            model_name="test-model",
+            system_prompt="Be brief.",
+            user_prompt="Say hi.",
+            max_output_tokens=2048,
+            request_timeout_seconds=30,
+            reasoning_effort=LlmReasoningEffortType.HIGH,
+        )
+    ]
+
+
+async def test_complete_structured_tier_without_reasoning_effort_passes_none(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    llm_provider_service_stub = LlmProviderServiceStub()
+    llm_provider_service_stub.complete_structured_result = build_llm_provider_completion_result(
+        parsed_output=_SampleOutput(answer="42")
+    )
+    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
+    llm_settings = LlmSettings(
+        strong=StrongLlmTierSettings(
+            provider=LlmProviderType.OPENAI,
+            model_name="test-model",
+            max_output_tokens=1024,
+            request_timeout_seconds=90,
+        ),
+        model_pricing={},
+    )
+    llm_service = LlmService(
+        llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
+        llm_call_service=llm_call_service,
+        llm_settings=llm_settings,
+    )
+    llm_completion_input = build_llm_completion_input(
+        llm_type=LlmType.STRONG, system_prompt=None, user_prompt="Say hi."
+    )
+
+    await llm_service.complete_structured(llm_completion_input, _SampleOutput, auth_user)
+
+    assert llm_provider_service_stub.complete_structured_inputs == [
+        LlmProviderCompletionInput(
+            model_name="test-model",
+            system_prompt=None,
+            user_prompt="Say hi.",
+            max_output_tokens=1024,
+            request_timeout_seconds=90,
+            reasoning_effort=None,
+        )
+    ]

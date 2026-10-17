@@ -47,6 +47,8 @@ backend/tests/
 ├── payloads/
 │   └── weather_api.py       # third-party response bodies, as builder functions
 ├── libs/
+│   ├── core/
+│   │   └── test_background_job_service.py   # one module per libs/core service or Utils
 │   └── users/
 │       ├── conftest.py      # only if the domain's lib tests share fixtures
 │       ├── test_services.py
@@ -56,6 +58,7 @@ backend/tests/
 │   ├── core/
 │   │   ├── test_config.py
 │   │   ├── test_exception_handlers.py
+│   │   ├── test_event_loop_monitor.py
 │   │   └── test_dependencies.py
 │   ├── users/
 │   │   ├── conftest.py
@@ -104,7 +107,9 @@ backend/tests/
 | `apps/api/core/exception_handlers.py` | `tests/api/core/test_exception_handlers.py` | Each standard exception maps to its status; a lib exception gets its parent's; unhandled errors return 500 without internals (§7) |
 | `libs/core/exceptions.py`, `libs/<d>/exceptions.py` | None                   | The app factory tests and the service tests that raise them cover these |
 | `apps/api/lifespan.py`               | `tests/api/test_lifespan.py`           | Resources created at startup and closed at shutdown (§7) |
-| `libs/<d>/tasks.py`                  | `tests/libs/<d>/test_tasks.py`         | Call the task directly with the `db_session_factory` and `redis_client` fixtures, and assert the persisted effect. Don't assert a background task ran from a route test: the task opens a second session on the shared test connection, and the harness loses that write |
+| `libs/<d>/after_response_tasks.py`   | `tests/libs/<d>/test_after_response_tasks.py` | Call the task directly with the `db_session_factory` and `redis_client` fixtures, and assert the persisted effect |
+| A service method that starts a background job | That service's test file, and the route's | Drain the job before asserting (see Async) |
+| `apps/api/core/event_loop_monitor.py` | `tests/api/core/test_event_loop_monitor.py` | A blocked loop logs `event_loop_lag`; an idle one logs nothing. Pass a short sample and a generous threshold. The one test allowed to block and sleep (see Async) |
 | Middleware                           | `tests/api/test_<module>.py`           | Observable effect on a real route (§9) |
 | `libs/database/orm/*.py`             | None                                   | Service database tests cover them; CI's drift check catches mismatches with migrations |
 | `migrations/`                        | `tests/migrations/test_revisions.py`   | One file covers every revision (§10) |
@@ -220,7 +225,14 @@ calls.
   different loop".
 - Never use `asyncio.run()`, `loop.run_until_complete()`, `time.sleep()`, or
   `asyncio.sleep()` in a test. If a test has to wait for something, it isn't
-  controlling that thing.
+  controlling that thing. The one exception is the event loop lag monitor's own test,
+  which may block the loop and sleep, because lag only exists when the loop is really
+  blocked.
+- A test that starts a background job waits for it with
+  `await background_job_service.drain(...)` before asserting or touching the database
+  again. The job and the test share one test connection, which can't serve two
+  operations at once. Service tests build a real `BackgroundJobService`; route tests
+  get the app's through the `background_job_service` fixture.
 - A forgotten `await` produces a `RuntimeWarning`, and the config turns warnings into
   failures. That's the main reason warnings are errors.
 
@@ -519,7 +531,9 @@ parse the reply.
   fields tests vary.
 
 `tests/stubs/http.py` holds `HttpHandlerStub`, which records every request, raises
-`handle_error` when set, and pops the next queued response.
+`handle_error` when set, and pops the next queued response. For "fails once, then
+succeeds" tests, queue exceptions in `handle_errors`: each request raises the next one
+until the list is empty, then responses are returned.
 
 ```python
 # tests/libs/weather/conftest.py

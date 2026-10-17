@@ -90,6 +90,7 @@ class LlmService:
             user_prompt=llm_completion_input.user_prompt,
             max_output_tokens=tier_settings.max_output_tokens,
             request_timeout_seconds=tier_settings.request_timeout_seconds,
+            reasoning_effort=tier_settings.reasoning_effort,
         )
 
         start_time = DateTimeUtils.now_monotonic()

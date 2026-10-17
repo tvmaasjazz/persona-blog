@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from libs.llm.types import LlmProviderType
+from libs.llm.types import LlmProviderType, LlmReasoningEffortType
 
 
 class LlmTierSettings(BaseModel):
@@ -12,6 +12,7 @@ class LlmTierSettings(BaseModel):
     model_name: str
     max_output_tokens: int
     request_timeout_seconds: int
+    reasoning_effort: LlmReasoningEffortType | None = None
 
 
 # One class per tier, each with its own defaults, so a single value can be overridden
@@ -19,16 +20,17 @@ class LlmTierSettings(BaseModel):
 # would replace the whole tier.
 class FastLlmTierSettings(LlmTierSettings):
     provider: LlmProviderType = LlmProviderType.OPENAI
-    model_name: str = "gpt-4o-mini"
-    max_output_tokens: int = 2048
+    model_name: str = "gpt-5.4-nano"
+    max_output_tokens: int = 8192
     request_timeout_seconds: int = 30
+    reasoning_effort: LlmReasoningEffortType | None = LlmReasoningEffortType.LOW
 
 
 class StrongLlmTierSettings(LlmTierSettings):
     provider: LlmProviderType = LlmProviderType.OPENAI
     model_name: str = "gpt-5.6-sol"
     max_output_tokens: int = 4096
-    request_timeout_seconds: int = 60
+    request_timeout_seconds: int = 120
 
 
 class ThinkingLlmTierSettings(LlmTierSettings):
@@ -53,6 +55,11 @@ def _default_model_pricing() -> dict[str, LlmModelPricingSettings]:
             cached_input_usd_per_million_tokens=Decimal("0.075"),
             output_usd_per_million_tokens=Decimal("0.60"),
         ),
+        "gpt-5.4-nano": LlmModelPricingSettings(
+            input_usd_per_million_tokens=Decimal("0.20"),
+            cached_input_usd_per_million_tokens=Decimal("0.02"),
+            output_usd_per_million_tokens=Decimal("1.25"),
+        ),
         "gpt-5.6-sol": LlmModelPricingSettings(
             input_usd_per_million_tokens=Decimal("4.00"),
             cached_input_usd_per_million_tokens=Decimal("0.40"),
@@ -76,3 +83,5 @@ class LlmSettings(BaseModel):
         default_factory=_default_model_pricing
     )
     max_retries: int = 2
+    retry_base_delay_seconds: float = 1.0
+    retry_max_delay_seconds: float = 20.0

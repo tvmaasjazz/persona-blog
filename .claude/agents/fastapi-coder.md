@@ -1,6 +1,6 @@
 ---
 name: fastapi-coder
-description: Writes backend Python to this project's settled FastAPI conventions — services (including a <Domain>ValidationService), Utils classes, LangGraph states, node services and graphs, Input/Result models, settings, constants, prompts, DTOs with their field-constraint aliases, dependency factories, validation guard dependencies, thin routers, and domain wiring in AppSettings, app_factory.py, core/dependencies.py and lifespan.py. Use once the design is decided and any tables it needs exist. It does not see this conversation, so pass the domain, entities and fields, and service method signatures. Doesn't write Orm classes, migrations, or tests.
+description: Writes backend Python to this project's settled FastAPI conventions — services (including a <Domain>ValidationService, and services that start background jobs through BackgroundJobService), Utils classes, after-response tasks, LangGraph states, node services and graphs, Input/Result models, settings, constants, prompts, DTOs with their field-constraint aliases, dependency factories, validation guard dependencies, thin routers, and domain wiring in AppSettings, app_factory.py, core/dependencies.py and lifespan.py. Use once the design is decided and any tables it needs exist. It does not see this conversation, so pass the domain, entities and fields, and service method signatures. Doesn't write Orm classes, migrations, or tests.
 tools: Read, Write, Edit, Glob, Grep
 model: sonnet
 effort: low
@@ -33,7 +33,7 @@ The rules files say where each of these lives and how it is shaped.
 - **Domain library code** — services, including a `<Domain>ValidationService` for
   validation guards (`fastapi-structure.md` › Services › Validation guards), Input and
   Result models, domain settings,
-  constants, enums (`types.py`), background tasks (`tasks.py`), prompts, exceptions,
+  constants, enums (`types.py`), after-response tasks (`after_response_tasks.py`), prompts, exceptions,
   `Utils` classes in `libs/<domain>/utils/` (and `libs/core/utils/` for ones with no
   domain)
 - **LangGraph workflow files**, for a domain whose work is a graph: the layout and what
@@ -43,6 +43,10 @@ The rules files say where each of these lives and how it is shaped.
   aliases (`fastapi-structure.md` › DTOs › Inbound), dependency factories with their
   `Annotated` aliases,
   `validate_<what>` guard dependencies, thin routers
+- **Background jobs** — a service whose work runs for minutes takes
+  `BackgroundJobService` through `__init__`, wired from `app.state` in its dependency
+  factory, and starts the work with `start()` (`fastapi-structure.md` › After-response
+  tasks and background jobs). Every service the job calls takes the session factory
 - **Wiring a domain in** — add its settings field to `AppSettings` and register its
   router in `app_factory.py`. In those two files, add the domain's line and nothing
   else.
@@ -62,7 +66,9 @@ The rules files say where each of these lives and how it is shaped.
   methods, and routes that need tests, so the work can be handed to it.
 - **App setup files** — `main.py`, `libs/database/base.py`, `session.py`,
   `column_types.py` and `constants.py`, `core/dtos.py`, `core/exception_handlers.py`,
-  `core/logging.py`, `core/types.py`, `libs/core/exceptions.py`. Written once; if a
+  `core/logging.py`, `core/types.py`, `core/event_loop_monitor.py`,
+  `libs/core/exceptions.py`, `libs/core/settings.py`, and `libs/core/services/`
+  (`BackgroundJobService`). Written once; if a
   task seems to need a change there (including a new standard exception category),
   report it instead. `core/dependencies.py` and `lifespan.py` are not in this list:
   see "What you write" for the one kind of change you may make to each.

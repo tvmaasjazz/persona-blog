@@ -91,8 +91,19 @@ class TextType(StrEnum):
 Write the value out explicitly. Never `auto()` — in a `StrEnum` it produces the
 lowercased member name, which breaks the rule silently.
 
-This carries into the database: Postgres enum labels match the members exactly
-(`database.md` › Enums). SQLAlchemy's `Enum` column persists member *names* by
+The one exception: an enum that only mirrors one outside API's fixed values keeps
+UPPER_SNAKE member names, but each value is exactly that API's spelling, so nothing
+converts it on the way out.
+
+An enum that more than one provider could take is ours, not a mirror, even when today
+only one provider uses it. It stays UPPER_SNAKE, and each provider's code maps it to
+its own API's values with a map that fails loudly on a missing member (› Enum dispatch).
+`LlmReasoningEffortType` is one: any LLM provider could take it, and `OpenAiLlmUtils`
+maps it through `OPENAI_REASONING_EFFORT_BY_TYPE` (`LOW` → `"low"`).
+
+For our own enums, this carries into the database: Postgres enum labels match the
+members exactly (`database.md` › Enums). A mirrored enum is never an Orm column, since
+its persisted names and serialized values would differ. SQLAlchemy's `Enum` column persists member *names* by
 default while Pydantic serializes *values* — when the two are identical, that
 difference stops being a source of bugs.
 

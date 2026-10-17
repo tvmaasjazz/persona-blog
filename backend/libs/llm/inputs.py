@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from libs.llm.types import LlmType
+from libs.llm.types import LlmReasoningEffortType, LlmType
 
 
 class LlmCompletionInput(BaseModel):
@@ -18,3 +18,4 @@ class LlmProviderCompletionInput(BaseModel):
     user_prompt: str
     max_output_tokens: int
     request_timeout_seconds: int
+    reasoning_effort: LlmReasoningEffortType | None = None
