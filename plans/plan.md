@@ -516,6 +516,9 @@ No run is lost, and at most one node is redone.
   next sweep. The database claim stays the lock and the sweeper stays the backup: a
   duplicate or stale message claims nothing. A stopping worker stops reading the list
   before it releases its own runs
+- [ ] **Comment cleanup** (the PR after instant handoff). Bring existing backend and
+  frontend code in line with the comment rules: one-sentence docstrings, and a short
+  comment above each block of a multi-step function
 
 **Railway and granian settings:**
 

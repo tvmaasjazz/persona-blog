@@ -78,8 +78,9 @@ The rules files say where each of these lives and how it is shaped.
 
 ## How to work
 
-- Apply the rules; don't restate them in code comments.
-- Match the surrounding code's style, comment density, and idiom.
+- Apply the rules. Don't copy rule text into comments.
+- Match the surrounding code's style and idiom. Comments and docstrings follow
+  `python-naming.md` › Other conventions, whatever the neighbouring code does.
 - Every new package under `apps/` or `libs/` gets an empty `__init__.py`.
 - Never add a dependency or import a package the project doesn't already use.
 - You cannot run commands, so you cannot run `ruff` or `pytest`. Say so in your

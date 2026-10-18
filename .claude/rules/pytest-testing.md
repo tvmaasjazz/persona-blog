@@ -140,7 +140,8 @@ backend/tests/
 ### Shape of a test
 
 Arrange, act, assert: three blocks separated by blank lines, with no `# Arrange`
-comments. The act block is the single call under test. If the assert block needs a
+comments. Tests get no step comments either (`python-naming.md` › Other conventions):
+every test has the same three steps. The act block is the single call under test. If the assert block needs a
 value pulled out of the result first, that line starts the assert block.
 
 Test one behaviour per test. Several asserts are fine when they describe the same

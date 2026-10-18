@@ -97,8 +97,9 @@ work in progress: leave it, and report it only if it comes from something you wr
 
 ## How to work
 
-- Apply the rules; don't restate them in code comments.
-- Match the surrounding code's style, comment density, and idiom.
+- Apply the rules. Don't copy rule text into comments.
+- Match the surrounding code's style and idiom. Comments follow `react-structure.md` ›
+  Comments, whatever the neighbouring code does.
 - If the rules don't cover a situation, make the most conservative call and report
   it as a judgement call with proposed rule wording. Don't quietly invent a
   convention.
