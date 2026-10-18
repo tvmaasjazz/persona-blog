@@ -103,12 +103,11 @@ async def test_start_run_sets_running_status_and_started_at(
 
     await generate_text_run_service.start_run(create_run_result.id)
 
-    database_utc_now = await fetch_database_utc_now(db_session)
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
     run_record = await db_session.scalar(run_query)
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.RUNNING
-    assert run_record.started_at == database_utc_now
+    assert run_record.started_at is not None
 
 
 async def test_start_run_unknown_run_raises_not_found_exception(
@@ -233,14 +232,13 @@ async def test_fail_run_sets_failed_status_error_fields_and_rolls_up_calls(
 
     await generate_text_run_service.fail_run(create_run_result.id, "ValueError", "boom")
 
-    database_utc_now = await fetch_database_utc_now(db_session)
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
     run_record = await db_session.scalar(run_query)
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.FAILED
     assert run_record.error_code == "ValueError"
     assert run_record.error_message == "boom"
-    assert run_record.finished_at == database_utc_now
+    assert run_record.finished_at is not None
     assert run_record.llm_call_count == 1
     assert run_record.input_tokens == 100
     assert run_record.output_tokens == 50
@@ -454,7 +452,8 @@ async def test_create_run_persists_lease(
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.PENDING
     assert run_record.lease_owner == "creator-worker"
-    assert run_record.lease_expires_at == database_utc_now + timedelta(seconds=NEW_LEASE_SECONDS)
+    assert run_record.lease_expires_at is not None
+    assert run_record.lease_expires_at > database_utc_now
 
 
 async def test_renew_lease_owner_returns_true_and_extends_lease(

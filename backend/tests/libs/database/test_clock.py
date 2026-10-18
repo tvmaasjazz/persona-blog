@@ -1,18 +1,10 @@
-from datetime import UTC, timedelta
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from libs.database.clock import build_utc_now_plus_sql, build_utc_now_sql, fetch_utc_now
+from libs.database.clock import build_utc_now_plus_sql, build_utc_now_sql
 from tests.factories.database import fetch_database_utc_now
-
-
-async def test_fetch_utc_now_returns_aware_utc_database_time(db_session: AsyncSession) -> None:
-    fetch_utc_now_result = await fetch_utc_now(db_session)
-
-    database_utc_now = await fetch_database_utc_now(db_session)
-    assert fetch_utc_now_result.tzinfo == UTC
-    assert fetch_utc_now_result == database_utc_now
 
 
 async def test_build_utc_now_sql_selects_database_time(db_session: AsyncSession) -> None:

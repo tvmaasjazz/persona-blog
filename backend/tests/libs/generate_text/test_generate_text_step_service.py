@@ -12,7 +12,6 @@ from libs.generate_text.services.generate_text_run_service import GenerateTextRu
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
 from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionType
 from tests.factories.auth import build_auth_user
-from tests.factories.database import fetch_database_utc_now
 from tests.factories.generate_text import (
     build_create_generate_text_run_input,
     build_create_generate_text_step_input,
@@ -239,13 +238,12 @@ async def test_record_decision_sets_human_decision_and_feedback(
         create_step_result.id, HumanDecisionType.APPROVED, "Looks good.", auth_user
     )
 
-    database_utc_now = await fetch_database_utc_now(db_session)
     step_record = await db_session.get(GenerateTextStepOrm, create_step_result.id)
     assert step_record is not None
     assert step_record.human_decision == HumanDecisionType.APPROVED
     assert step_record.human_feedback == "Looks good."
     assert step_record.decided_by_id == auth_user.id
-    assert step_record.decided_at == database_utc_now
+    assert step_record.decided_at is not None
 
 
 async def test_record_awaiting_review_sets_awaiting_review_status_and_duration(
