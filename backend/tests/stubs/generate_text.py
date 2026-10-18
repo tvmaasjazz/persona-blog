@@ -1,6 +1,5 @@
 import asyncio
 from collections.abc import AsyncIterator
-from datetime import datetime
 from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -132,7 +131,6 @@ class GenerateTextStepServiceStub(GenerateTextStepService):
         human_decision: HumanDecisionType,
         human_feedback: str | None,
         auth_user: AuthUser,
-        decided_at: datetime,
     ) -> None:
         if self.record_decision_error is not None:
             raise self.record_decision_error
@@ -144,16 +142,16 @@ class GenerateTextRunServiceStub(GenerateTextRunService):
 
     def __init__(self, run_service: GenerateTextRunService) -> None:
         self._run_service = run_service
-        self.renew_lease_inputs: list[tuple[int, str, datetime]] = []
+        self.renew_lease_inputs: list[tuple[int, str, int]] = []
         self.renew_lease_error: Exception | None = None
         self.renew_lease_event = asyncio.Event()
 
-    async def renew_lease(self, run_id: int, lease_owner: str, lease_expires_at: datetime) -> bool:
-        self.renew_lease_inputs.append((run_id, lease_owner, lease_expires_at))
+    async def renew_lease(self, run_id: int, lease_owner: str, lease_seconds: int) -> bool:
+        self.renew_lease_inputs.append((run_id, lease_owner, lease_seconds))
         try:
             if self.renew_lease_error is not None:
                 raise self.renew_lease_error
-            return await self._run_service.renew_lease(run_id, lease_owner, lease_expires_at)
+            return await self._run_service.renew_lease(run_id, lease_owner, lease_seconds)
         finally:
             self.renew_lease_event.set()
 

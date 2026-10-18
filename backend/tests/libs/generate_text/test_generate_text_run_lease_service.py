@@ -67,7 +67,7 @@ async def test_keep_lease_alive_renewal_moves_lease_expiry_later_and_keeps_owner
         await run_service_stub.renew_lease_event.wait()
 
     await db_session.refresh(run_record)
-    assert run_service_stub.renew_lease_inputs[0][:2] == (run_record.id, "test-worker")
+    assert run_service_stub.renew_lease_inputs[0] == (run_record.id, "test-worker", 3600)
     assert run_record.lease_owner == "test-worker"
     assert run_record.lease_expires_at is not None
     assert run_record.lease_expires_at > EXPIRED_LEASE_EXPIRES_AT

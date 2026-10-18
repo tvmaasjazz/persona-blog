@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -42,7 +42,7 @@ def build_create_generate_text_run_input(
     additional_context: str | None = None,
     options: dict[str, Any] | None = None,
     lease_owner: str = "test-worker",
-    lease_expires_at: datetime = datetime(2099, 1, 2, 3, 4, 5, tzinfo=UTC),
+    lease_seconds: int = 60,
 ) -> CreateGenerateTextRunInput:
     return CreateGenerateTextRunInput(
         text_type=text_type,
@@ -55,7 +55,7 @@ def build_create_generate_text_run_input(
         additional_context=additional_context,
         options=options if options is not None else {},
         lease_owner=lease_owner,
-        lease_expires_at=lease_expires_at,
+        lease_seconds=lease_seconds,
     )
 
 
