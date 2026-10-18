@@ -22,11 +22,6 @@ class SoftDeleteMixin:
 class BaseOrm(SoftDeleteMixin, DeclarativeBase):
     """Every table's shared columns."""
 
-    # Fetches updated_at's database-clock value back with RETURNING, so it can be read
-    # after a flush without a reload
-    # TODO(db-clock): remove once every write is an update() or insert() statement
-    __mapper_args__: ClassVar[dict[str, Any]] = {"eager_defaults": True}
-
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
     type_annotation_map: ClassVar[dict[Any, Any]] = {str: Text, datetime: UtcDateTime, UUID: Uuid}
 

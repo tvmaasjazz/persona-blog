@@ -28,6 +28,7 @@ from tests.factories.blog_posts import (
     insert_blog_post_row,
 )
 from tests.factories.content_items import insert_content_item_row
+from tests.factories.database import fetch_database_utc_now
 from tests.factories.generate_text import (
     insert_generate_text_run_row,
     insert_generate_text_step_row,
@@ -705,6 +706,7 @@ async def test_delete_blog_post_soft_deletes_both_rows(
         ContentItemOrm.id == content_item_record.id
     )
     content_item_orm_result = await db_session.scalar(content_item_orm_query)
+    database_utc_now = await fetch_database_utc_now(db_session)
     raw_blog_post_query = text(
         "SELECT deleted_at, deleted_by_id FROM pb_blog_post WHERE identity = :identity"
     )
@@ -721,7 +723,7 @@ async def test_delete_blog_post_soft_deletes_both_rows(
     ).one()
     assert blog_post_orm_result is None
     assert content_item_orm_result is None
-    assert raw_blog_post_result.deleted_at is not None
+    assert raw_blog_post_result.deleted_at.replace(tzinfo=UTC) == database_utc_now
     assert raw_blog_post_result.deleted_by_id == auth_user.id
-    assert raw_content_item_result.deleted_at is not None
+    assert raw_content_item_result.deleted_at.replace(tzinfo=UTC) == database_utc_now
     assert raw_content_item_result.deleted_by_id == auth_user.id

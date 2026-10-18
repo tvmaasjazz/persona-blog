@@ -1,7 +1,7 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
 
@@ -25,6 +25,7 @@ from libs.content_items.utils.content_item_query_utils import ContentItemQueryUt
 from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.core.utils.markdown_utils import MarkdownUtils
 from libs.database.orm import BlogPostOrm, ContentItemOrm, PersonaOrm
+from libs.database.utils import DatabaseClockUtils
 from libs.generate_text.services import GenerateTextRunService, GenerateTextStepService
 from libs.personas.services import PersonaService
 
@@ -154,11 +155,17 @@ class BlogPostService:
         auth_user: AuthUser,
     ) -> None:
         blog_post_record = await self._find_owned_blog_post_record(blog_post_identity, auth_user)
-        blog_post_record.title = update_blog_post_input.title
-        blog_post_record.subtitle = update_blog_post_input.subtitle
-        blog_post_record.body = update_blog_post_input.body
-        blog_post_record.updated_by_id = auth_user.id
-        await self._db_session.flush()
+        blog_post_update = (
+            update(BlogPostOrm)
+            .where(BlogPostOrm.id == blog_post_record.id)
+            .values(
+                title=update_blog_post_input.title,
+                subtitle=update_blog_post_input.subtitle,
+                body=update_blog_post_input.body,
+                updated_by_id=auth_user.id,
+            )
+        )
+        await self._db_session.execute(blog_post_update)
 
         await self._content_item_service.update_content_item(
             blog_post_record.content_item_id,
@@ -171,10 +178,15 @@ class BlogPostService:
 
     async def delete_blog_post(self, blog_post_identity: UUID, auth_user: AuthUser) -> None:
         blog_post_record = await self._find_owned_blog_post_record(blog_post_identity, auth_user)
-        # TODO(db-clock): the database's now, once this write is an update() statement
-        blog_post_record.deleted_at = datetime.now(UTC)
-        blog_post_record.deleted_by_id = auth_user.id
-        await self._db_session.flush()
+        blog_post_soft_delete_update = (
+            update(BlogPostOrm)
+            .where(BlogPostOrm.id == blog_post_record.id)
+            .values(
+                deleted_at=DatabaseClockUtils.build_utc_now_sql(),
+                deleted_by_id=auth_user.id,
+            )
+        )
+        await self._db_session.execute(blog_post_soft_delete_update)
 
         await self._content_item_service.delete_content_item(
             blog_post_record.content_item_id, auth_user
@@ -201,18 +213,22 @@ class BlogPostService:
             ),
             auth_user,
         )
-        blog_post_record = BlogPostOrm(
-            content_item_id=create_content_item_result.id,
-            title=title,
-            subtitle=subtitle,
-            body=body,
-            created_by_id=auth_user.id,
-            updated_by_id=auth_user.id,
+        blog_post_insert = (
+            insert(BlogPostOrm)
+            .values(
+                content_item_id=create_content_item_result.id,
+                title=title,
+                subtitle=subtitle,
+                body=body,
+                created_by_id=auth_user.id,
+                updated_by_id=auth_user.id,
+            )
+            .returning(BlogPostOrm.identity)
         )
-        self._db_session.add(blog_post_record)
-        await self._db_session.flush()
+        blog_post_insert_result = await self._db_session.execute(blog_post_insert)
+        blog_post_identity = blog_post_insert_result.scalar_one()
 
-        return CreateBlogPostResult(identity=blog_post_record.identity)
+        return CreateBlogPostResult(identity=blog_post_identity)
 
     async def _find_accessible_blog_post_record(
         self, blog_post_identity: UUID, auth_user: AuthUser

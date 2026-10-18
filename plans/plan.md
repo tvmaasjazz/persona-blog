@@ -541,13 +541,12 @@ No run is lost, and at most one node is redone.
 - [ ] **Comment cleanup** (the PR after instant handoff). Bring existing backend and
   frontend code in line with the comment rules: one-sentence docstrings, and a short
   comment above each block of a multi-step function
-- [ ] **Writes as statements.** Switch Orm writes from setting attributes and calling
+- [x] **Writes as statements.** Switch Orm writes from setting attributes and calling
   `flush()` to one statement that sets every field, so a time it writes is
   `DatabaseClockUtils.build_utc_now_sql()` rather than the app server's clock. Updates
   become one `update()` statement, and creates become one `insert()` statement the
-  same way, instead of `add()` and `flush()`. Changes `fastapi-structure.md` › Querying and
-  writing, which today says to load the Orm, mutate it and flush, and to create with
-  `add()` then `flush()`. Clears every `TODO(db-clock)`, including the two inserts
+  same way, instead of `add()` and `flush()`. Rewrites `fastapi-structure.md` › Querying
+  and writing. Clears every `TODO(db-clock)`, including the two inserts
   (`create_run`'s lease expiry, `create_step`'s `started_at`), and removes `BaseOrm`'s
   `eager_defaults`, which only matters while records are flushed
 

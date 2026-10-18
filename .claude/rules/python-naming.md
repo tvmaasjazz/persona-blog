@@ -169,8 +169,14 @@ Booleans start with `is_` wherever they live: columns, Orm attributes,
 Pydantic fields, and local variables. `is_active`, not `active`.
 
 An `Orm` class describes a table; an instance of it is a row, named `<entity>_record`:
-`user_record`, `user_auth_provider_record`. That holds whether the row was loaded or
-just created and flushed. Never `user_orm`.
+`user_record`, `user_auth_provider_record`. That holds whether the row was loaded or,
+in a test factory, just created. Never `user_orm`.
+
+A statement's name ends in what kind it is. A read ends in `_query`: `persona_query`.
+A write ends in its SQL verb, after what it does to which row: `persona_insert`,
+`persona_update`, `run_start_update`, `run_claim_update`. A soft delete is an update, so
+it says both: `persona_soft_delete_update`. What `execute()` returns adds `_result`:
+`persona_insert_result`, `run_start_update_result`.
 
 One exception: the root `AppSettings` instance is `app.state.settings`. There is only
 ever one settings object on `app.state`, so the qualifier adds nothing. Local

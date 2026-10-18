@@ -86,6 +86,13 @@ class FindLatestGenerateTextStepResult(BaseModel):
     content: str
 
 
+class FindLlmCallRollupResult(BaseModel):
+    llm_call_count: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: Decimal
+
+
 class BuildPromptResult(BaseModel):
     system_prompt: str
     user_prompt: str

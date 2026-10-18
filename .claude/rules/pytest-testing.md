@@ -493,7 +493,7 @@ rolled back after each test.
 | --------------------------------- | ------- |
 | Create                            | Call, then `select()` the row back and assert on it. The returned `Result` alone proves nothing about persistence |
 | Primary key and server defaults   | Assert `id` and `identity` are set and `created_at is not None`. Never assert an exact timestamp |
-| Soft delete                       | Call, then assert the ORM `select()` no longer finds the row and a raw `text()` select still does, with `deleted_at` and `deleted_by_id` set |
+| Soft delete                       | Call, then assert the ORM `select()` no longer finds the row and a raw `text()` select still does, with `deleted_at` equal to the database's now and `deleted_by_id` set. A raw `text()` select returns datetimes without a time zone, so add `tzinfo=UTC` before comparing: `deleted_at.replace(tzinfo=UTC) == database_utc_now` |
 | Audit columns                     | Assert `created_by_id` / `updated_by_id` equal the `AuthUser` the test passed in |
 | Read, found                       | `insert_*_row`, call, compare the whole `Result` built from the row's values |
 | Read, not found                   | Call with a key that was never inserted and `pytest.raises(NotFoundException)` |

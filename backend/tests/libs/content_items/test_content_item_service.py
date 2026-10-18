@@ -14,6 +14,7 @@ from tests.factories.content_items import (
     build_update_content_item_input,
     insert_content_item_row,
 )
+from tests.factories.database import fetch_database_utc_now
 from tests.factories.generate_text import insert_generate_text_run_row
 from tests.factories.personas import insert_persona_row
 from tests.factories.users import insert_user_row
@@ -86,6 +87,72 @@ async def test_update_content_item_never_inserted_raises_not_found_exception(
         )
 
 
+async def test_update_content_item_soft_deleted_raises_not_found_exception(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=user_record.id,
+        persona_id=persona_record.id,
+        deleted_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        deleted_by_id=user_record.id,
+    )
+    await db_session.commit()
+    content_item_service = ContentItemService(db_session=db_session)
+
+    with pytest.raises(NotFoundException):
+        await content_item_service.update_content_item(
+            content_item_record.id, build_update_content_item_input(), auth_user
+        )
+
+
+async def test_delete_content_item_soft_deleted_raises_not_found_exception(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=user_record.id,
+        persona_id=persona_record.id,
+        deleted_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        deleted_by_id=user_record.id,
+    )
+    await db_session.commit()
+    content_item_service = ContentItemService(db_session=db_session)
+
+    with pytest.raises(NotFoundException):
+        await content_item_service.delete_content_item(content_item_record.id, auth_user)
+
+
+async def test_create_content_item_soft_deleted_generate_text_run_raises_not_found_exception(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
+    generate_text_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=user_record.id,
+        persona_id=persona_record.id,
+        deleted_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        deleted_by_id=user_record.id,
+    )
+    await db_session.commit()
+    content_item_service = ContentItemService(db_session=db_session)
+    create_content_item_input = build_create_content_item_input(
+        persona_id=persona_record.id,
+        generate_text_run_identity=generate_text_run_record.identity,
+    )
+
+    with pytest.raises(NotFoundException):
+        await content_item_service.create_content_item(create_content_item_input, auth_user)
+
+
 async def test_delete_content_item_soft_deletes_row(db_session: AsyncSession) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
@@ -100,6 +167,7 @@ async def test_delete_content_item_soft_deletes_row(db_session: AsyncSession) ->
 
     orm_query = select(ContentItemOrm).where(ContentItemOrm.id == content_item_record.id)
     orm_result = await db_session.scalar(orm_query)
+    database_utc_now = await fetch_database_utc_now(db_session)
     raw_query = text(
         "SELECT deleted_at, deleted_by_id FROM pb_content_item WHERE id = :content_item_id"
     )
@@ -107,7 +175,7 @@ async def test_delete_content_item_soft_deletes_row(db_session: AsyncSession) ->
         await db_session.execute(raw_query, {"content_item_id": content_item_record.id})
     ).one()
     assert orm_result is None
-    assert raw_result.deleted_at is not None
+    assert raw_result.deleted_at.replace(tzinfo=UTC) == database_utc_now
     assert raw_result.deleted_by_id == auth_user.id
 
 
