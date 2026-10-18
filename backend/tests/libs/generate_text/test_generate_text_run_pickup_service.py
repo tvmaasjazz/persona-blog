@@ -43,7 +43,7 @@ from tests.stubs.generate_text import (
 from tests.stubs.llm import LlmServiceStub
 
 DRAIN_TIMEOUT_SECONDS = 30
-LONG_SWEEP_INTERVAL_SECONDS = 3600
+LONG_PICKUP_INTERVAL_SECONDS = 3600
 # A lease this long (about 95 years) ends after LONG_LEASE_BOUND, so a test can tell a
 # fresh lease from a released one without reading the clock.
 LONG_LEASE_SECONDS = 3_000_000_000
@@ -149,7 +149,7 @@ def _build_pickup_service(
     )
 
 
-async def test_pick_up_expired_run_released_run_resumes_from_checkpoint_to_completion(
+async def test_pick_up_next_expired_run_released_run_resumes_from_checkpoint_to_completion(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
@@ -189,7 +189,7 @@ async def test_pick_up_expired_run_released_run_resumes_from_checkpoint_to_compl
         checkpointer=graph_checkpointer,
     )
 
-    is_picked_up = await run_pickup_service.pick_up_expired_run()
+    is_picked_up = await run_pickup_service.pick_up_next_expired_run()
 
     await picking_up_job_service.drain(DRAIN_TIMEOUT_SECONDS)
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.created_by_id == auth_user.id)
@@ -212,7 +212,7 @@ async def test_pick_up_expired_run_released_run_resumes_from_checkpoint_to_compl
     assert len(llm_service_stub.complete_inputs) == 2
 
 
-async def test_pick_up_expired_run_resumes_with_no_graph_input_under_new_lease(
+async def test_pick_up_next_expired_run_resumes_with_no_graph_input_under_new_lease(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
@@ -237,7 +237,7 @@ async def test_pick_up_expired_run_resumes_with_no_graph_input_under_new_lease(
         generate_text_settings=GenerateTextSettings(lease_seconds=LONG_LEASE_SECONDS),
     )
 
-    is_picked_up = await run_pickup_service.pick_up_expired_run()
+    is_picked_up = await run_pickup_service.pick_up_next_expired_run()
 
     await graph_stub.astream_started_event.wait()
     await db_session.refresh(run_record)
@@ -250,7 +250,7 @@ async def test_pick_up_expired_run_resumes_with_no_graph_input_under_new_lease(
     assert run_record.lease_expires_at > LONG_LEASE_BOUND
 
 
-async def test_pick_up_expired_run_at_pickup_limit_still_resumes_run(
+async def test_pick_up_next_expired_run_at_pickup_limit_still_resumes_run(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
@@ -273,7 +273,7 @@ async def test_pick_up_expired_run_at_pickup_limit_still_resumes_run(
         generate_text_settings=GenerateTextSettings(max_run_pickups=3),
     )
 
-    is_picked_up = await run_pickup_service.pick_up_expired_run()
+    is_picked_up = await run_pickup_service.pick_up_next_expired_run()
 
     await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
     await db_session.refresh(run_record)
@@ -282,7 +282,7 @@ async def test_pick_up_expired_run_at_pickup_limit_still_resumes_run(
     assert run_record.pickup_count == 3
 
 
-async def test_pick_up_expired_run_nothing_expired_returns_false(
+async def test_pick_up_next_expired_run_nothing_expired_returns_false(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
@@ -300,12 +300,12 @@ async def test_pick_up_expired_run_nothing_expired_returns_false(
         db_session_factory, GenerateTextGraphBuilderRegistryStub(), background_job_service
     )
 
-    is_picked_up = await run_pickup_service.pick_up_expired_run()
+    is_picked_up = await run_pickup_service.pick_up_next_expired_run()
 
     assert is_picked_up is False
 
 
-async def test_pick_up_expired_run_stopping_returns_false_and_claims_nothing(
+async def test_pick_up_next_expired_run_stopping_returns_false_and_claims_nothing(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
@@ -324,7 +324,7 @@ async def test_pick_up_expired_run_stopping_returns_false_and_claims_nothing(
     )
     background_job_service.request_stop()
 
-    is_picked_up = await run_pickup_service.pick_up_expired_run()
+    is_picked_up = await run_pickup_service.pick_up_next_expired_run()
 
     await db_session.refresh(run_record)
     assert is_picked_up is False
@@ -332,7 +332,7 @@ async def test_pick_up_expired_run_stopping_returns_false_and_claims_nothing(
     assert run_record.pickup_count == 0
 
 
-async def test_pick_up_expired_run_pending_run_fails_as_never_started(
+async def test_pick_up_next_expired_run_pending_run_fails_as_never_started(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
@@ -350,7 +350,7 @@ async def test_pick_up_expired_run_pending_run_fails_as_never_started(
         db_session_factory, GenerateTextGraphBuilderRegistryStub(), background_job_service
     )
 
-    is_picked_up = await run_pickup_service.pick_up_expired_run()
+    is_picked_up = await run_pickup_service.pick_up_next_expired_run()
 
     await db_session.refresh(run_record)
     assert is_picked_up is True
@@ -361,7 +361,7 @@ async def test_pick_up_expired_run_pending_run_fails_as_never_started(
     assert run_record.finished_at is not None
 
 
-async def test_pick_up_expired_run_picked_up_too_often_fails_run(
+async def test_pick_up_next_expired_run_picked_up_too_often_fails_run(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
@@ -384,7 +384,7 @@ async def test_pick_up_expired_run_picked_up_too_often_fails_run(
         generate_text_settings=GenerateTextSettings(max_run_pickups=3),
     )
 
-    is_picked_up = await run_pickup_service.pick_up_expired_run()
+    is_picked_up = await run_pickup_service.pick_up_next_expired_run()
 
     await db_session.refresh(run_record)
     assert is_picked_up is True
@@ -394,7 +394,7 @@ async def test_pick_up_expired_run_picked_up_too_often_fails_run(
     assert run_record.lease_owner is None
 
 
-async def test_pick_up_expired_run_graph_version_mismatch_fails_run(
+async def test_pick_up_next_expired_run_graph_version_mismatch_fails_run(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
@@ -419,7 +419,7 @@ async def test_pick_up_expired_run_graph_version_mismatch_fails_run(
         generate_text_settings=generate_text_settings,
     )
 
-    is_picked_up = await run_pickup_service.pick_up_expired_run()
+    is_picked_up = await run_pickup_service.pick_up_next_expired_run()
 
     await db_session.refresh(run_record)
     assert is_picked_up is True
@@ -428,7 +428,7 @@ async def test_pick_up_expired_run_graph_version_mismatch_fails_run(
     assert run_record.lease_owner is None
 
 
-async def test_pick_up_expired_run_unbuildable_graph_fails_run(
+async def test_pick_up_next_expired_run_unbuildable_graph_fails_run(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
@@ -454,7 +454,7 @@ async def test_pick_up_expired_run_unbuildable_graph_fails_run(
         generate_text_settings=generate_text_settings,
     )
 
-    is_picked_up = await run_pickup_service.pick_up_expired_run()
+    is_picked_up = await run_pickup_service.pick_up_next_expired_run()
 
     await db_session.refresh(run_record)
     assert is_picked_up is True
@@ -462,27 +462,30 @@ async def test_pick_up_expired_run_unbuildable_graph_fails_run(
     assert run_record.error_code == "GenerateTextOptionsInvalidException"
 
 
-async def test_sweep_expired_runs_asks_again_until_no_run_is_picked_up() -> None:
+async def test_pick_up_expired_runs_asks_again_until_no_run_is_picked_up() -> None:
     run_pickup_service_stub = GenerateTextRunPickupServiceStub(
-        run_sweep_interval_seconds=LONG_SWEEP_INTERVAL_SECONDS
+        run_pickup_interval_seconds=LONG_PICKUP_INTERVAL_SECONDS
     )
-    run_pickup_service_stub.pick_up_expired_run_results = [True, True, False]
-    sweep_task = asyncio.create_task(run_pickup_service_stub.sweep_expired_runs())
+    run_pickup_service_stub.pick_up_next_expired_run_results = [True, True, False]
+    pickup_task = asyncio.create_task(run_pickup_service_stub.pick_up_expired_runs())
 
-    await run_pickup_service_stub.pick_up_expired_run_exhausted_event.wait()
+    await run_pickup_service_stub.pick_up_next_expired_run_exhausted_event.wait()
 
-    sweep_task.cancel()
-    await asyncio.gather(sweep_task, return_exceptions=True)
-    assert run_pickup_service_stub.pick_up_expired_run_call_count == 3
+    pickup_task.cancel()
+    await asyncio.gather(pickup_task, return_exceptions=True)
+    assert run_pickup_service_stub.pick_up_next_expired_run_call_count == 3
 
 
-async def test_sweep_expired_runs_failed_sweep_does_not_stop_next_sweep() -> None:
-    run_pickup_service_stub = GenerateTextRunPickupServiceStub(run_sweep_interval_seconds=0)
-    run_pickup_service_stub.pick_up_expired_run_results = [RuntimeError("sweep failed"), False]
-    sweep_task = asyncio.create_task(run_pickup_service_stub.sweep_expired_runs())
+async def test_pick_up_expired_runs_failed_pickup_does_not_stop_next_pickup() -> None:
+    run_pickup_service_stub = GenerateTextRunPickupServiceStub(run_pickup_interval_seconds=0)
+    run_pickup_service_stub.pick_up_next_expired_run_results = [
+        RuntimeError("pickup failed"),
+        False,
+    ]
+    pickup_task = asyncio.create_task(run_pickup_service_stub.pick_up_expired_runs())
 
-    await run_pickup_service_stub.pick_up_expired_run_exhausted_event.wait()
+    await run_pickup_service_stub.pick_up_next_expired_run_exhausted_event.wait()
 
-    sweep_task.cancel()
-    await asyncio.gather(sweep_task, return_exceptions=True)
-    assert run_pickup_service_stub.pick_up_expired_run_call_count == 2
+    pickup_task.cancel()
+    await asyncio.gather(pickup_task, return_exceptions=True)
+    assert run_pickup_service_stub.pick_up_next_expired_run_call_count == 2

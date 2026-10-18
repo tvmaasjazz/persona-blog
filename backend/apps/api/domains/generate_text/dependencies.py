@@ -63,7 +63,7 @@ def build_generate_text_service(app_state: State, llm_service: LlmService) -> Ge
 
 
 def build_generate_text_run_pickup_service(app_state: State) -> GenerateTextRunPickupService:
-    """Built once by lifespan, which runs its sweep for as long as the app does."""
+    """Built once by lifespan, which runs its pickup loop for as long as the app does."""
     app_settings: AppSettings = app_state.settings
     generate_text_run_service = GenerateTextRunService(
         db_session_factory=app_state.db_session_factory

@@ -86,7 +86,7 @@ class GenerateTextRunService:
         self, lease_owner: str, lease_expires_at: datetime
     ) -> ClaimExpiredGenerateTextRunResult | None:
         """Takes the lease on the run whose lease expired longest ago, if any."""
-        # SKIP LOCKED keeps two sweeps from choosing the same row. A NULL lease never
+        # SKIP LOCKED keeps two processes from claiming the same row. A NULL lease never
         # matches, so a run from before leases existed is left alone.
         now = datetime.now(UTC)
         expired_run_id = (

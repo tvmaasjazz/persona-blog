@@ -37,20 +37,20 @@ class GenerateTextRunPickupService:
         self._background_job_service = background_job_service
         self._generate_text_settings = generate_text_settings
 
-    async def sweep_expired_runs(self) -> None:
-        """Picks up every expired run at startup and then every sweep interval, until
+    async def pick_up_expired_runs(self) -> None:
+        """Picks up every expired run at startup and then every pickup interval, until
         cancelled."""
         while True:
             try:
                 is_run_picked_up = True
                 while is_run_picked_up:
-                    is_run_picked_up = await self.pick_up_expired_run()
+                    is_run_picked_up = await self.pick_up_next_expired_run()
             except Exception:
-                # A failed sweep is logged, and the next one tries again
-                logger.exception("run_sweep_failed")
-            await asyncio.sleep(self._generate_text_settings.run_sweep_interval_seconds)
+                # A failed pickup is logged, and the next one tries again
+                logger.exception("run_pickup_failed")
+            await asyncio.sleep(self._generate_text_settings.run_pickup_interval_seconds)
 
-    async def pick_up_expired_run(self) -> bool:
+    async def pick_up_next_expired_run(self) -> bool:
         """Claims one run whose lease expired and fails or continues it. Returns whether
         it claimed a run."""
         # A stopping process takes on no new runs

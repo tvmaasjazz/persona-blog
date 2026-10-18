@@ -2,7 +2,7 @@
 # Text steps put their text under this key.
 STEP_OUTPUT_TEXT_KEY = "text"
 
-# Stored on a run the sweeper claimed while still PENDING: its job never started, so
+# Stored on a run picked up while still PENDING: its job never started, so
 # there is no checkpoint to resume from.
 RUN_NEVER_STARTED_ERROR_CODE = "RunNeverStarted"
 RUN_NEVER_STARTED_ERROR_MESSAGE = "This run never started. Start it again."

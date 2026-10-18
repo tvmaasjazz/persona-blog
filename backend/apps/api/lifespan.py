@@ -84,20 +84,22 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     event_loop_monitor_task = None
     if app_settings.environment is EnvironmentType.DEVELOPMENT:
         event_loop_monitor_task = asyncio.create_task(monitor_event_loop_lag())
-    run_sweep_task = None
+    generate_text_run_pickup_task = None
     if (
         app_settings.environment is not EnvironmentType.TEST
         and fastapi_app.state.graph_checkpointer is not None
     ):
         generate_text_run_pickup_service = build_generate_text_run_pickup_service(fastapi_app.state)
-        run_sweep_task = asyncio.create_task(generate_text_run_pickup_service.sweep_expired_runs())
+        generate_text_run_pickup_task = asyncio.create_task(
+            generate_text_run_pickup_service.pick_up_expired_runs()
+        )
     try:
         yield
     finally:
         # First, so a stopping process never claims a new run.
-        if run_sweep_task is not None:
-            run_sweep_task.cancel()
-            await asyncio.gather(run_sweep_task, return_exceptions=True)
+        if generate_text_run_pickup_task is not None:
+            generate_text_run_pickup_task.cancel()
+            await asyncio.gather(generate_text_run_pickup_task, return_exceptions=True)
         # Before the clients close: a running graph still needs them.
         background_job_service.request_stop()
         await background_job_service.drain(app_settings.background_jobs.shutdown_drain_seconds)

@@ -156,22 +156,22 @@ class GenerateTextRunServiceStub(GenerateTextRunService):
 
 
 class GenerateTextRunPickupServiceStub(GenerateTextRunPickupService):
-    """Overrides pick_up_expired_run only, so a test drives the real sweep loop. The loop
-    reads the sweep interval from the settings the real __init__ would have stored."""
+    """Overrides pick_up_next_expired_run only, so a test drives the real pickup loop."""
 
-    def __init__(self, *, run_sweep_interval_seconds: int) -> None:
+    def __init__(self, *, run_pickup_interval_seconds: int) -> None:
+        # The loop reads the pickup interval from the settings the real __init__ would store
         self._generate_text_settings = GenerateTextSettings(
-            run_sweep_interval_seconds=run_sweep_interval_seconds
+            run_pickup_interval_seconds=run_pickup_interval_seconds
         )
-        self.pick_up_expired_run_call_count = 0
-        self.pick_up_expired_run_results: list[bool | Exception] = []
-        self.pick_up_expired_run_exhausted_event = asyncio.Event()
+        self.pick_up_next_expired_run_call_count = 0
+        self.pick_up_next_expired_run_results: list[bool | Exception] = []
+        self.pick_up_next_expired_run_exhausted_event = asyncio.Event()
 
-    async def pick_up_expired_run(self) -> bool:
-        self.pick_up_expired_run_call_count += 1
-        pick_up_expired_run_result = self.pick_up_expired_run_results.pop(0)
-        if not self.pick_up_expired_run_results:
-            self.pick_up_expired_run_exhausted_event.set()
-        if isinstance(pick_up_expired_run_result, Exception):
-            raise pick_up_expired_run_result
-        return pick_up_expired_run_result
+    async def pick_up_next_expired_run(self) -> bool:
+        self.pick_up_next_expired_run_call_count += 1
+        pick_up_next_expired_run_result = self.pick_up_next_expired_run_results.pop(0)
+        if not self.pick_up_next_expired_run_results:
+            self.pick_up_next_expired_run_exhausted_event.set()
+        if isinstance(pick_up_next_expired_run_result, Exception):
+            raise pick_up_next_expired_run_result
+        return pick_up_next_expired_run_result
