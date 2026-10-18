@@ -103,11 +103,12 @@ async def test_start_run_sets_running_status_and_started_at(
 
     await generate_text_run_service.start_run(create_run_result.id)
 
+    database_utc_now = await fetch_database_utc_now(db_session)
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
     run_record = await db_session.scalar(run_query)
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.RUNNING
-    assert run_record.started_at is not None
+    assert run_record.started_at == database_utc_now
 
 
 async def test_start_run_unknown_run_raises_not_found_exception(
@@ -117,6 +118,15 @@ async def test_start_run_unknown_run_raises_not_found_exception(
 
     with pytest.raises(NotFoundException):
         await generate_text_run_service.start_run(999999)
+
+
+async def test_complete_run_unknown_run_raises_not_found_exception(
+    db_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    with pytest.raises(NotFoundException):
+        await generate_text_run_service.complete_run(999999)
 
 
 async def test_complete_run_sets_completed_status_and_zero_rollup_when_no_calls(
@@ -131,11 +141,12 @@ async def test_complete_run_sets_completed_status_and_zero_rollup_when_no_calls(
 
     await generate_text_run_service.complete_run(create_run_result.id)
 
+    database_utc_now = await fetch_database_utc_now(db_session)
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
     run_record = await db_session.scalar(run_query)
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.COMPLETED
-    assert run_record.finished_at is not None
+    assert run_record.finished_at == database_utc_now
     assert run_record.llm_call_count == 0
     assert run_record.input_tokens == 0
     assert run_record.output_tokens == 0
@@ -211,6 +222,15 @@ async def test_record_awaiting_review_sets_awaiting_review_status_and_rolls_up_c
     assert run_record.cost_usd == Decimal("0.01")
 
 
+async def test_record_awaiting_review_unknown_run_raises_not_found_exception(
+    db_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    with pytest.raises(NotFoundException):
+        await generate_text_run_service.record_awaiting_review(999999)
+
+
 async def test_fail_run_sets_failed_status_error_fields_and_rolls_up_calls(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
@@ -232,13 +252,14 @@ async def test_fail_run_sets_failed_status_error_fields_and_rolls_up_calls(
 
     await generate_text_run_service.fail_run(create_run_result.id, "ValueError", "boom")
 
+    database_utc_now = await fetch_database_utc_now(db_session)
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
     run_record = await db_session.scalar(run_query)
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.FAILED
     assert run_record.error_code == "ValueError"
     assert run_record.error_message == "boom"
-    assert run_record.finished_at is not None
+    assert run_record.finished_at == database_utc_now
     assert run_record.llm_call_count == 1
     assert run_record.input_tokens == 100
     assert run_record.output_tokens == 50
@@ -452,8 +473,7 @@ async def test_create_run_persists_lease(
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.PENDING
     assert run_record.lease_owner == "creator-worker"
-    assert run_record.lease_expires_at is not None
-    assert run_record.lease_expires_at > database_utc_now
+    assert run_record.lease_expires_at == database_utc_now + timedelta(seconds=NEW_LEASE_SECONDS)
 
 
 async def test_renew_lease_owner_returns_true_and_extends_lease(
@@ -538,11 +558,11 @@ async def test_release_lease_owner_expires_lease_and_keeps_status_and_owner(
 
     await generate_text_run_service.release_lease(run_record.id, "owner-worker")
 
+    database_utc_now = await fetch_database_utc_now(db_session)
     await db_session.refresh(run_record)
     assert run_record.status == GenerateTextRunStatusType.RUNNING
     assert run_record.lease_owner == "owner-worker"
-    assert run_record.lease_expires_at is not None
-    assert run_record.lease_expires_at < OLD_LEASE_EXPIRES_AT
+    assert run_record.lease_expires_at == database_utc_now
 
 
 async def test_release_lease_non_owner_changes_nothing(

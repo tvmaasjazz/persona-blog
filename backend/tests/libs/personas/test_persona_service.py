@@ -16,6 +16,7 @@ from libs.personas.results import (
 )
 from libs.personas.services import PersonaService
 from tests.factories.auth import build_auth_user
+from tests.factories.database import fetch_database_utc_now
 from tests.factories.personas import build_persona_input, insert_persona_row
 from tests.factories.users import insert_user_row
 
@@ -465,12 +466,13 @@ async def test_delete_persona_soft_deletes_row(db_session: AsyncSession) -> None
 
     orm_query = select(PersonaOrm).where(PersonaOrm.identity == persona_record.identity)
     orm_result = await db_session.scalar(orm_query)
+    database_utc_now = await fetch_database_utc_now(db_session)
     raw_query = text("SELECT deleted_at, deleted_by_id FROM pb_persona WHERE identity = :identity")
     raw_result = (
         await db_session.execute(raw_query, {"identity": str(persona_record.identity)})
     ).one()
     assert orm_result is None
-    assert raw_result.deleted_at is not None
+    assert raw_result.deleted_at.replace(tzinfo=UTC) == database_utc_now
     assert raw_result.deleted_by_id == auth_user.id
 
 

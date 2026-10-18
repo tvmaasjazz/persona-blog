@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.database.orm import UserOrm
@@ -34,7 +34,7 @@ async def test_base_orm_update_sets_updated_at(db_session: AsyncSession) -> None
     assert persisted_updated_at > datetime(2020, 1, 1, tzinfo=UTC)
 
 
-async def test_base_orm_update_makes_updated_at_readable_after_flush(
+async def test_base_orm_update_statement_sets_updated_at_to_database_now(
     db_session: AsyncSession,
 ) -> None:
     user_record = await insert_user_row(db_session)
@@ -42,10 +42,13 @@ async def test_base_orm_update_makes_updated_at_readable_after_flush(
         text("UPDATE pb_user SET updated_at = '2020-01-01' WHERE id = :user_id"),
         {"user_id": user_record.id},
     )
-    await db_session.refresh(user_record)
+    user_update = (
+        update(UserOrm).where(UserOrm.id == user_record.id).values(display_name="Grace Hopper")
+    )
 
-    user_record.display_name = "Grace Hopper"
-    await db_session.flush()
+    await db_session.execute(user_update)
 
     database_utc_now = await fetch_database_utc_now(db_session)
-    assert user_record.updated_at == database_utc_now
+    updated_at_query = select(UserOrm.updated_at).where(UserOrm.id == user_record.id)
+    persisted_updated_at = await db_session.scalar(updated_at_query)
+    assert persisted_updated_at == database_utc_now
