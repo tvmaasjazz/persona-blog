@@ -1,7 +1,6 @@
-from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import insert, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.auth.results import AuthUser
@@ -9,6 +8,7 @@ from libs.content_items.inputs import CreateContentItemInput, UpdateContentItemI
 from libs.content_items.results import CreateContentItemResult
 from libs.core.exceptions import NotFoundException
 from libs.database.orm import ContentItemOrm, GenerateTextRunOrm
+from libs.database.utils import DatabaseClockUtils
 
 
 class ContentItemService:
@@ -18,25 +18,27 @@ class ContentItemService:
     async def create_content_item(
         self, create_content_item_input: CreateContentItemInput, auth_user: AuthUser
     ) -> CreateContentItemResult:
-        content_item_record = ContentItemOrm(
-            persona_id=create_content_item_input.persona_id,
-            content_type=create_content_item_input.content_type,
-            is_public=create_content_item_input.is_public,
-            published_at=create_content_item_input.published_at,
-            created_by_id=auth_user.id,
-            updated_by_id=auth_user.id,
+        content_item_insert = (
+            insert(ContentItemOrm)
+            .values(
+                persona_id=create_content_item_input.persona_id,
+                content_type=create_content_item_input.content_type,
+                is_public=create_content_item_input.is_public,
+                published_at=create_content_item_input.published_at,
+                created_by_id=auth_user.id,
+                updated_by_id=auth_user.id,
+            )
+            .returning(ContentItemOrm.id, ContentItemOrm.identity)
         )
-        self._db_session.add(content_item_record)
-        await self._db_session.flush()
+        content_item_insert_result = await self._db_session.execute(content_item_insert)
+        content_item_row = content_item_insert_result.one()
 
         if create_content_item_input.generate_text_run_identity is not None:
             await self._link_generate_text_run(
-                content_item_record.id, create_content_item_input.generate_text_run_identity
+                content_item_row.id, create_content_item_input.generate_text_run_identity
             )
 
-        return CreateContentItemResult(
-            id=content_item_record.id, identity=content_item_record.identity
-        )
+        return CreateContentItemResult(id=content_item_row.id, identity=content_item_row.identity)
 
     async def update_content_item(
         self,
@@ -44,38 +46,46 @@ class ContentItemService:
         update_content_item_input: UpdateContentItemInput,
         auth_user: AuthUser,
     ) -> None:
-        content_item_record = await self._find_content_item_record(content_item_id)
-        content_item_record.is_public = update_content_item_input.is_public
-        content_item_record.published_at = update_content_item_input.published_at
-        content_item_record.updated_by_id = auth_user.id
-        await self._db_session.flush()
+        # The where clause is the lookup; a soft-deleted row counts as missing
+        content_item_update = (
+            update(ContentItemOrm)
+            .where(ContentItemOrm.id == content_item_id, ContentItemOrm.deleted_at.is_(None))
+            .values(
+                is_public=update_content_item_input.is_public,
+                published_at=update_content_item_input.published_at,
+                updated_by_id=auth_user.id,
+            )
+        )
+        content_item_update_result = await self._db_session.execute(content_item_update)
+        if content_item_update_result.rowcount == 0:
+            raise NotFoundException("Content item not found")
 
     async def delete_content_item(self, content_item_id: int, auth_user: AuthUser) -> None:
-        content_item_record = await self._find_content_item_record(content_item_id)
-        # TODO(db-clock): the database's now, once this write is an update() statement
-        content_item_record.deleted_at = datetime.now(UTC)
-        content_item_record.deleted_by_id = auth_user.id
-        await self._db_session.flush()
+        # The where clause is the lookup; a soft-deleted row counts as missing
+        content_item_delete = (
+            update(ContentItemOrm)
+            .where(ContentItemOrm.id == content_item_id, ContentItemOrm.deleted_at.is_(None))
+            .values(
+                deleted_at=DatabaseClockUtils.build_utc_now_sql(),
+                deleted_by_id=auth_user.id,
+            )
+        )
+        content_item_delete_result = await self._db_session.execute(content_item_delete)
+        if content_item_delete_result.rowcount == 0:
+            raise NotFoundException("Content item not found")
 
     async def _link_generate_text_run(
         self, content_item_id: int, generate_text_run_identity: UUID
     ) -> None:
-        run_query = select(GenerateTextRunOrm).where(
-            GenerateTextRunOrm.identity == generate_text_run_identity
+        # The where clause is the lookup; a soft-deleted run counts as missing
+        generate_text_run_update = (
+            update(GenerateTextRunOrm)
+            .where(
+                GenerateTextRunOrm.identity == generate_text_run_identity,
+                GenerateTextRunOrm.deleted_at.is_(None),
+            )
+            .values(content_item_id=content_item_id)
         )
-        run_query_result = await self._db_session.execute(run_query)
-        generate_text_run_record = run_query_result.scalar_one_or_none()
-
-        if generate_text_run_record is None:
+        generate_text_run_update_result = await self._db_session.execute(generate_text_run_update)
+        if generate_text_run_update_result.rowcount == 0:
             raise NotFoundException("Generate text run not found")
-        generate_text_run_record.content_item_id = content_item_id
-        await self._db_session.flush()
-
-    async def _find_content_item_record(self, content_item_id: int) -> ContentItemOrm:
-        content_item_query = select(ContentItemOrm).where(ContentItemOrm.id == content_item_id)
-        content_item_query_result = await self._db_session.execute(content_item_query)
-        content_item_record = content_item_query_result.scalar_one_or_none()
-
-        if content_item_record is None:
-            raise NotFoundException("Content item not found")
-        return content_item_record

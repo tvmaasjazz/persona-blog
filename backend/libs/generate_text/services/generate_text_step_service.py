@@ -1,18 +1,19 @@
-from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, null, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
 from libs.database.orm.llm_call import LlmCallOrm
+from libs.database.utils import DatabaseClockUtils
 from libs.generate_text.constants import STEP_OUTPUT_TEXT_KEY
 from libs.generate_text.inputs import CreateGenerateTextStepInput
 from libs.generate_text.results import (
     CreateGenerateTextStepResult,
     FindLatestGenerateTextStepResult,
+    FindLlmCallRollupResult,
 )
 from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionType
 
@@ -38,59 +39,86 @@ class GenerateTextStepService:
                 db_session, run_id, step_name
             )
             if paused_step_record is not None:
-                paused_step_record.status = GenerateTextStepStatusType.RUNNING
-                await db_session.flush()
+                step_resume = (
+                    update(GenerateTextStepOrm)
+                    .where(GenerateTextStepOrm.id == paused_step_record.id)
+                    .values(status=GenerateTextStepStatusType.RUNNING)
+                )
+                await db_session.execute(step_resume)
                 return CreateGenerateTextStepResult(
                     id=paused_step_record.id, identity=paused_step_record.identity
                 )
 
+            # Number the step after the run's last one, and count this name's attempts
             next_step_number = await self._resolve_next_step_number(db_session, run_id)
             next_attempt = await self._resolve_next_attempt(db_session, run_id, step_name)
 
-            step_record = GenerateTextStepOrm(
-                run_id=run_id,
-                step_number=next_step_number,
-                step_name=step_name,
-                attempt=next_attempt,
-                status=GenerateTextStepStatusType.RUNNING,
-                input=create_generate_text_step_input.input,
-                # TODO(db-clock): the database's now, once this write is an insert() statement
-                started_at=datetime.now(UTC),
-                created_by_id=auth_user.id,
-                updated_by_id=auth_user.id,
+            # Insert the step as running
+            step_insert = (
+                insert(GenerateTextStepOrm)
+                .values(
+                    run_id=run_id,
+                    step_number=next_step_number,
+                    step_name=step_name,
+                    attempt=next_attempt,
+                    status=GenerateTextStepStatusType.RUNNING,
+                    input=create_generate_text_step_input.input,
+                    started_at=DatabaseClockUtils.build_utc_now_sql(),
+                    created_by_id=auth_user.id,
+                    updated_by_id=auth_user.id,
+                )
+                .returning(GenerateTextStepOrm.id, GenerateTextStepOrm.identity)
             )
-            db_session.add(step_record)
-            await db_session.flush()
-            step_id = step_record.id
-            step_identity = step_record.identity
+            step_insert_result = await db_session.execute(step_insert)
+            step_id, step_identity = step_insert_result.one()
 
         return CreateGenerateTextStepResult(id=step_id, identity=step_identity)
 
     async def complete_step(self, step_id: int, output: str, duration_ms: int) -> None:
         async with self._db_session_factory() as db_session, db_session.begin():
-            step_record = await self._get_step(db_session, step_id)
-            step_record.status = GenerateTextStepStatusType.SUCCEEDED
-            # A node that produced no text — a review node, say — stores nothing rather than
-            # an empty string, so "the latest output" skips it.
-            step_record.output = {STEP_OUTPUT_TEXT_KEY: output} if output else None
-            step_record.duration_ms = duration_ms
-            # TODO(db-clock): the database's now, once this write is an update() statement
-            step_record.finished_at = datetime.now(UTC)
-            await self._apply_rollup(db_session, step_record)
-            await db_session.flush()
+            # Sum what the step's LLM calls cost
+            llm_call_rollup = await self._find_llm_call_rollup(db_session, step_id)
+
+            # Mark the step succeeded. A node that produced no text — a review node, say —
+            # stores nothing rather than an empty string, so "the latest output" skips it.
+            step_completion = (
+                update(GenerateTextStepOrm)
+                .where(GenerateTextStepOrm.id == step_id)
+                .values(
+                    status=GenerateTextStepStatusType.SUCCEEDED,
+                    # SQL NULL, not JSON null: a None here would store JSON null, which
+                    # the latest-output query's IS NOT NULL doesn't skip
+                    output={STEP_OUTPUT_TEXT_KEY: output} if output else null(),
+                    duration_ms=duration_ms,
+                    finished_at=DatabaseClockUtils.build_utc_now_sql(),
+                    llm_call_count=llm_call_rollup.llm_call_count,
+                    input_tokens=llm_call_rollup.input_tokens,
+                    output_tokens=llm_call_rollup.output_tokens,
+                    cost_usd=llm_call_rollup.cost_usd,
+                )
+            )
+            step_completion_result = await db_session.execute(step_completion)
+            if step_completion_result.rowcount == 0:
+                raise NotFoundException(f"Generate text step {step_id} not found")
 
     async def fail_step(
         self, step_id: int, error_code: str, error_message: str, duration_ms: int
     ) -> None:
+        step_failure = (
+            update(GenerateTextStepOrm)
+            .where(GenerateTextStepOrm.id == step_id)
+            .values(
+                status=GenerateTextStepStatusType.FAILED,
+                error_code=error_code,
+                error_message=error_message,
+                duration_ms=duration_ms,
+                finished_at=DatabaseClockUtils.build_utc_now_sql(),
+            )
+        )
         async with self._db_session_factory() as db_session, db_session.begin():
-            step_record = await self._get_step(db_session, step_id)
-            step_record.status = GenerateTextStepStatusType.FAILED
-            step_record.error_code = error_code
-            step_record.error_message = error_message
-            step_record.duration_ms = duration_ms
-            # TODO(db-clock): the database's now, once this write is an update() statement
-            step_record.finished_at = datetime.now(UTC)
-            await db_session.flush()
+            step_failure_result = await db_session.execute(step_failure)
+            if step_failure_result.rowcount == 0:
+                raise NotFoundException(f"Generate text step {step_id} not found")
 
     async def record_decision(
         self,
@@ -99,15 +127,21 @@ class GenerateTextStepService:
         human_feedback: str | None,
         auth_user: AuthUser,
     ) -> None:
+        step_decision = (
+            update(GenerateTextStepOrm)
+            .where(GenerateTextStepOrm.id == step_id)
+            .values(
+                human_decision=human_decision,
+                human_feedback=human_feedback,
+                decided_by_id=auth_user.id,
+                decided_at=DatabaseClockUtils.build_utc_now_sql(),
+                updated_by_id=auth_user.id,
+            )
+        )
         async with self._db_session_factory() as db_session, db_session.begin():
-            step_record = await self._get_step(db_session, step_id)
-            step_record.human_decision = human_decision
-            step_record.human_feedback = human_feedback
-            step_record.decided_by_id = auth_user.id
-            # TODO(db-clock): the database's now, once this write is an update() statement
-            step_record.decided_at = datetime.now(UTC)
-            step_record.updated_by_id = auth_user.id
-            await db_session.flush()
+            step_decision_result = await db_session.execute(step_decision)
+            if step_decision_result.rowcount == 0:
+                raise NotFoundException(f"Generate text step {step_id} not found")
 
     async def find_awaiting_review_step_id(self, run_id: int) -> int | None:
         """The step a paused run is waiting on, or None when no step is paused."""
@@ -166,33 +200,38 @@ class GenerateTextStepService:
 
     async def record_awaiting_review(self, step_id: int, duration_ms: int) -> None:
         """A review node paused rather than failed: the graph will call it again on resume."""
+        step_pause = (
+            update(GenerateTextStepOrm)
+            .where(GenerateTextStepOrm.id == step_id)
+            .values(
+                status=GenerateTextStepStatusType.AWAITING_REVIEW,
+                duration_ms=duration_ms,
+            )
+        )
         async with self._db_session_factory() as db_session, db_session.begin():
-            step_record = await db_session.get(GenerateTextStepOrm, step_id)
-            if step_record is None:
+            step_pause_result = await db_session.execute(step_pause)
+            if step_pause_result.rowcount == 0:
                 raise NotFoundException(f"Generate text step {step_id} not found")
 
-            step_record.status = GenerateTextStepStatusType.AWAITING_REVIEW
-            step_record.duration_ms = duration_ms
-            await db_session.flush()
-
-    async def _apply_rollup(
-        self, db_session: AsyncSession, step_record: GenerateTextStepOrm
-    ) -> None:
-        """Sums this step's pb_llm_call rows onto the step row itself, run as part of
-        completing a step."""
+    async def _find_llm_call_rollup(
+        self, db_session: AsyncSession, step_id: int
+    ) -> FindLlmCallRollupResult:
+        """Sums this step's pb_llm_call rows."""
         query = select(
             func.count(LlmCallOrm.id),
             func.coalesce(func.sum(LlmCallOrm.input_tokens), 0),
             func.coalesce(func.sum(LlmCallOrm.output_tokens), 0),
             func.coalesce(func.sum(LlmCallOrm.cost_usd), 0),
-        ).where(LlmCallOrm.step_id == step_record.id)
+        ).where(LlmCallOrm.step_id == step_id)
         query_result = await db_session.execute(query)
         llm_call_count, input_tokens, output_tokens, cost_usd = query_result.one()
 
-        step_record.llm_call_count = llm_call_count
-        step_record.input_tokens = input_tokens
-        step_record.output_tokens = output_tokens
-        step_record.cost_usd = Decimal(cost_usd)
+        return FindLlmCallRollupResult(
+            llm_call_count=llm_call_count,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=Decimal(cost_usd),
+        )
 
     async def _resolve_next_step_number(self, db_session: AsyncSession, run_id: int) -> int:
         query = select(func.max(GenerateTextStepOrm.step_number)).where(
@@ -211,9 +250,3 @@ class GenerateTextStepService:
         query_result = await db_session.execute(query)
         existing_count = query_result.scalar_one()
         return existing_count + 1
-
-    async def _get_step(self, db_session: AsyncSession, step_id: int) -> GenerateTextStepOrm:
-        step_record = await db_session.get(GenerateTextStepOrm, step_id)
-        if step_record is None:
-            raise NotFoundException(f"Generate text step {step_id} not found")
-        return step_record

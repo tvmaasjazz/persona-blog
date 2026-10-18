@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.core.exceptions import ConflictException, ForbiddenException, NotFoundException
@@ -78,29 +78,37 @@ class UserService:
         if email_owner_record is not None:
             raise ConflictException("An account with this email already exists")
 
-        user_record = UserOrm(
-            email=find_or_create_user_from_auth_provider_input.email,
-            is_email_verified=find_or_create_user_from_auth_provider_input.is_email_verified,
-            display_name=find_or_create_user_from_auth_provider_input.display_name,
-            avatar_url=find_or_create_user_from_auth_provider_input.avatar_url,
+        user_insert = (
+            insert(UserOrm)
+            .values(
+                email=find_or_create_user_from_auth_provider_input.email,
+                is_email_verified=find_or_create_user_from_auth_provider_input.is_email_verified,
+                display_name=find_or_create_user_from_auth_provider_input.display_name,
+                avatar_url=find_or_create_user_from_auth_provider_input.avatar_url,
+            )
+            .returning(UserOrm.id, UserOrm.identity)
         )
-        self._db_session.add(user_record)
-        await self._db_session.flush()
+        user_insert_result = await self._db_session.execute(user_insert)
+        user_row = user_insert_result.one()
 
-        user_auth_provider_record = UserAuthProviderOrm(
-            user_id=user_record.id,
-            provider=find_or_create_user_from_auth_provider_input.provider,
-            provider_subject=find_or_create_user_from_auth_provider_input.provider_subject,
-            email_at_provider=find_or_create_user_from_auth_provider_input.email,
-            created_by_id=user_record.id,
-            updated_by_id=user_record.id,
+        user_auth_provider_insert = (
+            insert(UserAuthProviderOrm)
+            .values(
+                user_id=user_row.id,
+                provider=find_or_create_user_from_auth_provider_input.provider,
+                provider_subject=find_or_create_user_from_auth_provider_input.provider_subject,
+                email_at_provider=find_or_create_user_from_auth_provider_input.email,
+                created_by_id=user_row.id,
+                updated_by_id=user_row.id,
+            )
+            .returning(UserAuthProviderOrm.id)
         )
-        self._db_session.add(user_auth_provider_record)
-        await self._db_session.flush()
+        user_auth_provider_insert_result = await self._db_session.execute(user_auth_provider_insert)
+        user_auth_provider_id = user_auth_provider_insert_result.scalar_one()
 
         return FindOrCreateUserFromAuthProviderResult(
-            id=user_record.id,
-            identity=user_record.identity,
-            user_auth_provider_id=user_auth_provider_record.id,
+            id=user_row.id,
+            identity=user_row.identity,
+            user_auth_provider_id=user_auth_provider_id,
             is_new_user=True,
         )

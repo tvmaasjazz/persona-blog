@@ -1,12 +1,12 @@
-from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.database.orm import PersonaOrm
+from libs.database.utils import DatabaseClockUtils
 from libs.personas.inputs import PersonaInput
 from libs.personas.results import (
     CreatePersonaResult,
@@ -23,23 +23,27 @@ class PersonaService:
     async def create_persona(
         self, persona_input: PersonaInput, auth_user: AuthUser
     ) -> CreatePersonaResult:
-        persona_record = PersonaOrm(
-            name=persona_input.name,
-            bio=persona_input.bio,
-            avatar_url=persona_input.avatar_url,
-            background=persona_input.background,
-            writing_style=persona_input.writing_style,
-            default_tone=persona_input.default_tone,
-            default_target_audience=persona_input.default_target_audience,
-            sample_writing=persona_input.sample_writing,
-            is_public=persona_input.is_public,
-            created_by_id=auth_user.id,
-            updated_by_id=auth_user.id,
+        persona_insert = (
+            insert(PersonaOrm)
+            .values(
+                name=persona_input.name,
+                bio=persona_input.bio,
+                avatar_url=persona_input.avatar_url,
+                background=persona_input.background,
+                writing_style=persona_input.writing_style,
+                default_tone=persona_input.default_tone,
+                default_target_audience=persona_input.default_target_audience,
+                sample_writing=persona_input.sample_writing,
+                is_public=persona_input.is_public,
+                created_by_id=auth_user.id,
+                updated_by_id=auth_user.id,
+            )
+            .returning(PersonaOrm.identity)
         )
-        self._db_session.add(persona_record)
-        await self._db_session.flush()
+        persona_insert_result = await self._db_session.execute(persona_insert)
+        persona_identity = persona_insert_result.scalar_one()
 
-        return CreatePersonaResult(identity=persona_record.identity)
+        return CreatePersonaResult(identity=persona_identity)
 
     async def find_persona(
         self, persona_identity: UUID, auth_user: AuthUser
@@ -83,24 +87,35 @@ class PersonaService:
         self, persona_identity: UUID, persona_input: PersonaInput, auth_user: AuthUser
     ) -> None:
         persona_record = await self._find_owned_persona_record(persona_identity, auth_user)
-        persona_record.name = persona_input.name
-        persona_record.bio = persona_input.bio
-        persona_record.avatar_url = persona_input.avatar_url
-        persona_record.background = persona_input.background
-        persona_record.writing_style = persona_input.writing_style
-        persona_record.default_tone = persona_input.default_tone
-        persona_record.default_target_audience = persona_input.default_target_audience
-        persona_record.sample_writing = persona_input.sample_writing
-        persona_record.is_public = persona_input.is_public
-        persona_record.updated_by_id = auth_user.id
-        await self._db_session.flush()
+        persona_update = (
+            update(PersonaOrm)
+            .where(PersonaOrm.id == persona_record.id)
+            .values(
+                name=persona_input.name,
+                bio=persona_input.bio,
+                avatar_url=persona_input.avatar_url,
+                background=persona_input.background,
+                writing_style=persona_input.writing_style,
+                default_tone=persona_input.default_tone,
+                default_target_audience=persona_input.default_target_audience,
+                sample_writing=persona_input.sample_writing,
+                is_public=persona_input.is_public,
+                updated_by_id=auth_user.id,
+            )
+        )
+        await self._db_session.execute(persona_update)
 
     async def delete_persona(self, persona_identity: UUID, auth_user: AuthUser) -> None:
         persona_record = await self._find_owned_persona_record(persona_identity, auth_user)
-        # TODO(db-clock): the database's now, once this write is an update() statement
-        persona_record.deleted_at = datetime.now(UTC)
-        persona_record.deleted_by_id = auth_user.id
-        await self._db_session.flush()
+        persona_delete = (
+            update(PersonaOrm)
+            .where(PersonaOrm.id == persona_record.id)
+            .values(
+                deleted_at=DatabaseClockUtils.build_utc_now_sql(),
+                deleted_by_id=auth_user.id,
+            )
+        )
+        await self._db_session.execute(persona_delete)
 
     async def _find_accessible_persona_record(
         self, persona_identity: UUID, auth_user: AuthUser
