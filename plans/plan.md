@@ -469,6 +469,28 @@ A follow-up PR, after polling lands.
 - **Instant handoff** stays the next PR. Until then, a released run waits for the next
   pickup, up to 30s.
 
+**Decided for the handoff PR:**
+
+- **A Redis list, not a stream.** The stopping process `RPUSH`es the run id once its
+  release has saved, and each live process waits on `BLPOP`. Each message reaches one
+  listener, and messages wait in the list when nobody is listening.
+- **The message is only a wake-up.** A listener that receives one runs one pickup,
+  which claims whichever run expired longest ago. The database claim stays the lock.
+- **No acknowledgements.** A message is lost if Redis is down when it's sent, or if a
+  listener dies between taking it and saving its claim, a few milliseconds. The 30s
+  pickup loop stays and catches both. A stream with a consumer group (`XREADGROUP`,
+  `XACK`, `XAUTOCLAIM`) would recover the second case on the same 30s schedule, so its
+  guarantees would only duplicate the run row's lease and `pickup_count`.
+- **Revisit with a proper queue** if generation moves out of the API into a worker
+  app. The queue message would then start the run and be the only record of it, so it
+  needs acknowledgements and redelivery.
+- **Only a released run is handed off:** one stopped between steps at shutdown, or
+  cancelled at the drain deadline while still holding its lease. A paused, finished or
+  failed run, a lease lost to another process, and a crashed process send nothing.
+- **The database clock** sets a released lease's expiry and judges whether a lease has
+  expired, so a listener whose clock runs behind the releaser's still sees the run as
+  expired.
+
 A run can take minutes, longer than any deploy should wait. So a stopping process
 finishes the node it's on, saves, and hands the rest of the run to a live process.
 No run is lost, and at most one node is redone.
@@ -511,7 +533,7 @@ No run is lost, and at most one node is redone.
 - [ ] A run whose resume keeps failing after a few pick-ups is marked `FAILED`, so a
   poisoned run can't loop forever
 - [ ] **Instant handoff** (a follow-up after the lease PR). A stopping process that
-  releases a run mid-way pushes its identity onto a Redis list. Each live worker waits
+  releases a run mid-way pushes its id onto a Redis list. Each live worker waits
   on that list (`BLPOP`) and claims the run at once, so the user doesn't wait for the
   next pickup. The database claim stays the lock and the pickup loop stays the backup: a
   duplicate or stale message claims nothing. A stopping worker stops reading the list
