@@ -290,6 +290,24 @@ A route that needs something from the layout says so in its `handle`, typed as
 - Import from `src/` with the `@/` alias. Use relative imports only within a
   feature's own folder.
 
+## Comments
+
+- A comment on a component, hook or function is one plain sentence saying what it
+  does, never a paragraph, and only when its name doesn't already say it. A reason, a
+  constraint or a trap goes in a comment beside the line it concerns.
+- A function or component with several steps gets a short comment above each block
+  saying what the block does, so its steps read from the comments alone, without
+  reading the code:
+
+```tsx
+async function handleSubmit(personaFormValues: PersonaFormValues) {
+  // Save the persona
+  ...
+  // Confirm, then go to its page
+  ...
+}
+```
+
 ## Formatting
 
 oxfmt formats every file, `components/ui/` included, with the settings in

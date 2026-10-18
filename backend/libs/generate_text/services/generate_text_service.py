@@ -1,4 +1,4 @@
-import asyncio
+from contextlib import aclosing
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -11,7 +11,6 @@ from pydantic import BaseModel
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.core.services import BackgroundJobService
-from libs.generate_text.constants import SERVER_SHUTDOWN_ERROR_CODE, SERVER_SHUTDOWN_ERROR_MESSAGE
 from libs.generate_text.exceptions import (
     GenerateTextRunNotPausedException,
     GenerateTextRunVersionMismatchException,
@@ -21,7 +20,14 @@ from libs.generate_text.inputs import (
     GenerateTextInput,
     ResumeGenerateTextInput,
 )
-from libs.generate_text.results import FindGenerateTextRunByIdentityResult, GenerateTextRunResult
+from libs.generate_text.results import (
+    ClaimExpiredGenerateTextRunResult,
+    FindGenerateTextRunByIdentityResult,
+    GenerateTextRunResult,
+)
+from libs.generate_text.services.generate_text_run_lease_service import (
+    GenerateTextRunLeaseService,
+)
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
 from libs.generate_text.settings import GenerateTextSettings
@@ -39,15 +45,14 @@ if TYPE_CHECKING:
 
 
 class GenerateTextService:
-    """Starts and resumes generate-text runs. Owns the graph's lifecycle: it asks the
-    registry for the run's builder, runs the graph on the run's own identity as the
-    LangGraph thread id, reads the snapshot, and maps it to a Result."""
+    """Starts, resumes and continues generate-text runs, each as a background job."""
 
     def __init__(
         self,
         graph_builder_registry: GenerateTextGraphBuilderRegistry,
         run_service: GenerateTextRunService,
         step_service: GenerateTextStepService,
+        lease_service: GenerateTextRunLeaseService,
         checkpointer: BaseCheckpointSaver,
         background_job_service: BackgroundJobService,
         generate_text_settings: GenerateTextSettings,
@@ -55,6 +60,7 @@ class GenerateTextService:
         self._graph_builder_registry = graph_builder_registry
         self._run_service = run_service
         self._step_service = step_service
+        self._lease_service = lease_service
         self._checkpointer = checkpointer
         self._background_job_service = background_job_service
         self._generate_text_settings = generate_text_settings
@@ -79,6 +85,8 @@ class GenerateTextService:
             target_audience=generate_text_input.target_audience,
             additional_context=generate_text_input.additional_context,
             options=options_dict,
+            lease_owner=self._lease_service.worker_id,
+            lease_expires_at=self._lease_service.build_lease_expires_at(),
         )
         # Built before the row exists, so bad options fail with nothing left behind.
         generate_text_graph = graph_builder.build_graph(options_dict, self._checkpointer)
@@ -150,7 +158,7 @@ class GenerateTextService:
         generate_text_graph = graph_builder.build_graph(find_run_result.options, self._checkpointer)
         graph_run_config = {"configurable": {"thread_id": str(run_identity)}}
 
-        is_claimed = await self._run_service.claim_paused_run(find_run_result.id)
+        is_claimed = await self._lease_service.claim_paused_run(find_run_result.id)
         if not is_claimed:
             raise GenerateTextRunNotPausedException(
                 f"Generate text run {run_identity} is not awaiting review"
@@ -214,6 +222,48 @@ class GenerateTextService:
             datetime.now(UTC),
         )
 
+    async def continue_generate_text(
+        self, claim_expired_run_result: ClaimExpiredGenerateTextRunResult
+    ) -> None:
+        """Continues a picked-up run from its last checkpoint as a background job."""
+        # Fail a run built on a graph version that no longer exists
+        run_id = claim_expired_run_result.id
+        graph_builder = self._graph_builder_registry.get_by_text_type(
+            claim_expired_run_result.text_type
+        )
+        if claim_expired_run_result.graph_version != graph_builder.graph_version:
+            await self._run_service.fail_run(
+                run_id,
+                GenerateTextRunVersionMismatchException.__name__,
+                f"Generate text run {claim_expired_run_result.identity} was built on graph "
+                f"version {claim_expired_run_result.graph_version}, "
+                f"not the current {graph_builder.graph_version}",
+            )
+            return
+
+        # Build the graph, failing the run if its options no longer build one
+        try:
+            generate_text_graph = graph_builder.build_graph(
+                claim_expired_run_result.options, self._checkpointer
+            )
+        except Exception as build_graph_exception:
+            await self._run_service.fail_run(
+                run_id, type(build_graph_exception).__name__, str(build_graph_exception)
+            )
+            return
+
+        # Start the graph with no input, so it continues from its last checkpoint
+        graph_run_config = {"configurable": {"thread_id": str(claim_expired_run_result.identity)}}
+        self._background_job_service.start(
+            self._run_graph_in_background(
+                generate_text_graph,
+                None,
+                graph_run_config,
+                run_id,
+                should_start_run=False,
+            )
+        )
+
     async def _run_graph_in_background(
         self,
         generate_text_graph: CompiledStateGraph,
@@ -222,43 +272,50 @@ class GenerateTextService:
         run_id: int,
         should_start_run: bool,
     ) -> None:
-        """Runs as a background job, so nothing here may use the request's resources.
-        A failure is recorded on the run and re-raised for BackgroundJobService to log; a
-        cancellation means the process is shutting down."""
+        """Runs the graph under the run's lease, then records how the run ended."""
         try:
-            if should_start_run:
-                await self._run_service.start_run(run_id)
-            await self._invoke_graph(generate_text_graph, graph_input, graph_run_config, run_id)
+            # Run the graph while the lease is kept alive
+            async with self._lease_service.keep_lease_alive(run_id):
+                if should_start_run:
+                    await self._run_service.start_run(run_id)
+                is_stopped = await self._stream_graph(
+                    generate_text_graph, graph_input, graph_run_config
+                )
+
+            # Hand a stopped run to another process
+            if is_stopped:
+                await self._lease_service.release_lease(run_id)
+                return
+
+            # Record whether the run completed or paused for review
             state_snapshot = await generate_text_graph.aget_state(graph_run_config)
             await self._finish(run_id, state_snapshot)
-        except asyncio.CancelledError:
-            await self._run_service.fail_run(
-                run_id, SERVER_SHUTDOWN_ERROR_CODE, SERVER_SHUTDOWN_ERROR_MESSAGE
-            )
-            raise
         except Exception as background_exception:
+            # A node's failure is already on its step, and the first failure recorded wins
             await self._run_service.fail_run(
                 run_id, type(background_exception).__name__, str(background_exception)
             )
             raise
 
-    async def _invoke_graph(
+    async def _stream_graph(
         self,
         generate_text_graph: CompiledStateGraph,
         graph_input: object,
         graph_run_config: dict[str, object],
-        run_id: int,
-    ) -> None:
-        """A node's failure is already recorded by the instrumentation wrapper, which then
-        re-raises. Anything else that breaks — the checkpointer, the graph itself — has no
-        step to own it, so the run is failed here rather than left RUNNING forever."""
-        try:
-            await generate_text_graph.ainvoke(graph_input, graph_run_config)
-        except Exception as graph_exception:
-            await self._run_service.fail_run(
-                run_id, type(graph_exception).__name__, str(graph_exception)
-            )
-            raise
+    ) -> bool:
+        """Runs the graph one step at a time. Returns True when it stopped early because
+        the process is shutting down."""
+        # Each step is saved to the checkpointer before its update arrives here
+        graph_stream = generate_text_graph.astream(
+            graph_input, graph_run_config, stream_mode="updates", durability="sync"
+        )
+
+        # Check for shutdown between steps; closing the stream starts no further step
+        async with aclosing(graph_stream):
+            async for _ in graph_stream:
+                if self._background_job_service.is_stopping:
+                    return True
+        return False
 
     async def _finish(self, run_id: int, state_snapshot: StateSnapshot) -> None:
         if state_snapshot.next:

@@ -10,15 +10,31 @@ logger = structlog.get_logger(__name__)
 class BackgroundJobService:
     """Runs background jobs: work that outlives the request that started it, such as a
     graph run. Each job is an asyncio task on this process's event loop. Python only keeps
-    a weak reference to a running task, so this holds a strong one until the job is done."""
+    a weak reference to a running task, so this holds a strong one until the job is done.
 
-    def __init__(self) -> None:
+    worker_id names this process, so a job can lease its work under it."""
+
+    def __init__(self, worker_id: str) -> None:
+        self._worker_id = worker_id
+        self._is_stopping = False
         self._running_job_tasks: set[asyncio.Task[Any]] = set()
+
+    @property
+    def worker_id(self) -> str:
+        return self._worker_id
+
+    @property
+    def is_stopping(self) -> bool:
+        return self._is_stopping
 
     def start(self, job_coroutine: Coroutine[Any, Any, object]) -> None:
         job_task = asyncio.create_task(job_coroutine)
         self._running_job_tasks.add(job_task)
         job_task.add_done_callback(self._handle_job_done)
+
+    def request_stop(self) -> None:
+        """Tells running jobs to stop at their next safe point."""
+        self._is_stopping = True
 
     async def drain(self, timeout_seconds: float) -> None:
         """Waits for the running jobs up to the timeout, then cancels what is left and

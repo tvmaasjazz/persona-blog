@@ -445,6 +445,30 @@ The run only stays cheap and non-blocking if every step in it is async, end to e
 
 A follow-up PR, after polling lands.
 
+**Decided for the lease PR:**
+
+- **Created leased.** A run is inserted with its creator's lease, so the pickup loop never
+  takes a run whose job is about to start. A run claimed for resume takes the lease in
+  the same update. Pausing, completing or failing clears it.
+- **Stop between steps.** On shutdown, each job finishes the step it's on, LLM call
+  included, then stops before the next one and releases the run. The drain deadline
+  (`BACKGROUND_JOBS__SHUTDOWN_DRAIN_SECONDS`) rises from 30 to 150, above STRONG's 120s
+  timeout, so a step always has time to finish.
+- **Deadline as a safety net.** A job still running at the deadline (something hung) is
+  cancelled and its run released, not failed. Another instance redoes that step from
+  the last checkpoint.
+- **Orphaned start.** A `PENDING` run whose lease expires never started, so it has no
+  checkpoint to resume from. The pickup loop marks it `FAILED`; the run page offers Try
+  again.
+- **A lost resume.** If a process dies after claiming a resume but before the graph
+  takes the decision, the checkpoint is still at the interrupt. The picked-up run pauses
+  for review again; the decision is already saved on the step, and the user approves
+  again.
+- **Timings,** as `GenerateTextSettings`: lease 60s, heartbeat 15s, pickup every 30s,
+  and a run picked up more than 3 times is marked `FAILED`.
+- **Instant handoff** stays the next PR. Until then, a released run waits for the next
+  pickup, up to 30s.
+
 A run can take minutes, longer than any deploy should wait. So a stopping process
 finishes the node it's on, saves, and hands the rest of the run to a live process.
 No run is lost, and at most one node is redone.
@@ -477,7 +501,7 @@ No run is lost, and at most one node is redone.
 - [x] **Bounded wait.** Shutdown waits for the jobs with a deadline shorter than
   `drainingSeconds`, then cancels what's left. A cancelled job's node is lost, but
   its last checkpoint isn't
-- [ ] **Pick-up.** A sweeper, on startup and every ~30s, claims `RUNNING` runs whose
+- [ ] **Pick-up.** A pickup loop, on startup and every ~30s, claims `RUNNING` runs whose
   lease has expired (`FOR UPDATE SKIP LOCKED`, so two workers or replicas never claim
   the same run) and resumes each from its checkpoint (`ainvoke(None, config)`). This
   also covers a crash or a `SIGKILL`: the lease runs out and another process picks the
@@ -489,9 +513,12 @@ No run is lost, and at most one node is redone.
 - [ ] **Instant handoff** (a follow-up after the lease PR). A stopping process that
   releases a run mid-way pushes its identity onto a Redis list. Each live worker waits
   on that list (`BLPOP`) and claims the run at once, so the user doesn't wait for the
-  next sweep. The database claim stays the lock and the sweeper stays the backup: a
+  next pickup. The database claim stays the lock and the pickup loop stays the backup: a
   duplicate or stale message claims nothing. A stopping worker stops reading the list
   before it releases its own runs
+- [ ] **Comment cleanup** (the PR after instant handoff). Bring existing backend and
+  frontend code in line with the comment rules: one-sentence docstrings, and a short
+  comment above each block of a multi-step function
 
 **Railway and granian settings:**
 

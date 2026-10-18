@@ -71,7 +71,7 @@ compose needs to be running. Don't work around it.
 
 ## How to work
 
-- Apply the rules; don't restate them in comments.
+- Apply the rules. Don't copy rule text into comments.
 - The SQL is the source of truth for names. Copy every constraint and index name from
   the SQL into the Orm class exactly.
 - When the drift check reports a difference, work out which side is wrong before

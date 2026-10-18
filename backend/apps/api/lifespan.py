@@ -1,4 +1,7 @@
 import asyncio
+import os
+import secrets
+import socket
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -10,13 +13,27 @@ from openai import AsyncOpenAI
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from apps.api.core.config import AppSettings
 from apps.api.core.event_loop_monitor import monitor_event_loop_lag
 from apps.api.core.logging import configure_logging
 from apps.api.core.types import EnvironmentType
+from apps.api.domains.generate_text.dependencies import build_generate_text_run_pickup_service
 from libs.core.services import BackgroundJobService
 from libs.database.session import create_db_session_factory
 
 logger = structlog.get_logger(__name__)
+
+WORKER_ID_SUFFIX_BYTES = 2
+WORKER_ID_REPLICA_LENGTH = 8
+
+
+def build_worker_id(app_settings: AppSettings) -> str:
+    """Names this process by where it runs, its PID and a random suffix."""
+    # The suffix keeps a restarted process that reuses a PID from matching the lease its
+    # predecessor held
+    host_name = app_settings.railway_replica_id or socket.gethostname()
+    random_suffix = secrets.token_hex(WORKER_ID_SUFFIX_BYTES)
+    return f"{host_name[:WORKER_ID_REPLICA_LENGTH]}-pid{os.getpid()}-{random_suffix}"
 
 
 @asynccontextmanager
@@ -27,7 +44,7 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     redis_client = Redis.from_url(app_settings.redis_url)
     http_client = AsyncClient()
     openai_client = AsyncOpenAI(api_key=app_settings.openai_api_key, max_retries=0)
-    background_job_service = BackgroundJobService()
+    background_job_service = BackgroundJobService(worker_id=build_worker_id(app_settings))
     fastapi_app.state.background_job_service = background_job_service
     fastapi_app.state.db_engine = db_engine
     fastapi_app.state.db_session_factory = create_db_session_factory(db_engine)
@@ -67,10 +84,24 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     event_loop_monitor_task = None
     if app_settings.environment is EnvironmentType.DEVELOPMENT:
         event_loop_monitor_task = asyncio.create_task(monitor_event_loop_lag())
+    generate_text_run_pickup_task = None
+    if (
+        app_settings.environment is not EnvironmentType.TEST
+        and fastapi_app.state.graph_checkpointer is not None
+    ):
+        generate_text_run_pickup_service = build_generate_text_run_pickup_service(fastapi_app.state)
+        generate_text_run_pickup_task = asyncio.create_task(
+            generate_text_run_pickup_service.pick_up_expired_runs()
+        )
     try:
         yield
     finally:
+        # First, so a stopping process never claims a new run.
+        if generate_text_run_pickup_task is not None:
+            generate_text_run_pickup_task.cancel()
+            await asyncio.gather(generate_text_run_pickup_task, return_exceptions=True)
         # Before the clients close: a running graph still needs them.
+        background_job_service.request_stop()
         await background_job_service.drain(app_settings.background_jobs.shutdown_drain_seconds)
         if event_loop_monitor_task is not None:
             event_loop_monitor_task.cancel()

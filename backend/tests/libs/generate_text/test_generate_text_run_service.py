@@ -3,13 +3,16 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
-from libs.generate_text.results import FindGenerateTextRunByIdentityResult
+from libs.generate_text.results import (
+    ClaimExpiredGenerateTextRunResult,
+    FindGenerateTextRunByIdentityResult,
+)
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.types import GenerateTextRunStatusType, TextType
 from tests.factories.auth import build_auth_user
@@ -20,6 +23,10 @@ from tests.factories.generate_text import (
 from tests.factories.llm import insert_llm_call_row
 from tests.factories.personas import insert_persona_row
 from tests.factories.users import insert_user_row
+
+EXPIRED_LEASE_EXPIRES_AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+NEW_LEASE_EXPIRES_AT = datetime(2098, 1, 2, 3, 4, 5, tzinfo=UTC)
+OLD_LEASE_EXPIRES_AT = datetime(2099, 1, 2, 3, 4, 5, tzinfo=UTC)
 
 
 async def _insert_auth_user(db_session: AsyncSession) -> AuthUser:
@@ -364,11 +371,15 @@ async def test_claim_paused_run_awaiting_review_returns_true_and_sets_running(
     await db_session.commit()
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
-    is_claimed = await generate_text_run_service.claim_paused_run(run_record.id)
+    is_claimed = await generate_text_run_service.claim_paused_run(
+        run_record.id, "new-worker", NEW_LEASE_EXPIRES_AT
+    )
 
     await db_session.refresh(run_record)
     assert is_claimed is True
     assert run_record.status == GenerateTextRunStatusType.RUNNING
+    assert run_record.lease_owner == "new-worker"
+    assert run_record.lease_expires_at == NEW_LEASE_EXPIRES_AT
 
 
 async def test_claim_paused_run_already_claimed_returns_false(
@@ -380,9 +391,13 @@ async def test_claim_paused_run_already_claimed_returns_false(
     )
     await db_session.commit()
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    await generate_text_run_service.claim_paused_run(run_record.id)
+    await generate_text_run_service.claim_paused_run(
+        run_record.id, "new-worker", NEW_LEASE_EXPIRES_AT
+    )
 
-    is_claimed = await generate_text_run_service.claim_paused_run(run_record.id)
+    is_claimed = await generate_text_run_service.claim_paused_run(
+        run_record.id, "new-worker", NEW_LEASE_EXPIRES_AT
+    )
 
     assert is_claimed is False
 
@@ -408,8 +423,426 @@ async def test_claim_paused_run_not_awaiting_review_returns_false_and_keeps_stat
     await db_session.commit()
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
-    is_claimed = await generate_text_run_service.claim_paused_run(run_record.id)
+    is_claimed = await generate_text_run_service.claim_paused_run(
+        run_record.id, "new-worker", NEW_LEASE_EXPIRES_AT
+    )
 
     await db_session.refresh(run_record)
     assert is_claimed is False
     assert run_record.status == run_status
+
+
+async def test_create_run_persists_lease(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    create_generate_text_run_input = build_create_generate_text_run_input(
+        persona_id=persona_id, lease_owner="creator-worker", lease_expires_at=NEW_LEASE_EXPIRES_AT
+    )
+
+    create_run_result = await generate_text_run_service.create_run(
+        create_generate_text_run_input, auth_user
+    )
+
+    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
+    run_record = await db_session.scalar(run_query)
+    assert run_record is not None
+    assert run_record.status == GenerateTextRunStatusType.PENDING
+    assert run_record.lease_owner == "creator-worker"
+    assert run_record.lease_expires_at == NEW_LEASE_EXPIRES_AT
+
+
+async def test_renew_lease_owner_returns_true_and_extends_lease(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="owner-worker",
+        lease_expires_at=OLD_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    is_renewed = await generate_text_run_service.renew_lease(
+        run_record.id, "owner-worker", NEW_LEASE_EXPIRES_AT
+    )
+
+    await db_session.refresh(run_record)
+    assert is_renewed is True
+    assert run_record.lease_owner == "owner-worker"
+    assert run_record.lease_expires_at == NEW_LEASE_EXPIRES_AT
+
+
+async def test_renew_lease_non_owner_returns_false_and_keeps_lease(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="owner-worker",
+        lease_expires_at=OLD_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    is_renewed = await generate_text_run_service.renew_lease(
+        run_record.id, "other-worker", NEW_LEASE_EXPIRES_AT
+    )
+
+    await db_session.refresh(run_record)
+    assert is_renewed is False
+    assert run_record.lease_owner == "owner-worker"
+    assert run_record.lease_expires_at == OLD_LEASE_EXPIRES_AT
+
+
+async def test_renew_lease_cleared_lease_returns_false(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.COMPLETED
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    is_renewed = await generate_text_run_service.renew_lease(
+        run_record.id, "owner-worker", NEW_LEASE_EXPIRES_AT
+    )
+
+    assert is_renewed is False
+
+
+async def test_release_lease_owner_expires_lease_and_keeps_status_and_owner(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="owner-worker",
+        lease_expires_at=OLD_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.release_lease(run_record.id, "owner-worker")
+
+    await db_session.refresh(run_record)
+    assert run_record.status == GenerateTextRunStatusType.RUNNING
+    assert run_record.lease_owner == "owner-worker"
+    assert run_record.lease_expires_at is not None
+    assert run_record.lease_expires_at < OLD_LEASE_EXPIRES_AT
+
+
+async def test_release_lease_non_owner_changes_nothing(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="owner-worker",
+        lease_expires_at=OLD_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.release_lease(run_record.id, "other-worker")
+
+    await db_session.refresh(run_record)
+    assert run_record.status == GenerateTextRunStatusType.RUNNING
+    assert run_record.lease_owner == "owner-worker"
+    assert run_record.lease_expires_at == OLD_LEASE_EXPIRES_AT
+
+
+async def test_complete_run_clears_lease(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="owner-worker",
+        lease_expires_at=OLD_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.complete_run(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert run_record.lease_owner is None
+    assert run_record.lease_expires_at is None
+
+
+async def test_record_awaiting_review_clears_lease(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="owner-worker",
+        lease_expires_at=OLD_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.record_awaiting_review(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert run_record.lease_owner is None
+    assert run_record.lease_expires_at is None
+
+
+async def test_fail_run_clears_lease(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="owner-worker",
+        lease_expires_at=OLD_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.fail_run(run_record.id, "RuntimeError", "boom")
+
+    await db_session.refresh(run_record)
+    assert run_record.lease_owner is None
+    assert run_record.lease_expires_at is None
+
+
+@pytest.mark.parametrize(
+    "run_status",
+    [
+        pytest.param(GenerateTextRunStatusType.PENDING, id="pending"),
+        pytest.param(GenerateTextRunStatusType.RUNNING, id="running"),
+    ],
+)
+async def test_claim_expired_run_expired_lease_returns_result_and_takes_lease(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    run_status: GenerateTextRunStatusType,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        graph_version="2026-09-24.1",
+        status=run_status,
+        options={"draft": {"is_enabled": True}},
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+        pickup_count=2,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    claim_expired_run_result = await generate_text_run_service.claim_expired_run(
+        "new-worker", NEW_LEASE_EXPIRES_AT
+    )
+
+    await db_session.refresh(run_record)
+    assert claim_expired_run_result == ClaimExpiredGenerateTextRunResult(
+        id=run_record.id,
+        identity=run_record.identity,
+        status=run_status,
+        pickup_count=3,
+        text_type=TextType.BLOG_POST,
+        graph_version="2026-09-24.1",
+        options={"draft": {"is_enabled": True}},
+        created_by_id=auth_user.id,
+    )
+    assert run_record.status == run_status
+    assert run_record.lease_owner == "new-worker"
+    assert run_record.lease_expires_at == NEW_LEASE_EXPIRES_AT
+    assert run_record.pickup_count == 3
+
+
+async def test_claim_expired_run_picks_oldest_expired_lease_only(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    newer_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=datetime(2026, 1, 3, tzinfo=UTC),
+    )
+    oldest_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    middle_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    claim_expired_run_result = await generate_text_run_service.claim_expired_run(
+        "new-worker", NEW_LEASE_EXPIRES_AT
+    )
+
+    await db_session.refresh(newer_run_record)
+    await db_session.refresh(middle_run_record)
+    assert claim_expired_run_result is not None
+    assert claim_expired_run_result.id == oldest_run_record.id
+    assert newer_run_record.pickup_count == 0
+    assert middle_run_record.pickup_count == 0
+
+
+async def test_claim_expired_run_claimed_run_is_not_claimed_again(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    await generate_text_run_service.claim_expired_run("first-worker", NEW_LEASE_EXPIRES_AT)
+
+    second_claim_result = await generate_text_run_service.claim_expired_run(
+        "second-worker", NEW_LEASE_EXPIRES_AT
+    )
+
+    assert second_claim_result is None
+
+
+async def test_claim_expired_run_nothing_in_table_returns_none(
+    db_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    claim_expired_run_result = await generate_text_run_service.claim_expired_run(
+        "new-worker", NEW_LEASE_EXPIRES_AT
+    )
+
+    assert claim_expired_run_result is None
+
+
+@pytest.mark.parametrize(
+    "run_status",
+    [
+        pytest.param(GenerateTextRunStatusType.AWAITING_REVIEW, id="awaiting_review"),
+        pytest.param(GenerateTextRunStatusType.COMPLETED, id="completed"),
+        pytest.param(GenerateTextRunStatusType.FAILED, id="failed"),
+    ],
+)
+async def test_claim_expired_run_settled_status_returns_none_and_keeps_run(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    run_status: GenerateTextRunStatusType,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=run_status,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    claim_expired_run_result = await generate_text_run_service.claim_expired_run(
+        "new-worker", NEW_LEASE_EXPIRES_AT
+    )
+
+    await db_session.refresh(run_record)
+    assert claim_expired_run_result is None
+    assert run_record.lease_owner == "dead-worker"
+    assert run_record.pickup_count == 0
+
+
+async def test_claim_expired_run_null_lease_returns_none(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.RUNNING
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    claim_expired_run_result = await generate_text_run_service.claim_expired_run(
+        "new-worker", NEW_LEASE_EXPIRES_AT
+    )
+
+    assert claim_expired_run_result is None
+
+
+async def test_claim_expired_run_unexpired_lease_returns_none(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="live-worker",
+        lease_expires_at=OLD_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    claim_expired_run_result = await generate_text_run_service.claim_expired_run(
+        "new-worker", NEW_LEASE_EXPIRES_AT
+    )
+
+    assert claim_expired_run_result is None
+
+
+async def test_claim_expired_run_soft_deleted_run_returns_none(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+        deleted_at=EXPIRED_LEASE_EXPIRES_AT,
+        deleted_by_id=auth_user.id,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    claim_expired_run_result = await generate_text_run_service.claim_expired_run(
+        "new-worker", NEW_LEASE_EXPIRES_AT
+    )
+
+    pickup_count_query = text(
+        "SELECT pickup_count FROM pb_generate_text_run WHERE id = :run_id"
+    ).bindparams(run_id=run_record.id)
+    pickup_count_scalar = await db_session.scalar(pickup_count_query)
+    assert claim_expired_run_result is None
+    assert pickup_count_scalar == 0

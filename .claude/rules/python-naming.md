@@ -207,7 +207,7 @@ llm_result, rss_result = await asyncio.gather(
 **A function that does more than one thing is split into private helpers named for
 each thing.** `find_or_create_user_from_auth_provider` tries `_find_user_from_auth_provider`
 and falls back to `_create_user_from_auth_provider`. When a split wouldn't read better,
-short plain comments mark each section instead.
+a step comment marks each block instead (Other conventions).
 
 **An `await` result is bound to a name unless it is returned directly or unused.** An
 `await` expression may appear in exactly three places: as the whole right-hand side of
@@ -261,12 +261,30 @@ The same applies to chained attribute access into a call:
   names the domain: `domains/users/router.py`, `libs/users/services.py`. Never
   `users/user_router.py`. Class and object names stay fully explicit regardless.
 - Enum members are `UPPER_SNAKE`. Constants are `UPPER_SNAKE` at module level.
+- A mechanism gets one name, used in its service, methods, settings and log events:
+  `GenerateTextRunPickupService`, `pick_up_expired_runs()`,
+  `run_pickup_interval_seconds` and `run_pickup_failed`, never "pickup" in one place
+  and "sweep" in another.
 - A `StringConstraints` alias for a DTO field is named for what it holds and ends in
   `Str`: `PersonaNameStr`, `AvatarUrlStr`.
 - A `Dto` name leads with its entity or domain: `PersonaListResponseDto`, never
   `ListPersonasResponseDto`. A `Result` is still named for its function
   (`FindUserPersonaListResult`).
-- A function or class gets a docstring or comment only when it isn't clear from its
-  name and context: a non-obvious reason, a constraint, a trap. Never restate what the
-  code already says. Most `Result` and `Dto` classes and most one-screen functions need
-  none.
+- A docstring is one plain sentence saying what the function or class does, never a
+  paragraph. A reason, a constraint or a trap goes in a comment beside the line it
+  concerns. Most `Result` and `Dto` classes and most short functions need no docstring.
+- A function with several steps gets a short comment above each block saying what the
+  block does, so its steps read from the comments alone, without reading the code:
+
+```python
+async def pick_up_next_expired_run(self) -> bool:
+    """Claims one run whose lease expired and fails or continues it."""
+    # A stopping process takes on no new runs
+    ...
+    # Claim the run whose lease expired longest ago
+    ...
+    # Fail a run that keeps being interrupted
+    ...
+    # Continue the run from its last checkpoint
+    ...
+```

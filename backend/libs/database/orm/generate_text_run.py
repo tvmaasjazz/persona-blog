@@ -28,6 +28,11 @@ class GenerateTextRunOrm(BaseOrm):
             "status",
             postgresql_where=text("status IN ('PENDING', 'RUNNING', 'AWAITING_REVIEW')"),
         ),
+        Index(
+            "pb_generate_text_run_lease_expires_at_idx",
+            "lease_expires_at",
+            postgresql_where=text("status IN ('PENDING', 'RUNNING')"),
+        ),
         Index("pb_generate_text_run_persona_id_idx", "persona_id"),
         Index("pb_generate_text_run_content_item_id_idx", "content_item_id"),
     )
@@ -54,5 +59,8 @@ class GenerateTextRunOrm(BaseOrm):
     started_at: Mapped[datetime | None]
     finished_at: Mapped[datetime | None]
     content_item_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey(ContentItemOrm.id))
+    lease_owner: Mapped[str | None]
+    lease_expires_at: Mapped[datetime | None]
+    pickup_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 
     steps: Mapped[list[GenerateTextStepOrm]] = relationship(back_populates="run")

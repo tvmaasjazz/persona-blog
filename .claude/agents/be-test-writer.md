@@ -95,7 +95,7 @@ comparison into a partial one, catching the exception, or adding `skip` / `xfail
 
 ## How to work
 
-- Apply the rules; don't restate them in comments.
+- Apply the rules. Don't copy rule text into comments.
 - Match the style and idiom of the tests already there.
 - Expected values come from the intended behaviour: the task description, method and
   route names, the Result and DTO shapes, `plan.md`. Never run the code and copy what

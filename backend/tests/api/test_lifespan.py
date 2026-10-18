@@ -1,9 +1,13 @@
+import os
+import re
+
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from apps.api.app_factory import create_app
 from apps.api.core.config import AppSettings
+from apps.api.lifespan import build_worker_id
 
 
 async def test_lifespan_creates_db_resources_and_redis_client_from_settings(
@@ -45,3 +49,45 @@ async def test_lifespan_closes_redis_client_on_shutdown() -> None:
         await redis_client.connection_pool.release(redis_connection)
 
     assert not redis_connection.is_connected
+
+
+def test_build_worker_id_uses_truncated_replica_id_and_pid() -> None:
+    app_settings = AppSettings(railway_replica_id="abcdef0123456789")
+
+    worker_id = build_worker_id(app_settings)
+
+    assert re.fullmatch(rf"abcdef01-pid{os.getpid()}-[0-9a-f]{{4}}", worker_id)
+
+
+def test_build_worker_id_without_replica_id_uses_host_name_and_pid() -> None:
+    app_settings = AppSettings(railway_replica_id=None)
+
+    worker_id = build_worker_id(app_settings)
+
+    assert re.fullmatch(rf".{{1,8}}-pid{os.getpid()}-[0-9a-f]{{4}}", worker_id)
+
+
+async def test_lifespan_gives_background_job_service_a_worker_id() -> None:
+    fastapi_app = create_app()
+
+    async with fastapi_app.router.lifespan_context(fastapi_app):
+        worker_id = fastapi_app.state.background_job_service.worker_id
+
+    assert re.fullmatch(rf".{{1,8}}-pid{os.getpid()}-[0-9a-f]{{4}}", worker_id)
+
+
+async def test_lifespan_shutdown_requests_stop_and_drains_running_jobs() -> None:
+    fastapi_app = create_app()
+    finished_labels: list[str] = []
+
+    async def record_finished() -> None:
+        finished_labels.append("finished")
+
+    async with fastapi_app.router.lifespan_context(fastapi_app):
+        background_job_service = fastapi_app.state.background_job_service
+        is_stopping_while_running = background_job_service.is_stopping
+        background_job_service.start(record_finished())
+
+    assert is_stopping_while_running is False
+    assert background_job_service.is_stopping is True
+    assert finished_labels == ["finished"]

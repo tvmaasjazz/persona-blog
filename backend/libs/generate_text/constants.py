@@ -2,6 +2,11 @@
 # Text steps put their text under this key.
 STEP_OUTPUT_TEXT_KEY = "text"
 
-# Stored on a run cancelled because the process stopped before it finished.
-SERVER_SHUTDOWN_ERROR_CODE = "ServerShutdown"
-SERVER_SHUTDOWN_ERROR_MESSAGE = "The server stopped before this run finished. Start it again."
+# Stored on a run picked up while still PENDING: its job never started, so
+# there is no checkpoint to resume from.
+RUN_NEVER_STARTED_ERROR_CODE = "RunNeverStarted"
+RUN_NEVER_STARTED_ERROR_MESSAGE = "This run never started. Start it again."
+
+# Stored on a run that was picked up more often than the settings allow.
+RUN_PICKED_UP_TOO_OFTEN_ERROR_CODE = "RunPickedUpTooOften"
+RUN_PICKED_UP_TOO_OFTEN_ERROR_MESSAGE = "This run kept being interrupted. Start it again."
