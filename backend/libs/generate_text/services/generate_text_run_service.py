@@ -1,16 +1,16 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
-from libs.database.constants import UTC_NOW_SQL
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.database.orm.persona import PersonaOrm
+from libs.database.utils import DatabaseClockUtils
 from libs.generate_text.inputs import CreateGenerateTextRunInput
 from libs.generate_text.results import (
     ClaimExpiredGenerateTextRunResult,
@@ -43,7 +43,9 @@ class GenerateTextRunService:
                 additional_context=create_generate_text_run_input.additional_context,
                 options=create_generate_text_run_input.options,
                 lease_owner=create_generate_text_run_input.lease_owner,
-                lease_expires_at=create_generate_text_run_input.lease_expires_at,
+                # TODO(db-clock): the database's now, once this write is an insert() statement
+                lease_expires_at=datetime.now(UTC)
+                + timedelta(seconds=create_generate_text_run_input.lease_seconds),
                 created_by_id=auth_user.id,
                 updated_by_id=auth_user.id,
             )
@@ -58,12 +60,11 @@ class GenerateTextRunService:
         async with self._db_session_factory() as db_session, db_session.begin():
             run_record = await self._get_run(db_session, run_id)
             run_record.status = GenerateTextRunStatusType.RUNNING
+            # TODO(db-clock): the database's now, once this write is an update() statement
             run_record.started_at = datetime.now(UTC)
             await db_session.flush()
 
-    async def claim_paused_run(
-        self, run_id: int, lease_owner: str, lease_expires_at: datetime
-    ) -> bool:
+    async def claim_paused_run(self, run_id: int, lease_owner: str, lease_seconds: int) -> bool:
         """Moves a paused run to RUNNING under the given lease. False when it wasn't paused."""
         # One statement tests and sets the status, so of two resumes that arrive together
         # exactly one changes a row
@@ -76,7 +77,7 @@ class GenerateTextRunService:
             .values(
                 status=GenerateTextRunStatusType.RUNNING,
                 lease_owner=lease_owner,
-                lease_expires_at=lease_expires_at,
+                lease_expires_at=DatabaseClockUtils.build_utc_now_plus_sql(lease_seconds),
             )
         )
         async with self._db_session_factory() as db_session, db_session.begin():
@@ -84,7 +85,7 @@ class GenerateTextRunService:
         return claim_result.rowcount == 1
 
     async def claim_expired_run(
-        self, lease_owner: str, lease_expires_at: datetime, run_id: int | None = None
+        self, lease_owner: str, lease_seconds: int, run_id: int | None = None
     ) -> ClaimExpiredGenerateTextRunResult | None:
         """Takes the lease on the given run if its lease has expired, or with no run id, on
         the run whose lease expired longest ago."""
@@ -98,7 +99,7 @@ class GenerateTextRunService:
                 ),
                 # The database clock, so a process whose clock runs behind the one that
                 # released the run still sees it as expired
-                GenerateTextRunOrm.lease_expires_at <= text(UTC_NOW_SQL),
+                GenerateTextRunOrm.lease_expires_at <= DatabaseClockUtils.build_utc_now_sql(),
                 # The session's soft-delete filter covers selects, not this update
                 GenerateTextRunOrm.deleted_at.is_(None),
             )
@@ -113,7 +114,7 @@ class GenerateTextRunService:
             .where(GenerateTextRunOrm.id == expired_run_id.scalar_subquery())
             .values(
                 lease_owner=lease_owner,
-                lease_expires_at=lease_expires_at,
+                lease_expires_at=DatabaseClockUtils.build_utc_now_plus_sql(lease_seconds),
                 pickup_count=GenerateTextRunOrm.pickup_count + 1,
             )
             .returning(GenerateTextRunOrm)
@@ -127,7 +128,7 @@ class GenerateTextRunService:
                 run_record, from_attributes=True
             )
 
-    async def renew_lease(self, run_id: int, lease_owner: str, lease_expires_at: datetime) -> bool:
+    async def renew_lease(self, run_id: int, lease_owner: str, lease_seconds: int) -> bool:
         """Extends the lease. False when the lease isn't this owner's any more."""
         renew_statement = (
             update(GenerateTextRunOrm)
@@ -135,7 +136,7 @@ class GenerateTextRunService:
                 GenerateTextRunOrm.id == run_id,
                 GenerateTextRunOrm.lease_owner == lease_owner,
             )
-            .values(lease_expires_at=lease_expires_at)
+            .values(lease_expires_at=DatabaseClockUtils.build_utc_now_plus_sql(lease_seconds))
         )
         async with self._db_session_factory() as db_session, db_session.begin():
             renew_result = await db_session.execute(renew_statement)
@@ -150,7 +151,7 @@ class GenerateTextRunService:
                 GenerateTextRunOrm.id == run_id,
                 GenerateTextRunOrm.lease_owner == lease_owner,
             )
-            .values(lease_expires_at=text(UTC_NOW_SQL))
+            .values(lease_expires_at=DatabaseClockUtils.build_utc_now_sql())
         )
         async with self._db_session_factory() as db_session, db_session.begin():
             release_result = await db_session.execute(release_statement)
@@ -160,6 +161,7 @@ class GenerateTextRunService:
         async with self._db_session_factory() as db_session, db_session.begin():
             run_record = await self._get_run(db_session, run_id)
             run_record.status = GenerateTextRunStatusType.COMPLETED
+            # TODO(db-clock): the database's now, once this write is an update() statement
             run_record.finished_at = datetime.now(UTC)
 
             # A finished or paused run has no lease
@@ -198,6 +200,7 @@ class GenerateTextRunService:
             run_record.status = GenerateTextRunStatusType.FAILED
             run_record.error_code = error_code
             run_record.error_message = error_message
+            # TODO(db-clock): the database's now, once this write is an update() statement
             run_record.finished_at = datetime.now(UTC)
 
             # A finished or paused run has no lease

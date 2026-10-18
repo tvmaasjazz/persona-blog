@@ -42,6 +42,7 @@ backend/
 │   │   ├── column_types.py    # UtcDateTime
 │   │   ├── constants.py       # naming convention, UTC_NOW_SQL
 │   │   ├── session.py         # create_db_session_factory(), soft-delete rule
+│   │   ├── utils/             # DatabaseClockUtils: the database clock as SQL
 │   │   └── orm/               # every table, one module per entity
 │   │       ├── __init__.py    # imports all modules below
 │   │       ├── user.py        # UserOrm
@@ -285,8 +286,9 @@ A lib creates a session in only three places: an after-response task, the servic
 background job calls, and a record that must survive the caller's rollback (below).
 
 Everything else a task needs — the Redis client, the domain's settings, the values it
-acts on — is passed in, so `libs/` still never imports `AppSettings`. The caller also
-passes the time, so the task doesn't read the clock.
+acts on — is passed in, so `libs/` still never imports `AppSettings`. A time the task
+writes comes from the database clock (`database.md` › Timestamps), not from its
+caller.
 
 ### Records that must survive a rollback
 
@@ -573,7 +575,8 @@ application code uses the database.
   a long-running route needs).
 - A service may import any Orm it needs; the domain boundary applies to services, not
   tables.
-- Python code handles aware UTC datetimes only: `datetime.now(UTC)`
+- Python code handles aware UTC datetimes only, and every "now" a query compares with
+  or a write stores comes from the database clock, never `datetime.now(UTC)`
   (`database.md` › Timestamps).
 - Deleting a row means setting `deleted_at` and `deleted_by_id`, never `DELETE`. ORM
   selects already exclude soft-deleted rows (`database.md` › Soft delete).

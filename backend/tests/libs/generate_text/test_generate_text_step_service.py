@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -234,10 +233,9 @@ async def test_record_decision_sets_human_decision_and_feedback(
     create_step_result = await step_service.create_step(
         build_create_generate_text_step_input(run_id=run_id), auth_user
     )
-    decided_at = datetime(2026, 9, 24, 12, 0, 0, tzinfo=UTC)
 
     await step_service.record_decision(
-        create_step_result.id, HumanDecisionType.APPROVED, "Looks good.", auth_user, decided_at
+        create_step_result.id, HumanDecisionType.APPROVED, "Looks good.", auth_user
     )
 
     step_record = await db_session.get(GenerateTextStepOrm, create_step_result.id)
@@ -245,7 +243,7 @@ async def test_record_decision_sets_human_decision_and_feedback(
     assert step_record.human_decision == HumanDecisionType.APPROVED
     assert step_record.human_feedback == "Looks good."
     assert step_record.decided_by_id == auth_user.id
-    assert step_record.decided_at == decided_at
+    assert step_record.decided_at is not None
 
 
 async def test_record_awaiting_review_sets_awaiting_review_status_and_duration(

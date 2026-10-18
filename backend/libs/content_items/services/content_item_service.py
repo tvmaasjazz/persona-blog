@@ -52,6 +52,7 @@ class ContentItemService:
 
     async def delete_content_item(self, content_item_id: int, auth_user: AuthUser) -> None:
         content_item_record = await self._find_content_item_record(content_item_id)
+        # TODO(db-clock): the database's now, once this write is an update() statement
         content_item_record.deleted_at = datetime.now(UTC)
         content_item_record.deleted_by_id = auth_user.id
         await self._db_session.flush()

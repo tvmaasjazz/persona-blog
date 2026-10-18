@@ -338,9 +338,11 @@ def _build_unique_email() -> str:
 - Tests pass in any order and on their own. No module-level mutable state.
 - No network except local Postgres and Redis.
 - No wall clock in assertions. Assert that a TTL is within bounds or that a timestamp
-  is not `None`. If behaviour depends on "now", stop and report it: the code needs an
-  injected clock. The exception is a stored time that code compares with now, such as
-  a lease expiry: the test stores a fixed literal far on the side it needs,
+  is not `None`. Code reads "now" from the database clock (`database.md` ›
+  Timestamps), which is one fixed value inside a test's transaction, so a time a write
+  stored can be asserted equal to the database's now read on `db_session`. A stored
+  time that code compares with now, such as a lease expiry, is a fixed literal far on
+  the side the test needs,
   `datetime(2026, 1, 2, tzinfo=UTC)` for the past and a 2099 date for the future, never
   an offset from now.
 - No randomness, apart from the unique-value defaults in factories.

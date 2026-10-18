@@ -171,6 +171,7 @@ class BlogPostService:
 
     async def delete_blog_post(self, blog_post_identity: UUID, auth_user: AuthUser) -> None:
         blog_post_record = await self._find_owned_blog_post_record(blog_post_identity, auth_user)
+        # TODO(db-clock): the database's now, once this write is an update() statement
         blog_post_record.deleted_at = datetime.now(UTC)
         blog_post_record.deleted_by_id = auth_user.id
         await self._db_session.flush()

@@ -54,6 +54,7 @@ class GenerateTextStepService:
                 attempt=next_attempt,
                 status=GenerateTextStepStatusType.RUNNING,
                 input=create_generate_text_step_input.input,
+                # TODO(db-clock): the database's now, once this write is an insert() statement
                 started_at=datetime.now(UTC),
                 created_by_id=auth_user.id,
                 updated_by_id=auth_user.id,
@@ -73,6 +74,7 @@ class GenerateTextStepService:
             # an empty string, so "the latest output" skips it.
             step_record.output = {STEP_OUTPUT_TEXT_KEY: output} if output else None
             step_record.duration_ms = duration_ms
+            # TODO(db-clock): the database's now, once this write is an update() statement
             step_record.finished_at = datetime.now(UTC)
             await self._apply_rollup(db_session, step_record)
             await db_session.flush()
@@ -86,6 +88,7 @@ class GenerateTextStepService:
             step_record.error_code = error_code
             step_record.error_message = error_message
             step_record.duration_ms = duration_ms
+            # TODO(db-clock): the database's now, once this write is an update() statement
             step_record.finished_at = datetime.now(UTC)
             await db_session.flush()
 
@@ -95,14 +98,14 @@ class GenerateTextStepService:
         human_decision: HumanDecisionType,
         human_feedback: str | None,
         auth_user: AuthUser,
-        decided_at: datetime,
     ) -> None:
         async with self._db_session_factory() as db_session, db_session.begin():
             step_record = await self._get_step(db_session, step_id)
             step_record.human_decision = human_decision
             step_record.human_feedback = human_feedback
             step_record.decided_by_id = auth_user.id
-            step_record.decided_at = decided_at
+            # TODO(db-clock): the database's now, once this write is an update() statement
+            step_record.decided_at = datetime.now(UTC)
             step_record.updated_by_id = auth_user.id
             await db_session.flush()
 

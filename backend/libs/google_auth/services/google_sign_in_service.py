@@ -1,5 +1,3 @@
-from datetime import UTC, datetime
-
 from libs.auth.services import AuthSessionService
 from libs.auth.types import AuthProviderType
 from libs.google_auth.results import GoogleSignInResult
@@ -45,7 +43,6 @@ class GoogleSignInService:
             user_auth_provider_id=(
                 find_or_create_user_from_auth_provider_result.user_auth_provider_id
             ),
-            signed_in_at=datetime.now(UTC),
         )
         session_id = await self._auth_session_service.create_session(
             user_id=find_or_create_user_from_auth_provider_result.id,

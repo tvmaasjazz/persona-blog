@@ -97,6 +97,7 @@ class PersonaService:
 
     async def delete_persona(self, persona_identity: UUID, auth_user: AuthUser) -> None:
         persona_record = await self._find_owned_persona_record(persona_identity, auth_user)
+        # TODO(db-clock): the database's now, once this write is an update() statement
         persona_record.deleted_at = datetime.now(UTC)
         persona_record.deleted_by_id = auth_user.id
         await self._db_session.flush()
