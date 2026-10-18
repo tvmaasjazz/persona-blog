@@ -538,7 +538,7 @@ No run is lost, and at most one node is redone.
   next pickup. The database claim stays the lock and the pickup loop stays the backup: a
   duplicate or stale message claims nothing. A stopping worker stops reading the list
   before it releases its own runs
-- [ ] **Comment cleanup** (the PR after instant handoff). Bring existing backend and
+- [x] **Comment cleanup** (the PR after instant handoff). Bring existing backend and
   frontend code in line with the comment rules: one-sentence docstrings, and a short
   comment above each block of a multi-step function
 - [x] **Writes as statements.** Switch Orm writes from setting attributes and calling
