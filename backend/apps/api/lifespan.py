@@ -14,12 +14,10 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from apps.api.core.config import AppSettings
-from apps.api.core.dependencies import build_llm_service
 from apps.api.core.event_loop_monitor import monitor_event_loop_lag
 from apps.api.core.logging import configure_logging
-from apps.api.core.run_sweeper import sweep_expired_runs
 from apps.api.core.types import EnvironmentType
-from apps.api.domains.generate_text.dependencies import build_generate_text_service
+from apps.api.domains.generate_text.dependencies import build_generate_text_run_pickup_service
 from libs.core.services import BackgroundJobService
 from libs.database.session import create_db_session_factory
 
@@ -30,8 +28,9 @@ WORKER_ID_REPLICA_LENGTH = 8
 
 
 def build_worker_id(app_settings: AppSettings) -> str:
-    """Names this process: where it runs, its PID, and a random suffix, so a restarted
-    process that reuses a PID never matches the lease its predecessor held."""
+    """Names this process by where it runs, its PID and a random suffix."""
+    # The suffix keeps a restarted process that reuses a PID from matching the lease its
+    # predecessor held
     host_name = app_settings.railway_replica_id or socket.gethostname()
     random_suffix = secrets.token_hex(WORKER_ID_SUFFIX_BYTES)
     return f"{host_name[:WORKER_ID_REPLICA_LENGTH]}-pid{os.getpid()}-{random_suffix}"
@@ -85,26 +84,20 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     event_loop_monitor_task = None
     if app_settings.environment is EnvironmentType.DEVELOPMENT:
         event_loop_monitor_task = asyncio.create_task(monitor_event_loop_lag())
-    run_sweeper_task = None
+    run_sweep_task = None
     if (
         app_settings.environment is not EnvironmentType.TEST
         and fastapi_app.state.graph_checkpointer is not None
     ):
-        run_sweeper_task = asyncio.create_task(
-            sweep_expired_runs(
-                lambda: build_generate_text_service(
-                    fastapi_app.state, build_llm_service(fastapi_app.state)
-                ),
-                app_settings.generate_text.run_sweep_interval_seconds,
-            )
-        )
+        generate_text_run_pickup_service = build_generate_text_run_pickup_service(fastapi_app.state)
+        run_sweep_task = asyncio.create_task(generate_text_run_pickup_service.sweep_expired_runs())
     try:
         yield
     finally:
         # First, so a stopping process never claims a new run.
-        if run_sweeper_task is not None:
-            run_sweeper_task.cancel()
-            await asyncio.gather(run_sweeper_task, return_exceptions=True)
+        if run_sweep_task is not None:
+            run_sweep_task.cancel()
+            await asyncio.gather(run_sweep_task, return_exceptions=True)
         # Before the clients close: a running graph still needs them.
         background_job_service.request_stop()
         await background_job_service.drain(app_settings.background_jobs.shutdown_drain_seconds)

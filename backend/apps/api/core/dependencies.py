@@ -59,7 +59,7 @@ async def get_auth_user(request: Request, after_response_tasks: BackgroundTasks)
 # other — so the alternative to core/ is each of them rebuilding the same provider map.
 # Worth revisiting if a third arrives and the shape has settled.
 def build_llm_service(app_state: State) -> LlmService:
-    """Takes the app state rather than a Request, so the run sweeper can build one too."""
+    """Takes the app state rather than a Request, so lifespan can build one too."""
     app_settings: AppSettings = app_state.settings
     openai_llm_service = OpenAiLlmService(
         openai_client=app_state.openai_client,

@@ -63,8 +63,9 @@ class GenerateTextRunService:
     async def claim_paused_run(
         self, run_id: int, lease_owner: str, lease_expires_at: datetime
     ) -> bool:
-        """One statement tests and sets the status, so of two resumes that arrive together
-        exactly one changes a row and gets True. It takes the lease in the same statement."""
+        """Moves a paused run to RUNNING under the given lease. False when it wasn't paused."""
+        # One statement tests and sets the status, so of two resumes that arrive together
+        # exactly one changes a row
         claim_statement = (
             update(GenerateTextRunOrm)
             .where(
@@ -84,9 +85,9 @@ class GenerateTextRunService:
     async def claim_expired_run(
         self, lease_owner: str, lease_expires_at: datetime
     ) -> ClaimExpiredGenerateTextRunResult | None:
-        """Claims the run whose lease ran out longest ago, in one statement. SKIP LOCKED
-        keeps two sweepers from choosing the same row. A NULL lease never matches, so a
-        run from before leases existed is left alone."""
+        """Takes the lease on the run whose lease expired longest ago, if any."""
+        # SKIP LOCKED keeps two sweeps from choosing the same row. A NULL lease never
+        # matches, so a run from before leases existed is left alone.
         now = datetime.now(UTC)
         expired_run_id = (
             select(GenerateTextRunOrm.id)
@@ -95,6 +96,7 @@ class GenerateTextRunService:
                     [GenerateTextRunStatusType.PENDING, GenerateTextRunStatusType.RUNNING]
                 ),
                 GenerateTextRunOrm.lease_expires_at < now,
+                # The session's soft-delete filter covers selects, not this update
                 GenerateTextRunOrm.deleted_at.is_(None),
             )
             .order_by(GenerateTextRunOrm.lease_expires_at)
@@ -122,7 +124,7 @@ class GenerateTextRunService:
             )
 
     async def renew_lease(self, run_id: int, lease_owner: str, lease_expires_at: datetime) -> bool:
-        """False when the lease belongs to someone else now."""
+        """Extends the lease. False when the lease isn't this owner's any more."""
         renew_statement = (
             update(GenerateTextRunOrm)
             .where(
@@ -136,8 +138,7 @@ class GenerateTextRunService:
         return renew_result.rowcount == 1
 
     async def release_lease(self, run_id: int, lease_owner: str) -> None:
-        """Expires the lease now and leaves the status alone, so the sweeper can take the
-        run. Changes nothing when the lease isn't ours any more."""
+        """Expires the lease now, so another process can pick the run up."""
         release_statement = (
             update(GenerateTextRunOrm)
             .where(
@@ -154,7 +155,11 @@ class GenerateTextRunService:
             run_record = await self._get_run(db_session, run_id)
             run_record.status = GenerateTextRunStatusType.COMPLETED
             run_record.finished_at = datetime.now(UTC)
-            self._clear_lease(run_record)
+
+            # A finished or paused run has no lease
+            run_record.lease_owner = None
+            run_record.lease_expires_at = None
+
             await self._apply_rollup(db_session, run_record)
             await db_session.flush()
 
@@ -163,7 +168,11 @@ class GenerateTextRunService:
         async with self._db_session_factory() as db_session, db_session.begin():
             run_record = await self._get_run(db_session, run_id)
             run_record.status = GenerateTextRunStatusType.AWAITING_REVIEW
-            self._clear_lease(run_record)
+
+            # A finished or paused run has no lease
+            run_record.lease_owner = None
+            run_record.lease_expires_at = None
+
             await self._apply_rollup(db_session, run_record)
             await db_session.flush()
 
@@ -184,7 +193,11 @@ class GenerateTextRunService:
             run_record.error_code = error_code
             run_record.error_message = error_message
             run_record.finished_at = datetime.now(UTC)
-            self._clear_lease(run_record)
+
+            # A finished or paused run has no lease
+            run_record.lease_owner = None
+            run_record.lease_expires_at = None
+
             await self._apply_rollup(db_session, run_record)
             await db_session.flush()
 
@@ -206,10 +219,6 @@ class GenerateTextRunService:
             run_record, from_attributes=True
         )
         return find_run_result.model_copy(update={"persona_identity": persona_identity})
-
-    def _clear_lease(self, run_record: GenerateTextRunOrm) -> None:
-        run_record.lease_owner = None
-        run_record.lease_expires_at = None
 
     async def _apply_rollup(self, db_session: AsyncSession, run_record: GenerateTextRunOrm) -> None:
         """Sums this run's pb_llm_call rows onto the run row itself. Aggregating by

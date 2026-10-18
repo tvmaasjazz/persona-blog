@@ -33,8 +33,7 @@ class BackgroundJobService:
         job_task.add_done_callback(self._handle_job_done)
 
     def request_stop(self) -> None:
-        """Tells running jobs to stop at their next safe point. Shutdown calls it before
-        drain."""
+        """Tells running jobs to stop at their next safe point."""
         self._is_stopping = True
 
     async def drain(self, timeout_seconds: float) -> None:
