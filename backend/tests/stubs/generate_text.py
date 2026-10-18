@@ -14,8 +14,12 @@ from libs.generate_text.graphs.generate_text_graph_builder_registry import (
 )
 from libs.generate_text.prompts import BaseGenerateTextPrompt
 from libs.generate_text.results import BuildPromptResult
-from libs.generate_text.services.generate_text_service import GenerateTextService
+from libs.generate_text.services.generate_text_run_pickup_service import (
+    GenerateTextRunPickupService,
+)
+from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
+from libs.generate_text.settings import GenerateTextSettings
 from libs.generate_text.states import GenerateTextState
 from libs.generate_text.types import HumanDecisionType, TextType
 
@@ -131,10 +135,36 @@ class GenerateTextStepServiceStub(GenerateTextStepService):
             raise self.record_decision_error
 
 
-class GenerateTextServiceStub(GenerateTextService):
-    def __init__(self) -> None:
+class GenerateTextRunServiceStub(GenerateTextRunService):
+    """Wraps a real run service so a test can wait for a lease renewal, make one fail,
+    or read the renewals it saw, while the renewals that succeed still write the row."""
+
+    def __init__(self, run_service: GenerateTextRunService) -> None:
+        self._run_service = run_service
+        self.renew_lease_inputs: list[tuple[int, str, datetime]] = []
+        self.renew_lease_error: Exception | None = None
+        self.renew_lease_event = asyncio.Event()
+
+    async def renew_lease(self, run_id: int, lease_owner: str, lease_expires_at: datetime) -> bool:
+        self.renew_lease_inputs.append((run_id, lease_owner, lease_expires_at))
+        try:
+            if self.renew_lease_error is not None:
+                raise self.renew_lease_error
+            return await self._run_service.renew_lease(run_id, lease_owner, lease_expires_at)
+        finally:
+            self.renew_lease_event.set()
+
+
+class GenerateTextRunPickupServiceStub(GenerateTextRunPickupService):
+    """Overrides pick_up_expired_run only, so a test drives the real sweep loop. The loop
+    reads the sweep interval from the settings the real __init__ would have stored."""
+
+    def __init__(self, *, run_sweep_interval_seconds: int) -> None:
+        self._generate_text_settings = GenerateTextSettings(
+            run_sweep_interval_seconds=run_sweep_interval_seconds
+        )
         self.pick_up_expired_run_call_count = 0
-        self.pick_up_expired_run_results: list[bool] = []
+        self.pick_up_expired_run_results: list[bool | Exception] = []
         self.pick_up_expired_run_exhausted_event = asyncio.Event()
 
     async def pick_up_expired_run(self) -> bool:
@@ -142,4 +172,6 @@ class GenerateTextServiceStub(GenerateTextService):
         pick_up_expired_run_result = self.pick_up_expired_run_results.pop(0)
         if not self.pick_up_expired_run_results:
             self.pick_up_expired_run_exhausted_event.set()
+        if isinstance(pick_up_expired_run_result, Exception):
+            raise pick_up_expired_run_result
         return pick_up_expired_run_result
