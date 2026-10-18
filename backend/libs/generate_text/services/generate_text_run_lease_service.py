@@ -45,9 +45,11 @@ class GenerateTextRunLeaseService:
             run_id, self.worker_id, self.build_lease_expires_at()
         )
 
-    async def claim_expired_run(self) -> ClaimExpiredGenerateTextRunResult | None:
+    async def claim_expired_run(
+        self, run_id: int | None = None
+    ) -> ClaimExpiredGenerateTextRunResult | None:
         return await self._run_service.claim_expired_run(
-            self.worker_id, self.build_lease_expires_at()
+            self.worker_id, self.build_lease_expires_at(), run_id
         )
 
     async def hand_off_run(self, run_id: int) -> None:

@@ -84,9 +84,10 @@ class GenerateTextRunService:
         return claim_result.rowcount == 1
 
     async def claim_expired_run(
-        self, lease_owner: str, lease_expires_at: datetime
+        self, lease_owner: str, lease_expires_at: datetime, run_id: int | None = None
     ) -> ClaimExpiredGenerateTextRunResult | None:
-        """Takes the lease on the run whose lease expired longest ago, if any."""
+        """Takes the lease on the given run if its lease has expired, or with no run id, on
+        the run whose lease expired longest ago."""
         # SKIP LOCKED keeps two processes from claiming the same row. A NULL lease never
         # matches, so a run from before leases existed is left alone.
         expired_run_id = (
@@ -104,11 +105,12 @@ class GenerateTextRunService:
             .order_by(GenerateTextRunOrm.lease_expires_at)
             .limit(1)
             .with_for_update(skip_locked=True)
-            .scalar_subquery()
         )
+        if run_id is not None:
+            expired_run_id = expired_run_id.where(GenerateTextRunOrm.id == run_id)
         claim_statement = (
             update(GenerateTextRunOrm)
-            .where(GenerateTextRunOrm.id == expired_run_id)
+            .where(GenerateTextRunOrm.id == expired_run_id.scalar_subquery())
             .values(
                 lease_owner=lease_owner,
                 lease_expires_at=lease_expires_at,
