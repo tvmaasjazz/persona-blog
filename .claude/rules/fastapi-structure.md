@@ -102,7 +102,23 @@ A lib with one service keeps it in `services.py`. A lib with more than one has a
 snake_case, with `__init__.py` re-exporting every class so callers import from
 `libs.<domain>.services`. Never both.
 
-Split a lib by what it is about, not by how big it gets.
+Split a lib by what it is about, not by how big it gets. Inside a lib, split services
+by job:
+
+- **A service does one job, and its name says what.** Its one-sentence docstring is
+  the test: if describing it needs an "and" joining unrelated jobs, the new work gets
+  its own service.
+- **Machinery around a flow gets its own service.** Work that runs alongside a flow
+  rather than being the flow, such as a lease, a heartbeat, or a retry or polling loop,
+  is a `<Domain><Thing>Service` of its own, even when only one service calls it:
+  `GenerateTextRunLeaseService` holds a run's lease while `GenerateTextService` runs
+  the graph.
+- **A loop that runs for the app's lifetime lives with what it acts on.** A pickup
+  loop or a queue listener is a method on the lib service it acts on, such as
+  `GenerateTextRunPickupService.pick_up_expired_runs()`. `lifespan` builds that service
+  through a `build_<service>(app_state)` in the domain's `dependencies.py` and runs the
+  loop as a task. `apps/api/core/` holds only loops that belong to no domain, like the
+  event loop monitor.
 
 ### Validation guards
 
@@ -254,7 +270,8 @@ they're never confused:
 - **Background job:** work that runs for minutes and outlives the request, such as a
   graph run. A private method on its domain service, started with
   `BackgroundJobService.start()` (`libs/core/services/`) and drained at shutdown, for
-  up to `BACKGROUND_JOBS__SHUTDOWN_DRAIN_SECONDS`.
+  up to `BACKGROUND_JOBS__SHUTDOWN_DRAIN_SECONDS`. The machinery around a job, such as
+  its lease, is a service of its own (Services).
 
 An after-response task is a function in `libs/<domain>/after_response_tasks.py`,
 scheduled from the dependency or route that knows it's needed. It takes a session
@@ -447,7 +464,10 @@ class BlogPostResponseDto(BaseModel):
 ## App-scoped vs request-scoped
 
 `lifespan.py` owns long-lived resources — HTTP pool, SQLAlchemy engine, settings —
-created on `app.state` at startup and closed at shutdown. Nothing per-request.
+created on `app.state` at startup and closed at shutdown. Nothing per-request. It
+also starts the app-lifetime loops (Services), each from a service built by a
+`build_<service>(app_state)` in its domain's `dependencies.py`, which takes `app.state`
+rather than a `Request`.
 
 Domain `dependencies.py` reads `Request`, pulls from `app.state`, builds
 request-scoped objects, and constructs the service. Each factory is followed
@@ -536,7 +556,8 @@ async def delete_blog_post(
     return EmptyResponseDto()
 ```
 
-`app_factory.py` is the only file that knows the full list of domains.
+`app_factory.py` is the only file that knows the full list of domains. `lifespan.py`
+imports only the `build_<service>` functions of domains that run an app-lifetime loop.
 
 ## Database
 

@@ -109,12 +109,16 @@ An agent in `.claude/agents/` is named for the side of the stack it works on:
 
 Split work across parallel agents only along files they don't share.
 
+- **Placement.** For a feature that adds a new responsibility, the design lists which
+  service or module each new piece lives in, following `fastapi-structure.md` ›
+  Services. Tyler reviews that list before any coder starts, and the contract
+  repeats it.
 - **Code.** `schema-coder` runs alone first; everything else needs its Orm classes.
   Then `fastapi-coder` agents split by lib or domain. When one part calls another,
-  write the contract first (names, signatures, `Input`/`Result` classes, exceptions)
-  and give both agents the identical text. One agent owns each shared wiring file
-  (`app_factory.py`, `core/dependencies.py`, `orm/__init__.py`). Afterwards, check
-  the calls match the contract, then run ruff and import the app.
+  write the contract first (placement, names, signatures, `Input`/`Result` classes,
+  exceptions) and give both agents the identical text. One agent owns each shared
+  wiring file (`app_factory.py`, `core/dependencies.py`, `orm/__init__.py`).
+  Afterwards, check the calls match the contract, then run ruff and import the app.
 - **Tests.** One `be-test-writer` adds the shared factories, stubs and fixtures first.
   Then two or three run in parallel on separate test files, each running only its
   own files: never the full suite, never `pytest -m migration`, since they share the

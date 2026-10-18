@@ -261,6 +261,10 @@ The same applies to chained attribute access into a call:
   names the domain: `domains/users/router.py`, `libs/users/services.py`. Never
   `users/user_router.py`. Class and object names stay fully explicit regardless.
 - Enum members are `UPPER_SNAKE`. Constants are `UPPER_SNAKE` at module level.
+- A mechanism gets one name, used in its service, methods, settings and log events:
+  `GenerateTextRunPickupService`, `pick_up_expired_runs()`,
+  `run_pickup_interval_seconds` and `run_pickup_failed`, never "pickup" in one place
+  and "sweep" in another.
 - A `StringConstraints` alias for a DTO field is named for what it holds and ends in
   `Str`: `PersonaNameStr`, `AvatarUrlStr`.
 - A `Dto` name leads with its entity or domain: `PersonaListResponseDto`, never
