@@ -53,7 +53,7 @@ class never redeclares them.
 | `id`            | `BIGINT GENERATED ALWAYS AS IDENTITY`                        | `Mapped[int]`              | Primary key. Never leaves the backend |
 | `identity`      | `UUID NOT NULL DEFAULT gen_random_uuid()`                    | `Mapped[UUID]`             | Unique. The ID the API exposes |
 | `created_at`    | `TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')`      | `Mapped[datetime]`         | |
-| `updated_at`    | `TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')`      | `Mapped[datetime]`         | SQLAlchemy `onupdate` sets it from the database clock on every update |
+| `updated_at`    | `TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')`      | `Mapped[datetime]`         | `BaseOrm`'s `onupdate` sets it (Timestamps) |
 | `deleted_at`    | `TIMESTAMP`                                                  | `Mapped[datetime \| None]` | On `SoftDeleteMixin`, which `BaseOrm` inherits |
 | `created_by_id` | `BIGINT NOT NULL`, FK `pb_user (id)`                         | `Mapped[int]`              | |
 | `updated_by_id` | `BIGINT NOT NULL`, FK `pb_user (id)`                         | `Mapped[int]`              | |
@@ -135,9 +135,8 @@ CREATE INDEX pb_persona_created_by_id_created_at_idx
 - `datetime.now(UTC)` is only for a time that never reaches the database, such as
   checking a third-party token's expiry. A duration uses `DateTimeUtils`' monotonic
   clock.
-- No database triggers. SQLAlchemy sets `updated_at` on every Orm update and
-  `update()` statement, so only an `UPDATE` written in raw SQL, like a backfill, sets
-  `updated_at` itself.
+- No database triggers. `BaseOrm`'s `onupdate` sets `updated_at` on every `update()`
+  statement, so only an `UPDATE` written in raw SQL, like a backfill, sets it itself.
 
 ### Soft delete
 

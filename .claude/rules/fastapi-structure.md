@@ -645,8 +645,10 @@ lists every column it sets in `.values(...)`, never `**input.model_dump()`, so a
 renamed field can't write to the wrong column. A time it writes is
 `DatabaseClockUtils.build_utc_now_sql()` (`database.md` › Timestamps). A nullable
 `JSONB` column is cleared with `null()`, never `None`, which stores JSON `null` and
-passes `IS NOT NULL`. A service never calls `commit()`; whoever owns the transaction
-commits.
+passes `IS NOT NULL`. A service doesn't commit a session it was handed; one that opens
+its own session commits it (Services › Records that must survive a rollback). This
+governs application code. Test factories (`pytest-testing.md` › Test data) and e2e
+seed scripts still create rows through the Orm with `add()` and `flush()`.
 
 A create returns what its caller needs with `.returning(...)`:
 
@@ -692,7 +694,8 @@ An update that needs an access check reads the row first, in its own query that 
 
 An update with no access check skips the read: its `WHERE` is the lookup, and a row
 count of 0 raises `NotFoundException`. The soft-delete rule only filters selects, so
-when the row can be soft-deleted, that `WHERE` adds `<Orm>.deleted_at.is_(None)`:
+when the app soft-deletes rows of that table, as it does personas, blog posts and
+content items, that `WHERE` adds `<Orm>.deleted_at.is_(None)`:
 
 ```python
         run_start = (
@@ -711,8 +714,8 @@ when the row can be soft-deleted, that `WHERE` adds `<Orm>.deleted_at.is_(None)`
 An atomic claim works the same way, with its condition in the `WHERE`:
 `claim_paused_run` sets `RUNNING` only where the status is still `AWAITING_REVIEW`, and
 reports whether it changed a row. Deletes are updates too: set `deleted_at` from the
-database clock and `deleted_by_id`. `updated_at` needs nothing; `BaseOrm` sets it on
-every `update()`.
+database clock and `deleted_by_id`. `updated_at` needs nothing (`database.md` ›
+Timestamps).
 
 ## Configuration and constants
 
