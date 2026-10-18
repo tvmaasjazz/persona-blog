@@ -1,8 +1,8 @@
 from sqlalchemy import ColumnElement, and_, or_
 
-from libs.database.clock import build_utc_now_sql
 from libs.database.orm.content_item import ContentItemOrm
 from libs.database.orm.persona import PersonaOrm
+from libs.database.utils import DatabaseClockUtils
 
 
 class ContentItemQueryUtils:
@@ -11,7 +11,7 @@ class ContentItemQueryUtils:
         is_published_public = and_(
             ContentItemOrm.is_public,
             ContentItemOrm.published_at.is_not(None),
-            ContentItemOrm.published_at <= build_utc_now_sql(),
+            ContentItemOrm.published_at <= DatabaseClockUtils.build_utc_now_sql(),
             PersonaOrm.is_public,
         )
         return or_(ContentItemOrm.created_by_id == auth_user_id, is_published_public)

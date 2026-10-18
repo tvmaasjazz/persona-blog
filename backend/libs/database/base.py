@@ -5,9 +5,9 @@ from uuid import UUID
 from sqlalchemy import BigInteger, ForeignKey, Identity, MetaData, Text, Uuid, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 
-from libs.database.clock import build_utc_now_sql
 from libs.database.column_types import UtcDateTime
 from libs.database.constants import NAMING_CONVENTION, UTC_NOW_SQL
+from libs.database.utils import DatabaseClockUtils
 
 
 class SoftDeleteMixin:
@@ -24,6 +24,7 @@ class BaseOrm(SoftDeleteMixin, DeclarativeBase):
 
     # Fetches updated_at's database-clock value back with RETURNING, so it can be read
     # after a flush without a reload
+    # TODO(db-clock): remove once every write is an update() or insert() statement
     __mapper_args__: ClassVar[dict[str, Any]] = {"eager_defaults": True}
 
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
@@ -33,7 +34,7 @@ class BaseOrm(SoftDeleteMixin, DeclarativeBase):
     identity: Mapped[UUID] = mapped_column(server_default=text("gen_random_uuid()"), unique=True)
     created_at: Mapped[datetime] = mapped_column(server_default=text(UTC_NOW_SQL))
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=text(UTC_NOW_SQL), onupdate=build_utc_now_sql()
+        server_default=text(UTC_NOW_SQL), onupdate=DatabaseClockUtils.build_utc_now_sql()
     )
 
     # The audit columns reference pb_user by name: UserOrm itself extends BaseOrm, so the

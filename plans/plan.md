@@ -543,12 +543,13 @@ No run is lost, and at most one node is redone.
   comment above each block of a multi-step function
 - [ ] **Writes as statements.** Switch Orm writes from setting attributes and calling
   `flush()` to one statement that sets every field, so a time it writes is
-  `build_utc_now_sql()` rather than the app server's clock. Updates become one
-  `update()` statement, and creates become one `insert()` statement the same way,
-  instead of `add()` and `flush()`. Changes `fastapi-structure.md` › Querying and
+  `DatabaseClockUtils.build_utc_now_sql()` rather than the app server's clock. Updates
+  become one `update()` statement, and creates become one `insert()` statement the
+  same way, instead of `add()` and `flush()`. Changes `fastapi-structure.md` › Querying and
   writing, which today says to load the Orm, mutate it and flush, and to create with
   `add()` then `flush()`. Clears every `TODO(db-clock)`, including the two inserts
-  (`create_run`'s lease expiry, `create_step`'s `started_at`)
+  (`create_run`'s lease expiry, `create_step`'s `started_at`), and removes `BaseOrm`'s
+  `eager_defaults`, which only matters while records are flushed
 
 **Railway and granian settings:**
 

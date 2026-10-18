@@ -7,10 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
-from libs.database.clock import build_utc_now_plus_sql, build_utc_now_sql
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.database.orm.persona import PersonaOrm
+from libs.database.utils import DatabaseClockUtils
 from libs.generate_text.inputs import CreateGenerateTextRunInput
 from libs.generate_text.results import (
     ClaimExpiredGenerateTextRunResult,
@@ -77,7 +77,7 @@ class GenerateTextRunService:
             .values(
                 status=GenerateTextRunStatusType.RUNNING,
                 lease_owner=lease_owner,
-                lease_expires_at=build_utc_now_plus_sql(lease_seconds),
+                lease_expires_at=DatabaseClockUtils.build_utc_now_plus_sql(lease_seconds),
             )
         )
         async with self._db_session_factory() as db_session, db_session.begin():
@@ -99,7 +99,7 @@ class GenerateTextRunService:
                 ),
                 # The database clock, so a process whose clock runs behind the one that
                 # released the run still sees it as expired
-                GenerateTextRunOrm.lease_expires_at <= build_utc_now_sql(),
+                GenerateTextRunOrm.lease_expires_at <= DatabaseClockUtils.build_utc_now_sql(),
                 # The session's soft-delete filter covers selects, not this update
                 GenerateTextRunOrm.deleted_at.is_(None),
             )
@@ -114,7 +114,7 @@ class GenerateTextRunService:
             .where(GenerateTextRunOrm.id == expired_run_id.scalar_subquery())
             .values(
                 lease_owner=lease_owner,
-                lease_expires_at=build_utc_now_plus_sql(lease_seconds),
+                lease_expires_at=DatabaseClockUtils.build_utc_now_plus_sql(lease_seconds),
                 pickup_count=GenerateTextRunOrm.pickup_count + 1,
             )
             .returning(GenerateTextRunOrm)
@@ -136,7 +136,7 @@ class GenerateTextRunService:
                 GenerateTextRunOrm.id == run_id,
                 GenerateTextRunOrm.lease_owner == lease_owner,
             )
-            .values(lease_expires_at=build_utc_now_plus_sql(lease_seconds))
+            .values(lease_expires_at=DatabaseClockUtils.build_utc_now_plus_sql(lease_seconds))
         )
         async with self._db_session_factory() as db_session, db_session.begin():
             renew_result = await db_session.execute(renew_statement)
@@ -151,7 +151,7 @@ class GenerateTextRunService:
                 GenerateTextRunOrm.id == run_id,
                 GenerateTextRunOrm.lease_owner == lease_owner,
             )
-            .values(lease_expires_at=build_utc_now_sql())
+            .values(lease_expires_at=DatabaseClockUtils.build_utc_now_sql())
         )
         async with self._db_session_factory() as db_session, db_session.begin():
             release_result = await db_session.execute(release_statement)

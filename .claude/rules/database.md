@@ -120,15 +120,16 @@ CREATE INDEX pb_persona_created_by_id_created_at_idx
   datetimes. A naive datetime raises at flush.
 - Every "now" a query compares with or a write stores comes from the database clock,
   never the app server's `datetime.now(UTC)`: servers' clocks drift apart, and the
-  database's is the one they all share. `libs/database/clock.py` builds it as SQL,
-  written into the statement itself:
-  - `build_utc_now_sql()` inside a query or an `update()`:
-    `.where(GenerateTextRunOrm.lease_expires_at <= build_utc_now_sql())`,
-    `.values(last_login_at=build_utc_now_sql())`. `build_utc_now_plus_sql(seconds)`
-    is a time that far ahead, such as a lease expiry.
-  - `updated_at` is set by `BaseOrm` from the same clock and fetched back with
-    `RETURNING`.
-  - Never assign `build_utc_now_sql()` to an Orm attribute: async code can't read the
+  database's is the one they all share. `DatabaseClockUtils`
+  (`libs/database/utils/`) builds it as SQL, written into the statement itself:
+  - `DatabaseClockUtils.build_utc_now_sql()` inside a query or a statement:
+    `.where(GenerateTextRunOrm.lease_expires_at <= DatabaseClockUtils.build_utc_now_sql())`,
+    `.values(last_login_at=DatabaseClockUtils.build_utc_now_sql())`.
+    `build_utc_now_plus_sql(seconds)` is a time that far ahead, such as a lease
+    expiry.
+  - `updated_at` is set by `BaseOrm` from the same clock. While Orm writes still
+    flush, `eager_defaults` fetches it back with `RETURNING`.
+  - Never assign the SQL to an Orm attribute: async code can't read the
     attribute back until the row is reloaded. A write that sets Orm attributes and
     flushes still reads `datetime.now(UTC)` for now, marked `TODO(db-clock)`, until it
     becomes an `update()` or `insert()` statement (`plans/plan.md`).
