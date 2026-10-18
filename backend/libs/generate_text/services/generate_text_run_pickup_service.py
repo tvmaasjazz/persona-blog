@@ -9,6 +9,9 @@ from libs.generate_text.constants import (
     RUN_PICKED_UP_TOO_OFTEN_ERROR_CODE,
     RUN_PICKED_UP_TOO_OFTEN_ERROR_MESSAGE,
 )
+from libs.generate_text.services.generate_text_run_handoff_queue_service import (
+    GenerateTextRunHandoffQueueService,
+)
 from libs.generate_text.services.generate_text_run_lease_service import (
     GenerateTextRunLeaseService,
 )
@@ -27,12 +30,14 @@ class GenerateTextRunPickupService:
         self,
         generate_text_service: GenerateTextService,
         lease_service: GenerateTextRunLeaseService,
+        handoff_queue_service: GenerateTextRunHandoffQueueService,
         run_service: GenerateTextRunService,
         background_job_service: BackgroundJobService,
         generate_text_settings: GenerateTextSettings,
     ) -> None:
         self._generate_text_service = generate_text_service
         self._lease_service = lease_service
+        self._handoff_queue_service = handoff_queue_service
         self._run_service = run_service
         self._background_job_service = background_job_service
         self._generate_text_settings = generate_text_settings
@@ -49,6 +54,21 @@ class GenerateTextRunPickupService:
                 # A failed pickup is logged, and the next one tries again
                 logger.exception("run_pickup_failed")
             await asyncio.sleep(self._generate_text_settings.run_pickup_interval_seconds)
+
+    async def pick_up_handed_off_runs(self) -> None:
+        """Picks up a run as soon as another process hands one off, until cancelled."""
+        wait_seconds = self._generate_text_settings.run_handoff_wait_seconds
+        while True:
+            try:
+                # Wait for a handoff, then pick up one expired run
+                handed_off_run_id = await self._handoff_queue_service.wait_for_run(wait_seconds)
+                if handed_off_run_id is not None:
+                    await self.pick_up_next_expired_run()
+            except Exception:
+                # Log and wait before trying again, so a Redis outage doesn't spin the loop.
+                # The pickup loop still catches the run.
+                logger.exception("run_handoff_pickup_failed")
+                await asyncio.sleep(wait_seconds)
 
     async def pick_up_next_expired_run(self) -> bool:
         """Claims one run whose lease expired and fails or continues it. Returns whether

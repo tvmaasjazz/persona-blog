@@ -2,11 +2,12 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
+from libs.database.constants import UTC_NOW_SQL
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.database.orm.persona import PersonaOrm
@@ -88,14 +89,15 @@ class GenerateTextRunService:
         """Takes the lease on the run whose lease expired longest ago, if any."""
         # SKIP LOCKED keeps two processes from claiming the same row. A NULL lease never
         # matches, so a run from before leases existed is left alone.
-        now = datetime.now(UTC)
         expired_run_id = (
             select(GenerateTextRunOrm.id)
             .where(
                 GenerateTextRunOrm.status.in_(
                     [GenerateTextRunStatusType.PENDING, GenerateTextRunStatusType.RUNNING]
                 ),
-                GenerateTextRunOrm.lease_expires_at < now,
+                # The database clock, so a process whose clock runs behind the one that
+                # released the run still sees it as expired
+                GenerateTextRunOrm.lease_expires_at <= text(UTC_NOW_SQL),
                 # The session's soft-delete filter covers selects, not this update
                 GenerateTextRunOrm.deleted_at.is_(None),
             )
@@ -137,18 +139,20 @@ class GenerateTextRunService:
             renew_result = await db_session.execute(renew_statement)
         return renew_result.rowcount == 1
 
-    async def release_lease(self, run_id: int, lease_owner: str) -> None:
-        """Expires the lease now, so another process can pick the run up."""
+    async def release_lease(self, run_id: int, lease_owner: str) -> bool:
+        """Expires the lease now, so another process can pick the run up. False when the
+        lease isn't this owner's any more."""
         release_statement = (
             update(GenerateTextRunOrm)
             .where(
                 GenerateTextRunOrm.id == run_id,
                 GenerateTextRunOrm.lease_owner == lease_owner,
             )
-            .values(lease_expires_at=datetime.now(UTC))
+            .values(lease_expires_at=text(UTC_NOW_SQL))
         )
         async with self._db_session_factory() as db_session, db_session.begin():
-            await db_session.execute(release_statement)
+            release_result = await db_session.execute(release_statement)
+        return release_result.rowcount == 1
 
     async def complete_run(self, run_id: int) -> None:
         async with self._db_session_factory() as db_session, db_session.begin():

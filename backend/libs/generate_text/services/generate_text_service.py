@@ -284,7 +284,7 @@ class GenerateTextService:
 
             # Hand a stopped run to another process
             if is_stopped:
-                await self._lease_service.release_lease(run_id)
+                await self._lease_service.hand_off_run(run_id)
                 return
 
             # Record whether the run completed or paused for review

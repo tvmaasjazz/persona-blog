@@ -2,6 +2,10 @@
 # Text steps put their text under this key.
 STEP_OUTPUT_TEXT_KEY = "text"
 
+# The Redis list a stopping process pushes a released run's id onto. Every deployed
+# version must use the same key, or a handoff reaches no listener.
+RUN_HANDOFF_QUEUE_KEY = "generate_text:run_handoff"
+
 # Stored on a run picked up while still PENDING: its job never started, so
 # there is no checkpoint to resume from.
 RUN_NEVER_STARTED_ERROR_CODE = "RunNeverStarted"

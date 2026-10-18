@@ -13,6 +13,7 @@ from libs.generate_text.graphs.generate_text_graph_builder_registry import (
 from libs.generate_text.services import (
     GenerateTextInstrumentationService,
     GenerateTextNodeService,
+    GenerateTextRunHandoffQueueService,
     GenerateTextRunLeaseService,
     GenerateTextRunPickupService,
     GenerateTextRunService,
@@ -35,8 +36,12 @@ def build_generate_text_service(app_state: State, llm_service: LlmService) -> Ge
     db_session_factory = app_state.db_session_factory
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     generate_text_step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    generate_text_run_handoff_queue_service = GenerateTextRunHandoffQueueService(
+        redis_client=app_state.redis_client
+    )
     generate_text_run_lease_service = GenerateTextRunLeaseService(
         run_service=generate_text_run_service,
+        handoff_queue_service=generate_text_run_handoff_queue_service,
         background_job_service=app_state.background_job_service,
         generate_text_settings=app_settings.generate_text,
     )
@@ -63,19 +68,24 @@ def build_generate_text_service(app_state: State, llm_service: LlmService) -> Ge
 
 
 def build_generate_text_run_pickup_service(app_state: State) -> GenerateTextRunPickupService:
-    """Built once by lifespan, which runs its pickup loop for as long as the app does."""
+    """Built once by lifespan, which runs its pickup loops for as long as the app does."""
     app_settings: AppSettings = app_state.settings
     generate_text_run_service = GenerateTextRunService(
         db_session_factory=app_state.db_session_factory
     )
+    generate_text_run_handoff_queue_service = GenerateTextRunHandoffQueueService(
+        redis_client=app_state.redis_client
+    )
     generate_text_run_lease_service = GenerateTextRunLeaseService(
         run_service=generate_text_run_service,
+        handoff_queue_service=generate_text_run_handoff_queue_service,
         background_job_service=app_state.background_job_service,
         generate_text_settings=app_settings.generate_text,
     )
     return GenerateTextRunPickupService(
         generate_text_service=build_generate_text_service(app_state, build_llm_service(app_state)),
         lease_service=generate_text_run_lease_service,
+        handoff_queue_service=generate_text_run_handoff_queue_service,
         run_service=generate_text_run_service,
         background_job_service=app_state.background_job_service,
         generate_text_settings=app_settings.generate_text,
