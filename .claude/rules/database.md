@@ -53,7 +53,7 @@ class never redeclares them.
 | `id`            | `BIGINT GENERATED ALWAYS AS IDENTITY`                        | `Mapped[int]`              | Primary key. Never leaves the backend |
 | `identity`      | `UUID NOT NULL DEFAULT gen_random_uuid()`                    | `Mapped[UUID]`             | Unique. The ID the API exposes |
 | `created_at`    | `TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')`      | `Mapped[datetime]`         | |
-| `updated_at`    | `TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')`      | `Mapped[datetime]`         | SQLAlchemy `onupdate` sets it on every ORM update |
+| `updated_at`    | `TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')`      | `Mapped[datetime]`         | SQLAlchemy `onupdate` sets it from the database clock on every update |
 | `deleted_at`    | `TIMESTAMP`                                                  | `Mapped[datetime \| None]` | On `SoftDeleteMixin`, which `BaseOrm` inherits |
 | `created_by_id` | `BIGINT NOT NULL`, FK `pb_user (id)`                         | `Mapped[int]`              | |
 | `updated_by_id` | `BIGINT NOT NULL`, FK `pb_user (id)`                         | `Mapped[int]`              | |
@@ -124,7 +124,8 @@ CREATE INDEX pb_persona_created_by_id_created_at_idx
   - `build_utc_now_sql()` inside a query or an `update()`:
     `.where(GenerateTextRunOrm.lease_expires_at <= build_utc_now_sql())`,
     `.values(last_login_at=build_utc_now_sql())`. `build_utc_now_plus_sql(seconds)`
-    is a time that far ahead, such as a lease expiry.
+    is a time that far ahead, such as a lease expiry. An Orm write adds a `timedelta`
+    to `fetch_utc_now` instead.
   - `await fetch_utc_now(db_session)` for an Orm write:
     `persona_record.deleted_at = await fetch_utc_now(self._db_session)`. Never assign
     `build_utc_now_sql()` to an Orm attribute: async code can't read the attribute
@@ -138,8 +139,9 @@ CREATE INDEX pb_persona_created_by_id_created_at_idx
 - `datetime.now(UTC)` is only for a time that never reaches the database, such as
   checking a third-party token's expiry. A duration uses `DateTimeUtils`' monotonic
   clock.
-- No database triggers. SQLAlchemy sets `updated_at`, so an `UPDATE` written in raw
-  SQL, like a backfill, sets `updated_at` itself.
+- No database triggers. SQLAlchemy sets `updated_at` on every Orm update and
+  `update()` statement, so only an `UPDATE` written in raw SQL, like a backfill, sets
+  `updated_at` itself.
 
 ### Soft delete
 
