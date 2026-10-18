@@ -39,7 +39,7 @@ backend/
 │   │   └── utils/             # domain-free Utils: DateTimeUtils, MarkdownUtils
 │   ├── database/              # tables, Orm classes: see database.md
 │   │   ├── base.py            # BaseOrm: shared columns every table inherits
-│   │   ├── clock.py           # the database clock: build_utc_now_sql(), fetch_utc_now()
+│   │   ├── clock.py           # the database clock as SQL: build_utc_now_sql()
 │   │   ├── column_types.py    # UtcDateTime
 │   │   ├── constants.py       # naming convention, UTC_NOW_SQL
 │   │   ├── session.py         # create_db_session_factory(), soft-delete rule

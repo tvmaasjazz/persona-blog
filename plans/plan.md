@@ -541,6 +541,13 @@ No run is lost, and at most one node is redone.
 - [ ] **Comment cleanup** (the PR after instant handoff). Bring existing backend and
   frontend code in line with the comment rules: one-sentence docstrings, and a short
   comment above each block of a multi-step function
+- [ ] **Writes as statements.** Switch Orm updates from setting attributes and calling
+  `flush()` to one `update()` statement that sets every field, so a time it writes is
+  `build_utc_now_sql()` rather than the app server's clock. Changes
+  `fastapi-structure.md` › Querying and writing, which today says to load the Orm,
+  mutate it and flush. Clears every `TODO(db-clock)`. Two of those are inserts
+  (`create_run`'s lease expiry, `create_step`'s `started_at`): decide whether they
+  become `insert()` statements in the same PR
 
 **Railway and granian settings:**
 
