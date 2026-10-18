@@ -23,7 +23,7 @@ until you have read them.
 Then look at what already exists. Use Glob and Grep to find the domain's current
 files under `backend/libs/<domain>/` and `backend/apps/api/domains/<domain>/`, the
 relevant `backend/libs/database/orm/` modules, `core/dependencies.py`,
-`core/config.py`, and `app_factory.py`. Read the neighbours of any file you are about
+`core/config.py`, `app_factory.py`, and `lifespan.py`. Read the neighbours of any file you are about
 to touch so your code matches what is there.
 
 ## What you write
@@ -49,15 +49,16 @@ The rules files say where each of these lives and how it is shaped.
   tasks and background jobs). Every service the job calls takes the session factory
 - **App-lifetime loops** — a loop that runs for as long as the app does, such as a
   pickup loop or a queue listener: a method on the lib service it acts on, a
-  `build_<service>(app_state)` in the domain's `dependencies.py`, and the task that
-  runs it in `lifespan.py` (`fastapi-structure.md` › Services)
+  `build_<service>(app_state)` in the domain's `dependencies.py`, and in `lifespan.py`
+  the import, the task that runs it, and its cancel at shutdown (`fastapi-structure.md`
+  › Services and › App-scoped vs request-scoped). One service may run several loops
 - **Wiring a domain in** — add its settings field to `AppSettings` and register its
   router in `app_factory.py`. In those two files, add the domain's line and nothing
   else.
 - **Adding to `core/dependencies.py` and `lifespan.py`** — a dependency factory with
   its `Annotated` alias, one app-scoped resource on `app.state` with its shutdown, or
-  one app-lifetime loop's task, started after the resources it needs and cancelled
-  first at shutdown.
+  an app-lifetime loop, which may extend the existing block that starts and cancels
+  the loop tasks.
   Both files grow with each domain that needs them. Add; never restructure what is
   already there, and never change how an existing dependency or resource is built.
 
