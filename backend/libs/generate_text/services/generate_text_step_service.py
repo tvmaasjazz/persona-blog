@@ -39,12 +39,12 @@ class GenerateTextStepService:
                 db_session, run_id, step_name
             )
             if paused_step_record is not None:
-                step_resume = (
+                step_resume_update = (
                     update(GenerateTextStepOrm)
                     .where(GenerateTextStepOrm.id == paused_step_record.id)
                     .values(status=GenerateTextStepStatusType.RUNNING)
                 )
-                await db_session.execute(step_resume)
+                await db_session.execute(step_resume_update)
                 return CreateGenerateTextStepResult(
                     id=paused_step_record.id, identity=paused_step_record.identity
                 )
@@ -81,7 +81,7 @@ class GenerateTextStepService:
 
             # Mark the step succeeded. A node that produced no text — a review node, say —
             # stores nothing rather than an empty string, so "the latest output" skips it.
-            step_completion = (
+            step_completion_update = (
                 update(GenerateTextStepOrm)
                 .where(GenerateTextStepOrm.id == step_id)
                 .values(
@@ -97,14 +97,14 @@ class GenerateTextStepService:
                     cost_usd=llm_call_rollup.cost_usd,
                 )
             )
-            step_completion_result = await db_session.execute(step_completion)
-            if step_completion_result.rowcount == 0:
+            step_completion_update_result = await db_session.execute(step_completion_update)
+            if step_completion_update_result.rowcount == 0:
                 raise NotFoundException(f"Generate text step {step_id} not found")
 
     async def fail_step(
         self, step_id: int, error_code: str, error_message: str, duration_ms: int
     ) -> None:
-        step_failure = (
+        step_failure_update = (
             update(GenerateTextStepOrm)
             .where(GenerateTextStepOrm.id == step_id)
             .values(
@@ -116,8 +116,8 @@ class GenerateTextStepService:
             )
         )
         async with self._db_session_factory() as db_session, db_session.begin():
-            step_failure_result = await db_session.execute(step_failure)
-            if step_failure_result.rowcount == 0:
+            step_failure_update_result = await db_session.execute(step_failure_update)
+            if step_failure_update_result.rowcount == 0:
                 raise NotFoundException(f"Generate text step {step_id} not found")
 
     async def record_decision(
@@ -127,7 +127,7 @@ class GenerateTextStepService:
         human_feedback: str | None,
         auth_user: AuthUser,
     ) -> None:
-        step_decision = (
+        step_decision_update = (
             update(GenerateTextStepOrm)
             .where(GenerateTextStepOrm.id == step_id)
             .values(
@@ -139,8 +139,8 @@ class GenerateTextStepService:
             )
         )
         async with self._db_session_factory() as db_session, db_session.begin():
-            step_decision_result = await db_session.execute(step_decision)
-            if step_decision_result.rowcount == 0:
+            step_decision_update_result = await db_session.execute(step_decision_update)
+            if step_decision_update_result.rowcount == 0:
                 raise NotFoundException(f"Generate text step {step_id} not found")
 
     async def find_awaiting_review_step_id(self, run_id: int) -> int | None:
@@ -200,7 +200,7 @@ class GenerateTextStepService:
 
     async def record_awaiting_review(self, step_id: int, duration_ms: int) -> None:
         """A review node paused rather than failed: the graph will call it again on resume."""
-        step_pause = (
+        step_pause_update = (
             update(GenerateTextStepOrm)
             .where(GenerateTextStepOrm.id == step_id)
             .values(
@@ -209,8 +209,8 @@ class GenerateTextStepService:
             )
         )
         async with self._db_session_factory() as db_session, db_session.begin():
-            step_pause_result = await db_session.execute(step_pause)
-            if step_pause_result.rowcount == 0:
+            step_pause_update_result = await db_session.execute(step_pause_update)
+            if step_pause_update_result.rowcount == 0:
                 raise NotFoundException(f"Generate text step {step_id} not found")
 
     async def _find_llm_call_rollup(

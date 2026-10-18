@@ -178,7 +178,7 @@ class BlogPostService:
 
     async def delete_blog_post(self, blog_post_identity: UUID, auth_user: AuthUser) -> None:
         blog_post_record = await self._find_owned_blog_post_record(blog_post_identity, auth_user)
-        blog_post_delete = (
+        blog_post_soft_delete_update = (
             update(BlogPostOrm)
             .where(BlogPostOrm.id == blog_post_record.id)
             .values(
@@ -186,7 +186,7 @@ class BlogPostService:
                 deleted_by_id=auth_user.id,
             )
         )
-        await self._db_session.execute(blog_post_delete)
+        await self._db_session.execute(blog_post_soft_delete_update)
 
         await self._content_item_service.delete_content_item(
             blog_post_record.content_item_id, auth_user

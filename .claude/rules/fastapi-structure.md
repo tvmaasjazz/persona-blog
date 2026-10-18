@@ -698,7 +698,7 @@ when the app soft-deletes rows of that table, as it does personas, blog posts an
 content items, that `WHERE` adds `<Orm>.deleted_at.is_(None)`:
 
 ```python
-        run_start = (
+        run_start_update = (
             update(GenerateTextRunOrm)
             .where(GenerateTextRunOrm.id == run_id)
             .values(
@@ -706,8 +706,8 @@ content items, that `WHERE` adds `<Orm>.deleted_at.is_(None)`:
                 started_at=DatabaseClockUtils.build_utc_now_sql(),
             )
         )
-        run_start_result = await db_session.execute(run_start)
-        if run_start_result.rowcount == 0:
+        run_start_update_result = await db_session.execute(run_start_update)
+        if run_start_update_result.rowcount == 0:
             raise NotFoundException(f"Generate text run {run_id} not found")
 ```
 

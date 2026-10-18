@@ -107,7 +107,7 @@ class PersonaService:
 
     async def delete_persona(self, persona_identity: UUID, auth_user: AuthUser) -> None:
         persona_record = await self._find_owned_persona_record(persona_identity, auth_user)
-        persona_delete = (
+        persona_soft_delete_update = (
             update(PersonaOrm)
             .where(PersonaOrm.id == persona_record.id)
             .values(
@@ -115,7 +115,7 @@ class PersonaService:
                 deleted_by_id=auth_user.id,
             )
         )
-        await self._db_session.execute(persona_delete)
+        await self._db_session.execute(persona_soft_delete_update)
 
     async def _find_accessible_persona_record(
         self, persona_identity: UUID, auth_user: AuthUser

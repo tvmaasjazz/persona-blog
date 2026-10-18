@@ -172,9 +172,11 @@ An `Orm` class describes a table; an instance of it is a row, named `<entity>_re
 `user_record`, `user_auth_provider_record`. That holds whether the row was loaded or,
 in a test factory, just created. Never `user_orm`.
 
-A write statement is named for its row and what it does: `persona_insert`,
-`persona_update`, `persona_delete`, `run_start`, `run_claim`. What `execute()` returns
-for it adds `_result`: `persona_insert_result`.
+A statement's name ends in what kind it is. A read ends in `_query`: `persona_query`.
+A write ends in its SQL verb, after what it does to which row: `persona_insert`,
+`persona_update`, `run_start_update`, `run_claim_update`. A soft delete is an update, so
+it says both: `persona_soft_delete_update`. What `execute()` returns adds `_result`:
+`persona_insert_result`, `run_start_update_result`.
 
 One exception: the root `AppSettings` instance is `app.state.settings`. There is only
 ever one settings object on `app.state`, so the qualifier adds nothing. Local

@@ -59,7 +59,7 @@ class GenerateTextRunService:
         return CreateGenerateTextRunResult(id=run_id, identity=run_identity)
 
     async def start_run(self, run_id: int) -> None:
-        run_start = (
+        run_start_update = (
             update(GenerateTextRunOrm)
             .where(GenerateTextRunOrm.id == run_id)
             .values(
@@ -68,15 +68,15 @@ class GenerateTextRunService:
             )
         )
         async with self._db_session_factory() as db_session, db_session.begin():
-            run_start_result = await db_session.execute(run_start)
-            if run_start_result.rowcount == 0:
+            run_start_update_result = await db_session.execute(run_start_update)
+            if run_start_update_result.rowcount == 0:
                 raise NotFoundException(f"Generate text run {run_id} not found")
 
     async def claim_paused_run(self, run_id: int, lease_owner: str, lease_seconds: int) -> bool:
         """Moves a paused run to RUNNING under the given lease. False when it wasn't paused."""
         # One statement tests and sets the status, so of two resumes that arrive together
         # exactly one changes a row
-        run_claim = (
+        run_claim_update = (
             update(GenerateTextRunOrm)
             .where(
                 GenerateTextRunOrm.id == run_id,
@@ -89,8 +89,8 @@ class GenerateTextRunService:
             )
         )
         async with self._db_session_factory() as db_session, db_session.begin():
-            run_claim_result = await db_session.execute(run_claim)
-        return run_claim_result.rowcount == 1
+            run_claim_update_result = await db_session.execute(run_claim_update)
+        return run_claim_update_result.rowcount == 1
 
     async def claim_expired_run(
         self, lease_owner: str, lease_seconds: int, run_id: int | None = None
@@ -99,7 +99,7 @@ class GenerateTextRunService:
         the run whose lease expired longest ago."""
         # SKIP LOCKED keeps two processes from claiming the same row. A NULL lease never
         # matches, so a run from before leases existed is left alone.
-        expired_run_id = (
+        expired_run_id_query = (
             select(GenerateTextRunOrm.id)
             .where(
                 GenerateTextRunOrm.status.in_(
@@ -116,10 +116,10 @@ class GenerateTextRunService:
             .with_for_update(skip_locked=True)
         )
         if run_id is not None:
-            expired_run_id = expired_run_id.where(GenerateTextRunOrm.id == run_id)
-        expired_run_claim = (
+            expired_run_id_query = expired_run_id_query.where(GenerateTextRunOrm.id == run_id)
+        expired_run_claim_update = (
             update(GenerateTextRunOrm)
-            .where(GenerateTextRunOrm.id == expired_run_id.scalar_subquery())
+            .where(GenerateTextRunOrm.id == expired_run_id_query.scalar_subquery())
             .values(
                 lease_owner=lease_owner,
                 lease_expires_at=DatabaseClockUtils.build_utc_now_plus_sql(lease_seconds),
@@ -128,8 +128,8 @@ class GenerateTextRunService:
             .returning(GenerateTextRunOrm)
         )
         async with self._db_session_factory() as db_session, db_session.begin():
-            expired_run_claim_result = await db_session.execute(expired_run_claim)
-            run_record = expired_run_claim_result.scalar_one_or_none()
+            expired_run_claim_update_result = await db_session.execute(expired_run_claim_update)
+            run_record = expired_run_claim_update_result.scalar_one_or_none()
             if run_record is None:
                 return None
             return ClaimExpiredGenerateTextRunResult.model_validate(
@@ -138,7 +138,7 @@ class GenerateTextRunService:
 
     async def renew_lease(self, run_id: int, lease_owner: str, lease_seconds: int) -> bool:
         """Extends the lease. False when the lease isn't this owner's any more."""
-        run_lease_renewal = (
+        run_lease_renewal_update = (
             update(GenerateTextRunOrm)
             .where(
                 GenerateTextRunOrm.id == run_id,
@@ -147,13 +147,13 @@ class GenerateTextRunService:
             .values(lease_expires_at=DatabaseClockUtils.build_utc_now_plus_sql(lease_seconds))
         )
         async with self._db_session_factory() as db_session, db_session.begin():
-            run_lease_renewal_result = await db_session.execute(run_lease_renewal)
-        return run_lease_renewal_result.rowcount == 1
+            run_lease_renewal_update_result = await db_session.execute(run_lease_renewal_update)
+        return run_lease_renewal_update_result.rowcount == 1
 
     async def release_lease(self, run_id: int, lease_owner: str) -> bool:
         """Expires the lease now, so another process can pick the run up. False when the
         lease isn't this owner's any more."""
-        run_lease_release = (
+        run_lease_release_update = (
             update(GenerateTextRunOrm)
             .where(
                 GenerateTextRunOrm.id == run_id,
@@ -162,8 +162,8 @@ class GenerateTextRunService:
             .values(lease_expires_at=DatabaseClockUtils.build_utc_now_sql())
         )
         async with self._db_session_factory() as db_session, db_session.begin():
-            run_lease_release_result = await db_session.execute(run_lease_release)
-        return run_lease_release_result.rowcount == 1
+            run_lease_release_update_result = await db_session.execute(run_lease_release_update)
+        return run_lease_release_update_result.rowcount == 1
 
     async def complete_run(self, run_id: int) -> None:
         async with self._db_session_factory() as db_session, db_session.begin():
@@ -171,7 +171,7 @@ class GenerateTextRunService:
             llm_call_rollup = await self._find_llm_call_rollup(db_session, run_id)
 
             # Mark the run completed; a finished run has no lease
-            run_completion = (
+            run_completion_update = (
                 update(GenerateTextRunOrm)
                 .where(GenerateTextRunOrm.id == run_id)
                 .values(
@@ -185,8 +185,8 @@ class GenerateTextRunService:
                     cost_usd=llm_call_rollup.cost_usd,
                 )
             )
-            run_completion_result = await db_session.execute(run_completion)
-            if run_completion_result.rowcount == 0:
+            run_completion_update_result = await db_session.execute(run_completion_update)
+            if run_completion_update_result.rowcount == 0:
                 raise NotFoundException(f"Generate text run {run_id} not found")
 
     async def record_awaiting_review(self, run_id: int) -> None:
@@ -195,7 +195,7 @@ class GenerateTextRunService:
             llm_call_rollup = await self._find_llm_call_rollup(db_session, run_id)
 
             # Mark the run paused; a paused run has no lease
-            run_pause = (
+            run_pause_update = (
                 update(GenerateTextRunOrm)
                 .where(GenerateTextRunOrm.id == run_id)
                 .values(
@@ -208,8 +208,8 @@ class GenerateTextRunService:
                     cost_usd=llm_call_rollup.cost_usd,
                 )
             )
-            run_pause_result = await db_session.execute(run_pause)
-            if run_pause_result.rowcount == 0:
+            run_pause_update_result = await db_session.execute(run_pause_update)
+            if run_pause_update_result.rowcount == 0:
                 raise NotFoundException(f"Generate text run {run_id} not found")
 
     async def fail_run(
@@ -234,7 +234,7 @@ class GenerateTextRunService:
             llm_call_rollup = await self._find_llm_call_rollup(db_session, run_id)
 
             # Mark the run failed; a finished run has no lease
-            run_failure = (
+            run_failure_update = (
                 update(GenerateTextRunOrm)
                 .where(GenerateTextRunOrm.id == run_id)
                 .values(
@@ -250,7 +250,7 @@ class GenerateTextRunService:
                     cost_usd=llm_call_rollup.cost_usd,
                 )
             )
-            await db_session.execute(run_failure)
+            await db_session.execute(run_failure_update)
 
     async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
         async with self._db_session_factory() as db_session:

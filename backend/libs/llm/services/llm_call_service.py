@@ -74,7 +74,7 @@ class LlmCallService:
 
         async with self._db_session_factory() as db_session, db_session.begin():
             # Record the provider's response on the call; no row updated means it is missing
-            llm_call_update = (
+            llm_call_completion_update = (
                 update(LlmCallOrm)
                 .where(LlmCallOrm.id == llm_call_id)
                 .values(
@@ -92,8 +92,8 @@ class LlmCallService:
                     updated_by_id=auth_user.id,
                 )
             )
-            llm_call_update_result = await db_session.execute(llm_call_update)
-            if llm_call_update_result.rowcount == 0:
+            llm_call_completion_update_result = await db_session.execute(llm_call_completion_update)
+            if llm_call_completion_update_result.rowcount == 0:
                 raise NotFoundException(f"LLM call {llm_call_id} not found")
 
     async def fail_llm_call(
@@ -117,7 +117,7 @@ class LlmCallService:
 
         async with self._db_session_factory() as db_session, db_session.begin():
             # Record the failure on the call
-            llm_call_update = (
+            llm_call_failure_update = (
                 update(LlmCallOrm)
                 .where(LlmCallOrm.id == llm_call_id)
                 .values(
@@ -130,8 +130,8 @@ class LlmCallService:
                     updated_by_id=auth_user.id,
                 )
             )
-            llm_call_update_result = await db_session.execute(llm_call_update)
-            if llm_call_update_result.rowcount == 0:
+            llm_call_failure_update_result = await db_session.execute(llm_call_failure_update)
+            if llm_call_failure_update_result.rowcount == 0:
                 # The provider error is already on its way up; losing its row is not worth
                 # replacing it with a second exception.
                 logger.warning("llm_call_row_missing", llm_call_id=llm_call_id)

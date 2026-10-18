@@ -62,7 +62,7 @@ class ContentItemService:
 
     async def delete_content_item(self, content_item_id: int, auth_user: AuthUser) -> None:
         # The where clause is the lookup; a soft-deleted row counts as missing
-        content_item_delete = (
+        content_item_soft_delete_update = (
             update(ContentItemOrm)
             .where(ContentItemOrm.id == content_item_id, ContentItemOrm.deleted_at.is_(None))
             .values(
@@ -70,15 +70,17 @@ class ContentItemService:
                 deleted_by_id=auth_user.id,
             )
         )
-        content_item_delete_result = await self._db_session.execute(content_item_delete)
-        if content_item_delete_result.rowcount == 0:
+        content_item_soft_delete_update_result = await self._db_session.execute(
+            content_item_soft_delete_update
+        )
+        if content_item_soft_delete_update_result.rowcount == 0:
             raise NotFoundException("Content item not found")
 
     async def _link_generate_text_run(
         self, content_item_id: int, generate_text_run_identity: UUID
     ) -> None:
         # The where clause is the lookup; a soft-deleted run counts as missing
-        generate_text_run_update = (
+        generate_text_run_link_update = (
             update(GenerateTextRunOrm)
             .where(
                 GenerateTextRunOrm.identity == generate_text_run_identity,
@@ -86,6 +88,8 @@ class ContentItemService:
             )
             .values(content_item_id=content_item_id)
         )
-        generate_text_run_update_result = await self._db_session.execute(generate_text_run_update)
-        if generate_text_run_update_result.rowcount == 0:
+        generate_text_run_link_update_result = await self._db_session.execute(
+            generate_text_run_link_update
+        )
+        if generate_text_run_link_update_result.rowcount == 0:
             raise NotFoundException("Generate text run not found")
