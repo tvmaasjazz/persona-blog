@@ -85,6 +85,7 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     if app_settings.environment is EnvironmentType.DEVELOPMENT:
         event_loop_monitor_task = asyncio.create_task(monitor_event_loop_lag())
     generate_text_run_pickup_task = None
+    generate_text_run_handoff_task = None
     if (
         app_settings.environment is not EnvironmentType.TEST
         and fastapi_app.state.graph_checkpointer is not None
@@ -93,13 +94,25 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
         generate_text_run_pickup_task = asyncio.create_task(
             generate_text_run_pickup_service.pick_up_expired_runs()
         )
+        generate_text_run_handoff_task = asyncio.create_task(
+            generate_text_run_pickup_service.pick_up_handed_off_runs()
+        )
     try:
         yield
     finally:
-        # First, so a stopping process never claims a new run.
-        if generate_text_run_pickup_task is not None:
-            generate_text_run_pickup_task.cancel()
-            await asyncio.gather(generate_text_run_pickup_task, return_exceptions=True)
+        # First, so a stopping process never claims a new run. Both are cancelled, then
+        # waited on together.
+        generate_text_run_tasks = [
+            generate_text_run_task
+            for generate_text_run_task in (
+                generate_text_run_pickup_task,
+                generate_text_run_handoff_task,
+            )
+            if generate_text_run_task is not None
+        ]
+        for generate_text_run_task in generate_text_run_tasks:
+            generate_text_run_task.cancel()
+        await asyncio.gather(*generate_text_run_tasks, return_exceptions=True)
         # Before the clients close: a running graph still needs them.
         background_job_service.request_stop()
         await background_job_service.drain(app_settings.background_jobs.shutdown_drain_seconds)

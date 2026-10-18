@@ -6,6 +6,7 @@ import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel
+from redis.asyncio import Redis
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -29,6 +30,9 @@ from libs.generate_text.services.generate_text_instrumentation_service import (
     GenerateTextInstrumentationService,
 )
 from libs.generate_text.services.generate_text_node_service import GenerateTextNodeService
+from libs.generate_text.services.generate_text_run_handoff_queue_service import (
+    GenerateTextRunHandoffQueueService,
+)
 from libs.generate_text.services.generate_text_run_lease_service import (
     GenerateTextRunLeaseService,
 )
@@ -93,6 +97,7 @@ def _build_generate_text_service(
     db_session_factory: async_sessionmaker[AsyncSession],
     llm_service_stub: LlmServiceStub,
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
     *,
     generate_text_settings: GenerateTextSettings | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
@@ -116,6 +121,7 @@ def _build_generate_text_service(
     )
     lease_service = GenerateTextRunLeaseService(
         run_service=run_service,
+        handoff_queue_service=handoff_queue_service,
         background_job_service=background_job_service,
         generate_text_settings=generate_text_settings,
     )
@@ -133,6 +139,7 @@ def _build_generate_text_service(
 def _build_generate_text_service_with_stub_registry(
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
     *,
     generate_text_settings: GenerateTextSettings | None = None,
 ) -> tuple[GenerateTextService, GenerateTextGraphBuilderRegistryStub]:
@@ -142,6 +149,7 @@ def _build_generate_text_service_with_stub_registry(
     generate_text_settings = generate_text_settings or GenerateTextSettings()
     lease_service = GenerateTextRunLeaseService(
         run_service=run_service,
+        handoff_queue_service=handoff_queue_service,
         background_job_service=background_job_service,
         generate_text_settings=generate_text_settings,
     )
@@ -175,6 +183,7 @@ async def test_generate_text_returns_pending_run_before_graph_finishes(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
@@ -184,6 +193,7 @@ async def test_generate_text_returns_pending_run_before_graph_finishes(
         db_session_factory,
         llm_service_stub,
         background_job_service,
+        handoff_queue_service,
         generate_text_settings=GenerateTextSettings(poll_interval_ms=500),
     )
     generate_text_input = build_generate_text_input(
@@ -232,13 +242,14 @@ async def test_generate_text_all_steps_auto_approved_completes_run_in_background
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="# Final\n\nFinal text.")
     generate_text_service = _build_generate_text_service(
-        db_session_factory, llm_service_stub, background_job_service
+        db_session_factory, llm_service_stub, background_job_service, handoff_queue_service
     )
     generate_text_input = build_generate_text_input(options=_build_all_auto_approved_options())
 
@@ -262,13 +273,14 @@ async def test_generate_text_step_not_auto_approved_pauses_run_for_review_in_bac
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
     generate_text_service = _build_generate_text_service(
-        db_session_factory, llm_service_stub, background_job_service
+        db_session_factory, llm_service_stub, background_job_service, handoff_queue_service
     )
     generate_text_input = build_generate_text_input(options=_build_draft_needs_review_options())
 
@@ -291,13 +303,14 @@ async def test_resume_generate_text_returns_running_run_with_paused_step_content
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
     generate_text_service = _build_generate_text_service(
-        db_session_factory, llm_service_stub, background_job_service
+        db_session_factory, llm_service_stub, background_job_service, handoff_queue_service
     )
     generate_text_run_result = await generate_text_service.generate_text(
         build_generate_text_input(options=_build_draft_needs_review_options()),
@@ -323,13 +336,14 @@ async def test_resume_generate_text_approval_completes_run_in_background(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
     generate_text_service = _build_generate_text_service(
-        db_session_factory, llm_service_stub, background_job_service
+        db_session_factory, llm_service_stub, background_job_service, handoff_queue_service
     )
     generate_text_run_result = await generate_text_service.generate_text(
         build_generate_text_input(options=_build_draft_needs_review_options()),
@@ -364,13 +378,14 @@ async def test_resume_generate_text_rejection_rewrites_and_pauses_run_again(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
     generate_text_service = _build_generate_text_service(
-        db_session_factory, llm_service_stub, background_job_service
+        db_session_factory, llm_service_stub, background_job_service, handoff_queue_service
     )
     generate_text_run_result = await generate_text_service.generate_text(
         build_generate_text_input(options=_build_draft_needs_review_options()),
@@ -409,9 +424,10 @@ async def test_resume_generate_text_rejection_rewrites_and_pauses_run_again(
 async def test_find_generate_text_run_unknown_raises_not_found_exception(
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     generate_text_service = _build_generate_text_service(
-        db_session_factory, LlmServiceStub(), background_job_service
+        db_session_factory, LlmServiceStub(), background_job_service, handoff_queue_service
     )
 
     with pytest.raises(NotFoundException):
@@ -422,6 +438,7 @@ async def test_find_generate_text_run_another_users_run_raises_not_found_excepti
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     owner_auth_user = await _insert_auth_user(db_session)
     other_auth_user = await _insert_auth_user(db_session)
@@ -429,7 +446,7 @@ async def test_find_generate_text_run_another_users_run_raises_not_found_excepti
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="# Final\n\nFinal text.")
     generate_text_service = _build_generate_text_service(
-        db_session_factory, llm_service_stub, background_job_service
+        db_session_factory, llm_service_stub, background_job_service, handoff_queue_service
     )
     generate_text_run_result = await generate_text_service.generate_text(
         build_generate_text_input(options=_build_all_auto_approved_options()),
@@ -447,9 +464,10 @@ async def test_find_generate_text_run_another_users_run_raises_not_found_excepti
 async def test_resume_generate_text_unknown_run_raises_not_found_exception(
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     generate_text_service = _build_generate_text_service(
-        db_session_factory, LlmServiceStub(), background_job_service
+        db_session_factory, LlmServiceStub(), background_job_service, handoff_queue_service
     )
 
     with pytest.raises(NotFoundException):
@@ -462,6 +480,7 @@ async def test_resume_generate_text_another_users_run_raises_not_found_exception
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     owner_auth_user = await _insert_auth_user(db_session)
     other_auth_user = await _insert_auth_user(db_session)
@@ -469,7 +488,7 @@ async def test_resume_generate_text_another_users_run_raises_not_found_exception
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="# Draft\n\nA draft.")
     generate_text_service = _build_generate_text_service(
-        db_session_factory, llm_service_stub, background_job_service
+        db_session_factory, llm_service_stub, background_job_service, handoff_queue_service
     )
     generate_text_run_result = await generate_text_service.generate_text(
         build_generate_text_input(options=_build_draft_needs_review_options()),
@@ -490,13 +509,14 @@ async def test_resume_generate_text_run_not_paused_raises_not_paused_exception(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="# Final\n\nFinal text.")
     generate_text_service = _build_generate_text_service(
-        db_session_factory, llm_service_stub, background_job_service
+        db_session_factory, llm_service_stub, background_job_service, handoff_queue_service
     )
     generate_text_run_result = await generate_text_service.generate_text(
         build_generate_text_input(options=_build_all_auto_approved_options()),
@@ -515,6 +535,7 @@ async def test_resume_generate_text_version_mismatch_raises_version_mismatch_exc
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     run_record = await insert_generate_text_run_row(
@@ -525,7 +546,7 @@ async def test_resume_generate_text_version_mismatch_raises_version_mismatch_exc
     )
     await db_session.commit()
     generate_text_service = _build_generate_text_service(
-        db_session_factory, LlmServiceStub(), background_job_service
+        db_session_factory, LlmServiceStub(), background_job_service, handoff_queue_service
     )
 
     with pytest.raises(GenerateTextRunVersionMismatchException):
@@ -538,6 +559,7 @@ async def test_resume_generate_text_record_decision_fails_marks_run_failed_and_r
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
@@ -548,6 +570,7 @@ async def test_resume_generate_text_record_decision_fails_marks_run_failed_and_r
         db_session_factory,
         llm_service_stub,
         background_job_service,
+        handoff_queue_service,
         checkpointer=graph_checkpointer,
     )
     generate_text_run_result = await generate_text_service.generate_text(
@@ -562,6 +585,7 @@ async def test_resume_generate_text_record_decision_fails_marks_run_failed_and_r
         db_session_factory,
         llm_service_stub,
         background_job_service,
+        handoff_queue_service,
         checkpointer=graph_checkpointer,
         step_service=generate_text_step_service_stub,
     )
@@ -585,11 +609,14 @@ async def test_generate_text_graph_stream_fails_with_no_step_marks_run_failed(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
     generate_text_service, graph_builder_registry_stub = (
-        _build_generate_text_service_with_stub_registry(db_session_factory, background_job_service)
+        _build_generate_text_service_with_stub_registry(
+            db_session_factory, background_job_service, handoff_queue_service
+        )
     )
     graph_builder_stub = graph_builder_registry_stub.get_by_text_type_result
     graph_builder_stub.build_graph_result.astream_error = RuntimeError("checkpointer unreachable")
@@ -613,6 +640,7 @@ async def test_generate_text_task_cancelled_mid_run_releases_lease_and_keeps_run
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
@@ -620,6 +648,7 @@ async def test_generate_text_task_cancelled_mid_run_releases_lease_and_keeps_run
         _build_generate_text_service_with_stub_registry(
             db_session_factory,
             background_job_service,
+            handoff_queue_service,
             generate_text_settings=GenerateTextSettings(lease_seconds=LONG_LEASE_SECONDS),
         )
     )
@@ -648,6 +677,7 @@ async def test_generate_text_creates_run_leased_to_worker(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
@@ -655,6 +685,7 @@ async def test_generate_text_creates_run_leased_to_worker(
         _build_generate_text_service_with_stub_registry(
             db_session_factory,
             background_job_service,
+            handoff_queue_service,
             generate_text_settings=GenerateTextSettings(lease_seconds=LONG_LEASE_SECONDS),
         )
     )
@@ -680,6 +711,7 @@ async def test_generate_text_draft_never_validates_fails_run_and_records_error_o
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
@@ -689,6 +721,7 @@ async def test_generate_text_draft_never_validates_fails_run_and_records_error_o
         db_session_factory,
         llm_service_stub,
         background_job_service,
+        handoff_queue_service,
         generate_text_settings=GenerateTextSettings(max_output_format_retries=0),
     )
     generate_text_input = build_generate_text_input(options=_build_all_auto_approved_options())
@@ -717,13 +750,14 @@ async def test_generate_text_persists_persona_id_tone_and_target_audience(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
     llm_service_stub = LlmServiceStub()
     llm_service_stub.complete_result = build_llm_completion_result(content="# Final\n\nFinal text.")
     generate_text_service = _build_generate_text_service(
-        db_session_factory, llm_service_stub, background_job_service
+        db_session_factory, llm_service_stub, background_job_service, handoff_queue_service
     )
     generate_text_input = build_generate_text_input(
         options=_build_all_auto_approved_options(),
@@ -748,11 +782,12 @@ async def test_generate_text_invalid_options_raises_and_persists_no_run(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = build_find_user_persona_result()
     generate_text_service = _build_generate_text_service(
-        db_session_factory, LlmServiceStub(), background_job_service
+        db_session_factory, LlmServiceStub(), background_job_service, handoff_queue_service
     )
     generate_text_input = GenerateTextInput[_InvalidBlogPostOptionsInput](
         text_type=TextType.BLOG_POST,
@@ -774,6 +809,7 @@ async def test_resume_generate_text_run_without_checkpoint_raises_not_paused_exc
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     run_record = await insert_generate_text_run_row(
@@ -785,7 +821,7 @@ async def test_resume_generate_text_run_without_checkpoint_raises_not_paused_exc
     )
     await db_session.commit()
     generate_text_service = _build_generate_text_service(
-        db_session_factory, LlmServiceStub(), background_job_service
+        db_session_factory, LlmServiceStub(), background_job_service, handoff_queue_service
     )
 
     with pytest.raises(GenerateTextRunNotPausedException):
@@ -798,6 +834,7 @@ async def test_resume_generate_text_leases_claimed_run_to_worker(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     run_record = await insert_generate_text_run_row(
@@ -811,6 +848,7 @@ async def test_resume_generate_text_leases_claimed_run_to_worker(
         _build_generate_text_service_with_stub_registry(
             db_session_factory,
             background_job_service,
+            handoff_queue_service,
             generate_text_settings=GenerateTextSettings(lease_seconds=LONG_LEASE_SECONDS),
         )
     )
@@ -830,10 +868,12 @@ async def test_resume_generate_text_leases_claimed_run_to_worker(
     assert run_record.lease_expires_at > LONG_LEASE_BOUND
 
 
-async def test_generate_text_stop_requested_during_step_saves_step_and_releases_lease(
+async def test_generate_text_stop_requested_during_step_saves_step_releases_lease_and_pushes_run_id(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
+    redis_client: Redis,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
@@ -844,6 +884,7 @@ async def test_generate_text_stop_requested_during_step_saves_step_and_releases_
         db_session_factory,
         llm_service_stub,
         background_job_service,
+        handoff_queue_service,
         generate_text_settings=GenerateTextSettings(lease_seconds=LONG_LEASE_SECONDS),
     )
     await generate_text_service.generate_text(
@@ -876,12 +917,15 @@ async def test_generate_text_stop_requested_during_step_saves_step_and_releases_
     assert step_records[0].status == GenerateTextStepStatusType.SUCCEEDED
     assert step_records[0].output == {"text": "# Final\n\nFinal text."}
     assert len(llm_service_stub.complete_inputs) == 1
+    handoff_list_items = await redis_client.lrange("generate_text:run_handoff", 0, -1)
+    assert handoff_list_items == [str(run_record.id).encode()]
 
 
 async def test_generate_text_lease_lost_to_another_worker_cancels_job_without_releasing(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
@@ -889,6 +933,7 @@ async def test_generate_text_lease_lost_to_another_worker_cancels_job_without_re
         _build_generate_text_service_with_stub_registry(
             db_session_factory,
             background_job_service,
+            handoff_queue_service,
             generate_text_settings=GenerateTextSettings(
                 lease_seconds=LONG_LEASE_SECONDS, lease_heartbeat_seconds=1
             ),
