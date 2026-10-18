@@ -12,4 +12,5 @@ class GenerateTextSettings(BaseModel):
     lease_heartbeat_seconds: int = 15
     run_pickup_interval_seconds: int = 30
     max_run_pickups: int = 3
-    run_handoff_wait_seconds: int = 5
+    # Under redis-py's 5s socket timeout, or an empty wait raises instead of returning
+    run_handoff_wait_seconds: int = 2
