@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -7,7 +8,6 @@ from libs.auth.results import AuthUser
 from libs.content_items.inputs import CreateContentItemInput, UpdateContentItemInput
 from libs.content_items.results import CreateContentItemResult
 from libs.core.exceptions import NotFoundException
-from libs.database.clock import fetch_utc_now
 from libs.database.orm import ContentItemOrm, GenerateTextRunOrm
 
 
@@ -52,7 +52,8 @@ class ContentItemService:
 
     async def delete_content_item(self, content_item_id: int, auth_user: AuthUser) -> None:
         content_item_record = await self._find_content_item_record(content_item_id)
-        content_item_record.deleted_at = await fetch_utc_now(self._db_session)
+        # TODO(db-clock): the database's now, once this write is an update() statement
+        content_item_record.deleted_at = datetime.now(UTC)
         content_item_record.deleted_by_id = auth_user.id
         await self._db_session.flush()
 

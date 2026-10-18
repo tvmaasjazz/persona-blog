@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -5,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
-from libs.database.clock import fetch_utc_now
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.generate_text.constants import STEP_OUTPUT_TEXT_KEY
@@ -54,7 +54,8 @@ class GenerateTextStepService:
                 attempt=next_attempt,
                 status=GenerateTextStepStatusType.RUNNING,
                 input=create_generate_text_step_input.input,
-                started_at=await fetch_utc_now(db_session),
+                # TODO(db-clock): the database's now, once this write is an insert() statement
+                started_at=datetime.now(UTC),
                 created_by_id=auth_user.id,
                 updated_by_id=auth_user.id,
             )
@@ -73,7 +74,8 @@ class GenerateTextStepService:
             # an empty string, so "the latest output" skips it.
             step_record.output = {STEP_OUTPUT_TEXT_KEY: output} if output else None
             step_record.duration_ms = duration_ms
-            step_record.finished_at = await fetch_utc_now(db_session)
+            # TODO(db-clock): the database's now, once this write is an update() statement
+            step_record.finished_at = datetime.now(UTC)
             await self._apply_rollup(db_session, step_record)
             await db_session.flush()
 
@@ -86,7 +88,8 @@ class GenerateTextStepService:
             step_record.error_code = error_code
             step_record.error_message = error_message
             step_record.duration_ms = duration_ms
-            step_record.finished_at = await fetch_utc_now(db_session)
+            # TODO(db-clock): the database's now, once this write is an update() statement
+            step_record.finished_at = datetime.now(UTC)
             await db_session.flush()
 
     async def record_decision(
@@ -101,7 +104,8 @@ class GenerateTextStepService:
             step_record.human_decision = human_decision
             step_record.human_feedback = human_feedback
             step_record.decided_by_id = auth_user.id
-            step_record.decided_at = await fetch_utc_now(db_session)
+            # TODO(db-clock): the database's now, once this write is an update() statement
+            step_record.decided_at = datetime.now(UTC)
             step_record.updated_by_id = auth_user.id
             await db_session.flush()
 

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import or_, select
@@ -5,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import ForbiddenException, NotFoundException
-from libs.database.clock import fetch_utc_now
 from libs.database.orm import PersonaOrm
 from libs.personas.inputs import PersonaInput
 from libs.personas.results import (
@@ -97,7 +97,8 @@ class PersonaService:
 
     async def delete_persona(self, persona_identity: UUID, auth_user: AuthUser) -> None:
         persona_record = await self._find_owned_persona_record(persona_identity, auth_user)
-        persona_record.deleted_at = await fetch_utc_now(self._db_session)
+        # TODO(db-clock): the database's now, once this write is an update() statement
+        persona_record.deleted_at = datetime.now(UTC)
         persona_record.deleted_by_id = auth_user.id
         await self._db_session.flush()
 

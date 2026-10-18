@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
-from libs.database.clock import build_utc_now_plus_sql, build_utc_now_sql, fetch_utc_now
+from libs.database.clock import build_utc_now_plus_sql, build_utc_now_sql
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.database.orm.persona import PersonaOrm
@@ -32,7 +32,6 @@ class GenerateTextRunService:
         self, create_generate_text_run_input: CreateGenerateTextRunInput, auth_user: AuthUser
     ) -> CreateGenerateTextRunResult:
         async with self._db_session_factory() as db_session, db_session.begin():
-            utc_now = await fetch_utc_now(db_session)
             run_record = GenerateTextRunOrm(
                 text_type=create_generate_text_run_input.text_type,
                 graph_name=create_generate_text_run_input.graph_name,
@@ -44,7 +43,8 @@ class GenerateTextRunService:
                 additional_context=create_generate_text_run_input.additional_context,
                 options=create_generate_text_run_input.options,
                 lease_owner=create_generate_text_run_input.lease_owner,
-                lease_expires_at=utc_now
+                # TODO(db-clock): the database's now, once this write is an insert() statement
+                lease_expires_at=datetime.now(UTC)
                 + timedelta(seconds=create_generate_text_run_input.lease_seconds),
                 created_by_id=auth_user.id,
                 updated_by_id=auth_user.id,
@@ -60,7 +60,8 @@ class GenerateTextRunService:
         async with self._db_session_factory() as db_session, db_session.begin():
             run_record = await self._get_run(db_session, run_id)
             run_record.status = GenerateTextRunStatusType.RUNNING
-            run_record.started_at = await fetch_utc_now(db_session)
+            # TODO(db-clock): the database's now, once this write is an update() statement
+            run_record.started_at = datetime.now(UTC)
             await db_session.flush()
 
     async def claim_paused_run(self, run_id: int, lease_owner: str, lease_seconds: int) -> bool:
@@ -160,7 +161,8 @@ class GenerateTextRunService:
         async with self._db_session_factory() as db_session, db_session.begin():
             run_record = await self._get_run(db_session, run_id)
             run_record.status = GenerateTextRunStatusType.COMPLETED
-            run_record.finished_at = await fetch_utc_now(db_session)
+            # TODO(db-clock): the database's now, once this write is an update() statement
+            run_record.finished_at = datetime.now(UTC)
 
             # A finished or paused run has no lease
             run_record.lease_owner = None
@@ -198,7 +200,8 @@ class GenerateTextRunService:
             run_record.status = GenerateTextRunStatusType.FAILED
             run_record.error_code = error_code
             run_record.error_message = error_message
-            run_record.finished_at = await fetch_utc_now(db_session)
+            # TODO(db-clock): the database's now, once this write is an update() statement
+            run_record.finished_at = datetime.now(UTC)
 
             # A finished or paused run has no lease
             run_record.lease_owner = None
