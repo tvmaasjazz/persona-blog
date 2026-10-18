@@ -117,7 +117,27 @@ CREATE INDEX pb_persona_created_by_id_created_at_idx
   `TIMESTAMPTZ`.
 - `Mapped[datetime]` maps to `UtcDateTime` (`libs/database/column_types.py`), which
   stores naive UTC and returns aware UTC. Python code only ever handles aware UTC
-  datetimes, `datetime.now(UTC)`. A naive datetime raises at flush.
+  datetimes. A naive datetime raises at flush.
+- Every "now" a query compares with or a write stores comes from the database clock,
+  never the app server's `datetime.now(UTC)`: servers' clocks drift apart, and the
+  database's is the one they all share. `libs/database/clock.py` has three forms:
+  - `build_utc_now_sql()` inside a query or an `update()`:
+    `.where(GenerateTextRunOrm.lease_expires_at <= build_utc_now_sql())`,
+    `.values(last_login_at=build_utc_now_sql())`. `build_utc_now_plus_sql(seconds)`
+    is a time that far ahead, such as a lease expiry.
+  - `await fetch_utc_now(db_session)` for an Orm write:
+    `persona_record.deleted_at = await fetch_utc_now(self._db_session)`. Never assign
+    `build_utc_now_sql()` to an Orm attribute: async code can't read the attribute
+    back until the row is reloaded.
+  - `updated_at` is set by `BaseOrm` from the same clock and fetched back with
+    `RETURNING`.
+- A service that writes a time takes none from its caller; it reads the database
+  clock itself.
+- Inside one transaction the database clock is the transaction's start time, so every
+  time one transaction writes is the same.
+- `datetime.now(UTC)` is only for a time that never reaches the database, such as
+  checking a third-party token's expiry. A duration uses `DateTimeUtils`' monotonic
+  clock.
 - No database triggers. SQLAlchemy sets `updated_at`, so an `UPDATE` written in raw
   SQL, like a backfill, sets `updated_at` itself.
 
