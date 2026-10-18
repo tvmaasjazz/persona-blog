@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -16,6 +16,7 @@ from libs.generate_text.results import (
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.types import GenerateTextRunStatusType, TextType
 from tests.factories.auth import build_auth_user
+from tests.factories.database import fetch_database_utc_now
 from tests.factories.generate_text import (
     build_create_generate_text_run_input,
     insert_generate_text_run_row,
@@ -25,7 +26,7 @@ from tests.factories.personas import insert_persona_row
 from tests.factories.users import insert_user_row
 
 EXPIRED_LEASE_EXPIRES_AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
-NEW_LEASE_EXPIRES_AT = datetime(2098, 1, 2, 3, 4, 5, tzinfo=UTC)
+NEW_LEASE_SECONDS = 600
 OLD_LEASE_EXPIRES_AT = datetime(2099, 1, 2, 3, 4, 5, tzinfo=UTC)
 
 
@@ -102,11 +103,12 @@ async def test_start_run_sets_running_status_and_started_at(
 
     await generate_text_run_service.start_run(create_run_result.id)
 
+    database_utc_now = await fetch_database_utc_now(db_session)
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
     run_record = await db_session.scalar(run_query)
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.RUNNING
-    assert run_record.started_at is not None
+    assert run_record.started_at == database_utc_now
 
 
 async def test_start_run_unknown_run_raises_not_found_exception(
@@ -231,13 +233,14 @@ async def test_fail_run_sets_failed_status_error_fields_and_rolls_up_calls(
 
     await generate_text_run_service.fail_run(create_run_result.id, "ValueError", "boom")
 
+    database_utc_now = await fetch_database_utc_now(db_session)
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
     run_record = await db_session.scalar(run_query)
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.FAILED
     assert run_record.error_code == "ValueError"
     assert run_record.error_message == "boom"
-    assert run_record.finished_at is not None
+    assert run_record.finished_at == database_utc_now
     assert run_record.llm_call_count == 1
     assert run_record.input_tokens == 100
     assert run_record.output_tokens == 50
@@ -372,14 +375,15 @@ async def test_claim_paused_run_awaiting_review_returns_true_and_sets_running(
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     is_claimed = await generate_text_run_service.claim_paused_run(
-        run_record.id, "new-worker", NEW_LEASE_EXPIRES_AT
+        run_record.id, "new-worker", NEW_LEASE_SECONDS
     )
 
+    database_utc_now = await fetch_database_utc_now(db_session)
     await db_session.refresh(run_record)
     assert is_claimed is True
     assert run_record.status == GenerateTextRunStatusType.RUNNING
     assert run_record.lease_owner == "new-worker"
-    assert run_record.lease_expires_at == NEW_LEASE_EXPIRES_AT
+    assert run_record.lease_expires_at == database_utc_now + timedelta(seconds=NEW_LEASE_SECONDS)
 
 
 async def test_claim_paused_run_already_claimed_returns_false(
@@ -391,12 +395,10 @@ async def test_claim_paused_run_already_claimed_returns_false(
     )
     await db_session.commit()
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    await generate_text_run_service.claim_paused_run(
-        run_record.id, "new-worker", NEW_LEASE_EXPIRES_AT
-    )
+    await generate_text_run_service.claim_paused_run(run_record.id, "new-worker", NEW_LEASE_SECONDS)
 
     is_claimed = await generate_text_run_service.claim_paused_run(
-        run_record.id, "new-worker", NEW_LEASE_EXPIRES_AT
+        run_record.id, "new-worker", NEW_LEASE_SECONDS
     )
 
     assert is_claimed is False
@@ -424,7 +426,7 @@ async def test_claim_paused_run_not_awaiting_review_returns_false_and_keeps_stat
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     is_claimed = await generate_text_run_service.claim_paused_run(
-        run_record.id, "new-worker", NEW_LEASE_EXPIRES_AT
+        run_record.id, "new-worker", NEW_LEASE_SECONDS
     )
 
     await db_session.refresh(run_record)
@@ -439,19 +441,20 @@ async def test_create_run_persists_lease(
     persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     create_generate_text_run_input = build_create_generate_text_run_input(
-        persona_id=persona_id, lease_owner="creator-worker", lease_expires_at=NEW_LEASE_EXPIRES_AT
+        persona_id=persona_id, lease_owner="creator-worker", lease_seconds=NEW_LEASE_SECONDS
     )
 
     create_run_result = await generate_text_run_service.create_run(
         create_generate_text_run_input, auth_user
     )
 
+    database_utc_now = await fetch_database_utc_now(db_session)
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
     run_record = await db_session.scalar(run_query)
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.PENDING
     assert run_record.lease_owner == "creator-worker"
-    assert run_record.lease_expires_at == NEW_LEASE_EXPIRES_AT
+    assert run_record.lease_expires_at == database_utc_now + timedelta(seconds=NEW_LEASE_SECONDS)
 
 
 async def test_renew_lease_owner_returns_true_and_extends_lease(
@@ -469,13 +472,14 @@ async def test_renew_lease_owner_returns_true_and_extends_lease(
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     is_renewed = await generate_text_run_service.renew_lease(
-        run_record.id, "owner-worker", NEW_LEASE_EXPIRES_AT
+        run_record.id, "owner-worker", NEW_LEASE_SECONDS
     )
 
+    database_utc_now = await fetch_database_utc_now(db_session)
     await db_session.refresh(run_record)
     assert is_renewed is True
     assert run_record.lease_owner == "owner-worker"
-    assert run_record.lease_expires_at == NEW_LEASE_EXPIRES_AT
+    assert run_record.lease_expires_at == database_utc_now + timedelta(seconds=NEW_LEASE_SECONDS)
 
 
 async def test_renew_lease_non_owner_returns_false_and_keeps_lease(
@@ -493,7 +497,7 @@ async def test_renew_lease_non_owner_returns_false_and_keeps_lease(
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     is_renewed = await generate_text_run_service.renew_lease(
-        run_record.id, "other-worker", NEW_LEASE_EXPIRES_AT
+        run_record.id, "other-worker", NEW_LEASE_SECONDS
     )
 
     await db_session.refresh(run_record)
@@ -513,7 +517,7 @@ async def test_renew_lease_cleared_lease_returns_false(
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     is_renewed = await generate_text_run_service.renew_lease(
-        run_record.id, "owner-worker", NEW_LEASE_EXPIRES_AT
+        run_record.id, "owner-worker", NEW_LEASE_SECONDS
     )
 
     assert is_renewed is False
@@ -654,9 +658,10 @@ async def test_claim_expired_run_expired_lease_returns_result_and_takes_lease(
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     claim_expired_run_result = await generate_text_run_service.claim_expired_run(
-        "new-worker", NEW_LEASE_EXPIRES_AT
+        "new-worker", NEW_LEASE_SECONDS
     )
 
+    database_utc_now = await fetch_database_utc_now(db_session)
     await db_session.refresh(run_record)
     assert claim_expired_run_result == ClaimExpiredGenerateTextRunResult(
         id=run_record.id,
@@ -670,7 +675,7 @@ async def test_claim_expired_run_expired_lease_returns_result_and_takes_lease(
     )
     assert run_record.status == run_status
     assert run_record.lease_owner == "new-worker"
-    assert run_record.lease_expires_at == NEW_LEASE_EXPIRES_AT
+    assert run_record.lease_expires_at == database_utc_now + timedelta(seconds=NEW_LEASE_SECONDS)
     assert run_record.pickup_count == 3
 
 
@@ -703,7 +708,7 @@ async def test_claim_expired_run_picks_oldest_expired_lease_only(
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     claim_expired_run_result = await generate_text_run_service.claim_expired_run(
-        "new-worker", NEW_LEASE_EXPIRES_AT
+        "new-worker", NEW_LEASE_SECONDS
     )
 
     await db_session.refresh(newer_run_record)
@@ -727,10 +732,10 @@ async def test_claim_expired_run_claimed_run_is_not_claimed_again(
     )
     await db_session.commit()
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    await generate_text_run_service.claim_expired_run("first-worker", NEW_LEASE_EXPIRES_AT)
+    await generate_text_run_service.claim_expired_run("first-worker", NEW_LEASE_SECONDS)
 
     second_claim_result = await generate_text_run_service.claim_expired_run(
-        "second-worker", NEW_LEASE_EXPIRES_AT
+        "second-worker", NEW_LEASE_SECONDS
     )
 
     assert second_claim_result is None
@@ -742,7 +747,7 @@ async def test_claim_expired_run_nothing_in_table_returns_none(
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     claim_expired_run_result = await generate_text_run_service.claim_expired_run(
-        "new-worker", NEW_LEASE_EXPIRES_AT
+        "new-worker", NEW_LEASE_SECONDS
     )
 
     assert claim_expired_run_result is None
@@ -773,7 +778,7 @@ async def test_claim_expired_run_settled_status_returns_none_and_keeps_run(
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     claim_expired_run_result = await generate_text_run_service.claim_expired_run(
-        "new-worker", NEW_LEASE_EXPIRES_AT
+        "new-worker", NEW_LEASE_SECONDS
     )
 
     await db_session.refresh(run_record)
@@ -793,7 +798,7 @@ async def test_claim_expired_run_null_lease_returns_none(
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     claim_expired_run_result = await generate_text_run_service.claim_expired_run(
-        "new-worker", NEW_LEASE_EXPIRES_AT
+        "new-worker", NEW_LEASE_SECONDS
     )
 
     assert claim_expired_run_result is None
@@ -814,7 +819,7 @@ async def test_claim_expired_run_unexpired_lease_returns_none(
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     claim_expired_run_result = await generate_text_run_service.claim_expired_run(
-        "new-worker", NEW_LEASE_EXPIRES_AT
+        "new-worker", NEW_LEASE_SECONDS
     )
 
     assert claim_expired_run_result is None
@@ -837,7 +842,7 @@ async def test_claim_expired_run_soft_deleted_run_returns_none(
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
     claim_expired_run_result = await generate_text_run_service.claim_expired_run(
-        "new-worker", NEW_LEASE_EXPIRES_AT
+        "new-worker", NEW_LEASE_SECONDS
     )
 
     pickup_count_query = text(
@@ -902,8 +907,83 @@ async def test_claim_expired_run_just_released_run_is_claimable_at_once(
     await generate_text_run_service.release_lease(run_record.id, "owner-worker")
 
     claim_expired_run_result = await generate_text_run_service.claim_expired_run(
-        "new-worker", NEW_LEASE_EXPIRES_AT
+        "new-worker", NEW_LEASE_SECONDS
     )
 
     assert claim_expired_run_result is not None
     assert claim_expired_run_result.id == run_record.id
+
+
+async def test_claim_expired_run_run_id_claims_only_that_run(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    older_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    named_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    claim_expired_run_result = await generate_text_run_service.claim_expired_run(
+        "new-worker", NEW_LEASE_SECONDS, named_run_record.id
+    )
+
+    database_utc_now = await fetch_database_utc_now(db_session)
+    await db_session.refresh(older_run_record)
+    await db_session.refresh(named_run_record)
+    assert claim_expired_run_result is not None
+    assert claim_expired_run_result.id == named_run_record.id
+    assert named_run_record.lease_owner == "new-worker"
+    assert named_run_record.lease_expires_at == database_utc_now + timedelta(
+        seconds=NEW_LEASE_SECONDS
+    )
+    assert named_run_record.pickup_count == 1
+    assert older_run_record.lease_owner == "dead-worker"
+    assert older_run_record.pickup_count == 0
+
+
+async def test_claim_expired_run_run_id_unexpired_lease_returns_none(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="live-worker",
+        lease_expires_at=OLD_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    claim_expired_run_result = await generate_text_run_service.claim_expired_run(
+        "new-worker", NEW_LEASE_SECONDS, run_record.id
+    )
+
+    await db_session.refresh(run_record)
+    assert claim_expired_run_result is None
+    assert run_record.lease_owner == "live-worker"
+    assert run_record.pickup_count == 0
+
+
+async def test_claim_expired_run_run_id_unknown_run_returns_none(
+    db_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    claim_expired_run_result = await generate_text_run_service.claim_expired_run(
+        "new-worker", NEW_LEASE_SECONDS, 999999
+    )
+
+    assert claim_expired_run_result is None

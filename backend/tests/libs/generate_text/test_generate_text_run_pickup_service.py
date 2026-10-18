@@ -527,20 +527,19 @@ async def test_pick_up_expired_runs_failed_pickup_does_not_stop_next_pickup() ->
     assert run_pickup_service_stub.pick_up_next_expired_run_call_count == 2
 
 
-async def test_pick_up_handed_off_runs_received_run_id_picks_up_one_expired_run() -> None:
+async def test_pick_up_handed_off_runs_received_run_id_picks_up_that_run() -> None:
     handoff_queue_service_stub = GenerateTextRunHandoffQueueServiceStub()
     handoff_queue_service_stub.wait_for_run_results = [7]
     run_pickup_service_stub = GenerateTextRunPickupServiceStub(
         run_handoff_wait_seconds=2, handoff_queue_service=handoff_queue_service_stub
     )
-    run_pickup_service_stub.pick_up_next_expired_run_results = [False]
     pickup_task = asyncio.create_task(run_pickup_service_stub.pick_up_handed_off_runs())
 
-    await run_pickup_service_stub.pick_up_next_expired_run_exhausted_event.wait()
+    await run_pickup_service_stub.pick_up_handed_off_run_event.wait()
 
     pickup_task.cancel()
     await asyncio.gather(pickup_task, return_exceptions=True)
-    assert run_pickup_service_stub.pick_up_next_expired_run_call_count == 1
+    assert run_pickup_service_stub.pick_up_handed_off_run_inputs == [7]
     assert handoff_queue_service_stub.wait_for_run_inputs[0] == 2
 
 
@@ -556,7 +555,7 @@ async def test_pick_up_handed_off_runs_empty_wait_picks_up_nothing() -> None:
 
     pickup_task.cancel()
     await asyncio.gather(pickup_task, return_exceptions=True)
-    assert run_pickup_service_stub.pick_up_next_expired_run_call_count == 0
+    assert run_pickup_service_stub.pick_up_handed_off_run_inputs == []
 
 
 async def test_pick_up_handed_off_runs_wait_raises_logs_failure_and_carries_on() -> None:
@@ -565,11 +564,10 @@ async def test_pick_up_handed_off_runs_wait_raises_logs_failure_and_carries_on()
     run_pickup_service_stub = GenerateTextRunPickupServiceStub(
         run_handoff_wait_seconds=0, handoff_queue_service=handoff_queue_service_stub
     )
-    run_pickup_service_stub.pick_up_next_expired_run_results = [False]
     pickup_task = asyncio.create_task(run_pickup_service_stub.pick_up_handed_off_runs())
 
     with structlog.testing.capture_logs() as captured_log_events:
-        await run_pickup_service_stub.pick_up_next_expired_run_exhausted_event.wait()
+        await run_pickup_service_stub.pick_up_handed_off_run_event.wait()
 
     pickup_task.cancel()
     await asyncio.gather(pickup_task, return_exceptions=True)
@@ -579,4 +577,199 @@ async def test_pick_up_handed_off_runs_wait_raises_logs_failure_and_carries_on()
         if log_event["event"] == "run_handoff_pickup_failed"
     ]
     assert len(handoff_pickup_failed_log_events) >= 1
-    assert run_pickup_service_stub.pick_up_next_expired_run_call_count == 1
+    assert run_pickup_service_stub.pick_up_handed_off_run_inputs == [7]
+
+
+async def test_pick_up_handed_off_run_named_run_continues_and_leaves_older_expired_run_alone(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    older_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        graph_version="stub-version",
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    handed_off_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        graph_version="stub-version",
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    run_pickup_service = _build_pickup_service(
+        db_session_factory,
+        GenerateTextGraphBuilderRegistryStub(),
+        background_job_service,
+        handoff_queue_service,
+    )
+
+    await run_pickup_service.pick_up_handed_off_run(handed_off_run_record.id)
+
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await db_session.refresh(older_run_record)
+    await db_session.refresh(handed_off_run_record)
+    assert handed_off_run_record.status == GenerateTextRunStatusType.COMPLETED
+    assert handed_off_run_record.pickup_count == 1
+    assert older_run_record.status == GenerateTextRunStatusType.RUNNING
+    assert older_run_record.lease_owner == "dead-worker"
+    assert older_run_record.pickup_count == 0
+
+
+async def test_pick_up_handed_off_run_pending_run_fails_as_never_started(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.PENDING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    run_pickup_service = _build_pickup_service(
+        db_session_factory,
+        GenerateTextGraphBuilderRegistryStub(),
+        background_job_service,
+        handoff_queue_service,
+    )
+
+    await run_pickup_service.pick_up_handed_off_run(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "RunNeverStarted"
+
+
+async def test_pick_up_handed_off_run_picked_up_too_often_fails_run(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+        pickup_count=3,
+    )
+    await db_session.commit()
+    run_pickup_service = _build_pickup_service(
+        db_session_factory,
+        GenerateTextGraphBuilderRegistryStub(),
+        background_job_service,
+        handoff_queue_service,
+        generate_text_settings=GenerateTextSettings(max_run_pickups=3),
+    )
+
+    await run_pickup_service.pick_up_handed_off_run(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "RunPickedUpTooOften"
+    assert run_record.pickup_count == 4
+
+
+async def test_pick_up_handed_off_run_unexpired_lease_claims_nothing(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="live-worker",
+        lease_expires_at=OTHER_WORKER_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    run_pickup_service = _build_pickup_service(
+        db_session_factory,
+        GenerateTextGraphBuilderRegistryStub(),
+        background_job_service,
+        handoff_queue_service,
+    )
+
+    await run_pickup_service.pick_up_handed_off_run(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert run_record.status == GenerateTextRunStatusType.RUNNING
+    assert run_record.lease_owner == "live-worker"
+    assert run_record.pickup_count == 0
+
+
+async def test_pick_up_handed_off_run_already_claimed_run_claims_nothing_again(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+        pickup_count=3,
+    )
+    await db_session.commit()
+    run_pickup_service = _build_pickup_service(
+        db_session_factory,
+        GenerateTextGraphBuilderRegistryStub(),
+        background_job_service,
+        handoff_queue_service,
+        generate_text_settings=GenerateTextSettings(max_run_pickups=3),
+    )
+    await run_pickup_service.pick_up_handed_off_run(run_record.id)
+
+    await run_pickup_service.pick_up_handed_off_run(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert run_record.pickup_count == 4
+
+
+async def test_pick_up_handed_off_run_stopping_claims_nothing(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        lease_owner="dead-worker",
+        lease_expires_at=EXPIRED_LEASE_EXPIRES_AT,
+    )
+    await db_session.commit()
+    run_pickup_service = _build_pickup_service(
+        db_session_factory,
+        GenerateTextGraphBuilderRegistryStub(),
+        background_job_service,
+        handoff_queue_service,
+    )
+    background_job_service.request_stop()
+
+    await run_pickup_service.pick_up_handed_off_run(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert run_record.lease_owner == "dead-worker"
+    assert run_record.pickup_count == 0
