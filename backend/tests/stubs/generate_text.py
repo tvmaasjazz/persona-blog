@@ -184,7 +184,8 @@ class GenerateTextRunHandoffQueueServiceStub(GenerateTextRunHandoffQueueService)
 
 
 class GenerateTextRunPickupServiceStub(GenerateTextRunPickupService):
-    """Overrides pick_up_next_expired_run only, so a test drives the real pickup loops."""
+    """Overrides pick_up_next_expired_run and pick_up_handed_off_run only, so a test drives
+    the real pickup loops."""
 
     def __init__(
         self,
@@ -202,6 +203,8 @@ class GenerateTextRunPickupServiceStub(GenerateTextRunPickupService):
         self.pick_up_next_expired_run_call_count = 0
         self.pick_up_next_expired_run_results: list[bool | Exception] = []
         self.pick_up_next_expired_run_exhausted_event = asyncio.Event()
+        self.pick_up_handed_off_run_inputs: list[int] = []
+        self.pick_up_handed_off_run_event = asyncio.Event()
 
     async def pick_up_next_expired_run(self) -> bool:
         self.pick_up_next_expired_run_call_count += 1
@@ -211,3 +214,7 @@ class GenerateTextRunPickupServiceStub(GenerateTextRunPickupService):
         if isinstance(pick_up_next_expired_run_result, Exception):
             raise pick_up_next_expired_run_result
         return pick_up_next_expired_run_result
+
+    async def pick_up_handed_off_run(self, run_id: int) -> None:
+        self.pick_up_handed_off_run_inputs.append(run_id)
+        self.pick_up_handed_off_run_event.set()
