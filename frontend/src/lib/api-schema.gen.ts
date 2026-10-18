@@ -478,7 +478,7 @@ export interface components {
         };
         /**
          * LlmType
-         * @description What a call needs, not which model runs it. LlmSettings maps each tier to a model.
+         * @description The tier of model a call needs; LlmSettings maps each tier to a model.
          * @enum {string}
          */
         LlmType: "FAST" | "STRONG" | "THINKING";

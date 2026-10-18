@@ -26,6 +26,7 @@ export function DeleteBlogPostButton({
   blogPostIdentity,
   blogPostTitle,
 }: DeleteBlogPostButtonProps) {
+  // Confirm, then delete and go to the list
   const navigate = useNavigate()
   const deleteBlogPost = useDeleteBlogPost()
 

@@ -17,8 +17,7 @@ type DiscardRunButtonProps = {
   onDiscard: () => void
 }
 
-// Throws away a finished post that hasn't been saved. Nothing is sent: the run stays as
-// it is, and only saving turns it into a post.
+// Confirms before discarding an unsaved post; sends nothing.
 export function DiscardRunButton({ onDiscard }: DiscardRunButtonProps) {
   return (
     <AlertDialog>

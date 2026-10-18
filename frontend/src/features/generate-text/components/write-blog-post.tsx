@@ -21,6 +21,7 @@ type RunPrefillProps = {
 }
 
 function RunPrefill({ personas, fromRunIdentity }: RunPrefillProps) {
+  // Load the run to copy
   const { data: run, isPending, error } = useGenerateTextRun(fromRunIdentity)
 
   if (isPending) {
@@ -31,6 +32,7 @@ function RunPrefill({ personas, fromRunIdentity }: RunPrefillProps) {
     return <p className="text-muted-foreground">Couldn't load that run to copy from.</p>
   }
 
+  // Prefill the form from the run
   const isPersonaKnown = personas.some((persona) => persona.identity === run.persona_identity)
   return (
     <WriteBlogPostForm
@@ -45,6 +47,7 @@ export function WriteBlogPost({
   preselectedPersonaIdentity,
   fromRunIdentity,
 }: WriteBlogPostProps) {
+  // No personas: ask for one first
   if (personas.length === 0) {
     return (
       <div className="flex flex-col items-start gap-4">
@@ -56,16 +59,17 @@ export function WriteBlogPost({
     )
   }
 
+  // Copying a run
   if (fromRunIdentity) {
     return (
       <RunPrefill key={fromRunIdentity} personas={personas} fromRunIdentity={fromRunIdentity} />
     )
   }
 
+  // Blank form with the preselected persona's defaults
   const persona = personas.find((choice) => choice.identity === preselectedPersonaIdentity)
   return (
-    // Keyed on the preselected persona, so following a different ?persona= link resets
-    // the form to that persona's defaults.
+    // Keyed so a different ?persona= link resets the defaults
     <WriteBlogPostForm
       key={preselectedPersonaIdentity ?? ''}
       personas={personas}

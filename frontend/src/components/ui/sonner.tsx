@@ -8,8 +8,7 @@ import {
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  // The app is dark only (react-styling.md), so this skips next-themes and pins
-  // the theme. Light mode switches it back to the theme the class toggle picks.
+  // The app is dark only, so the theme is pinned instead of read from next-themes
   return (
     <Sonner
       theme="dark"

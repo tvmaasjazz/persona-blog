@@ -1,8 +1,6 @@
 import type { AnyFormApi } from '@tanstack/react-form'
 
-// An error the API returned for one field, such as a 409 name clash. It sits in the
-// field's onServer slot, which no validator writes, and FormField clears it when the
-// user edits that field.
+// Shows an API error on one field; FormField clears it when the field is edited.
 export function setFieldServerError(form: AnyFormApi, fieldName: string, message: string) {
   form.setFieldMeta(fieldName, (fieldMeta) => ({
     ...fieldMeta,
@@ -23,8 +21,7 @@ export function fieldErrorMessage(fieldError: unknown): string | undefined {
   return undefined
 }
 
-// For a form's onSubmitInvalid, so a failed submit lands on the first error even
-// when it's scrolled out of view. Waits a frame for FormField to mark it invalid.
+// Focuses the first invalid field after a failed submit; waits a frame for aria-invalid.
 export function focusFirstInvalidField() {
   requestAnimationFrame(() => {
     document.querySelector<HTMLElement>('form [aria-invalid="true"]')?.focus()

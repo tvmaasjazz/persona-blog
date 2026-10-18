@@ -9,9 +9,7 @@ import { SwitchField } from '@/components/form/switch-field'
 import { TextField } from '@/components/form/text-field'
 import { TextareaField } from '@/components/form/textarea-field'
 
-// The app's form hook. Every form uses useAppForm, and a form split across
-// components uses withForm, and fields reused across forms use withFieldGroup. A new kind of field is a component in this folder,
-// registered here.
+// The app's form hooks: useAppForm, withForm for a split form, withFieldGroup for shared fields.
 export const { useAppForm, withForm, withFieldGroup } = createFormHook({
   fieldContext,
   formContext,

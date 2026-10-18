@@ -18,12 +18,14 @@ type BlogPostViewProps = {
 }
 
 export function BlogPostView({ blogPostIdentity, personas }: BlogPostViewProps) {
+  // Load the post
   const { data: blogPost, isPending, error } = useBlogPost(blogPostIdentity)
 
   if (isPending) {
     return <div className="h-40 rounded-2xl bg-accent" />
   }
 
+  // Not found or failed
   if (error) {
     const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
 
@@ -39,6 +41,7 @@ export function BlogPostView({ blogPostIdentity, personas }: BlogPostViewProps) 
     )
   }
 
+  // Header with author and actions, then the body
   const persona = personas.find((candidate) => candidate.identity === blogPost.persona_identity)
 
   return (

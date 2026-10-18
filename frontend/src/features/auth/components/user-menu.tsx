@@ -17,6 +17,7 @@ type UserMenuProps = {
 }
 
 export function UserMenu({ user }: UserMenuProps) {
+  // Name and initial for the avatar
   const signOut = useSignOut()
 
   const label = user.display_name ?? user.email

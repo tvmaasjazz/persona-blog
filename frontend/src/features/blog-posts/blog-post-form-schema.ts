@@ -7,8 +7,7 @@ import {
   publishingFormSchema,
 } from '@/features/blog-posts/publishing-form-schema'
 
-// BlogPostDto declares no length limits for title or subtitle, so none are enforced here.
-// A blank subtitle is sent as null.
+// BlogPostDto has no length limits; a blank subtitle is sent as null.
 export const blogPostFormSchema = z.object({
   title: z.string().trim().min(1, 'Title is required'),
   subtitle: z
@@ -26,7 +25,6 @@ const EMPTY_BLOG_POST_FORM_VALUES: BlogPostFormValues = {
   publishing: EMPTY_PUBLISHING_VALUES,
 }
 
-// Checks nothing until the first submit, then rechecks as the user types.
 export const blogPostFormOptions = formOptions({
   defaultValues: EMPTY_BLOG_POST_FORM_VALUES,
   validationLogic: revalidateLogic(),

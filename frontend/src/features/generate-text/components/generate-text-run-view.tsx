@@ -23,7 +23,7 @@ import type { components } from '@/lib/api-schema.gen'
 type GenerateTextRunResponseDto = components['schemas']['GenerateTextRunResponseDto']
 
 type CompletedActionsInput = {
-  // Lets the page leave without the unsaved-post prompt once the post is saved.
+  // Lets the page leave without the unsaved prompt
   onSaved: () => void
   discardButton: ReactNode
 }
@@ -31,7 +31,7 @@ type CompletedActionsInput = {
 type GenerateTextRunViewProps = {
   run: GenerateTextRunResponseDto
   personaName: string | null
-  // The save form, which the route composes from the blog-posts feature.
+  // The save form, composed by the route
   renderCompletedActions: (completedActionsInput: CompletedActionsInput) => ReactNode
 }
 
@@ -39,7 +39,7 @@ type RunPartProps = {
   run: GenerateTextRunResponseDto
 }
 
-// The text the run is on: the step to review, or the finished post.
+// The step to review, or the finished post.
 function RunContent({ run }: RunPartProps) {
   switch (run.status) {
     case 'AWAITING_REVIEW':
@@ -66,7 +66,7 @@ function RunContent({ run }: RunPartProps) {
   }
 }
 
-// Shown while the run is in the background; the page polls until it pauses or finishes.
+// Shown while the run is working in the background.
 function RunWorkingCard({ run }: RunPartProps) {
   const stepName = (findRunStepName(run.last_step) ?? 'Post').toLowerCase()
   return (
@@ -86,11 +86,11 @@ type RunActionsProps = RunPartProps & {
   completedActions: ReactNode
 }
 
-// What you can do next, in the sidebar so it's always in view.
+// What the user can do next, by status.
 function RunActions({ run, completedActions }: RunActionsProps) {
   switch (run.status) {
     case 'AWAITING_REVIEW':
-      // Keyed per LLM call, so each new step starts with Request changes closed.
+      // Keyed per LLM call so each step starts with Request changes closed
       return (
         <RunReviewActions
           key={run.llm_call_count}
@@ -127,16 +127,19 @@ export function GenerateTextRunView({
   personaName,
   renderCompletedActions,
 }: GenerateTextRunViewProps) {
+  // Notices and leave guard
   const navigate = useNavigate()
   useRunReadyNotice(run)
   const { blocker, allowLeave } = useUnsavedRunGuard(run.status === 'COMPLETED')
 
+  // Leave without the prompt after discarding
   function discardRun() {
     allowLeave()
     toast.success('Post discarded')
     navigate('/write')
   }
 
+  // Header, run text, sidebar, leave dialog
   return (
     <>
       <PageWithSidebar
@@ -174,7 +177,7 @@ export function GenerateTextRunView({
             />
             <p className="text-sm text-muted-foreground">
               {run.llm_call_count} LLM calls · {run.input_tokens + run.output_tokens} tokens · $
-              {/* A Decimal over JSON: a zero cost can arrive as "0E-10". */}
+              {/* A zero Decimal cost can arrive as "0E-10" */}
               {Number(run.cost_usd).toFixed(4)}
             </p>
           </>

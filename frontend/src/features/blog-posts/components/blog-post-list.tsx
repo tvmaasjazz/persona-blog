@@ -9,7 +9,7 @@ type PersonaResponseDto = components['schemas']['PersonaResponseDto']
 type BlogPostListProps = {
   personaIdentity?: string
   personas: PersonaResponseDto[]
-  // For a sidebar listing one persona's posts: titles and status only.
+  // Titles and status only, for a sidebar
   isCompact?: boolean
   emptyState: ReactNode
 }
@@ -20,6 +20,7 @@ export function BlogPostList({
   isCompact = false,
   emptyState,
 }: BlogPostListProps) {
+  // Load the posts
   const { data: blogPostList, isPending, isError } = useBlogPostList(personaIdentity)
 
   if (isPending) {
@@ -32,6 +33,7 @@ export function BlogPostList({
     )
   }
 
+  // Failed or empty
   if (isError) {
     return <p className="text-muted-foreground">Couldn't load your posts. Try again.</p>
   }
@@ -40,6 +42,7 @@ export function BlogPostList({
     return emptyState
   }
 
+  // One card per post
   return (
     <div className="flex flex-col gap-3">
       {blogPostList.blog_posts.map((blogPost) => (

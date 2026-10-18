@@ -9,12 +9,14 @@ import { personaFormOptions, personaFormSchema } from '@/features/personas/perso
 import { ApiError, apiErrorMessage } from '@/lib/api-error'
 
 export function CreatePersonaForm() {
+  // Empty form
   const navigate = useNavigate()
   const createPersona = useCreatePersona()
 
   const form = useAppForm({
     ...personaFormOptions,
     onSubmit: async ({ value, formApi }) => {
+      // Create, then go to the persona; a name clash shows on the field
       try {
         const personaIdentity = await createPersona.mutateAsync(personaFormSchema.parse(value))
         toast.success('Persona created')

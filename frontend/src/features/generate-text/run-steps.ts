@@ -53,8 +53,7 @@ export function findRunStepName(lastStep: string | null): RunStepName | null {
   return null
 }
 
-// What a toast says when a generate or resume call comes back, or null when the run
-// has nothing new to look at.
+// The toast text for a run that needs attention, or null.
 export function describeRunReady(run: GenerateTextRunResponseDto): string | null {
   if (run.status === 'AWAITING_REVIEW') {
     return `${findReviewStepName(run.last_step)} ready for review`

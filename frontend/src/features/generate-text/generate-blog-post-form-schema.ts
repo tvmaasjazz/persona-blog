@@ -63,7 +63,6 @@ export const EMPTY_GENERATE_BLOG_POST_FORM_VALUES: GenerateBlogPostFormValues = 
   isHumanizeAutoApproved: false,
 }
 
-// Checks nothing until the first submit, then rechecks as the user types.
 export const generateBlogPostFormOptions = formOptions({
   defaultValues: EMPTY_GENERATE_BLOG_POST_FORM_VALUES,
   validationLogic: revalidateLogic(),

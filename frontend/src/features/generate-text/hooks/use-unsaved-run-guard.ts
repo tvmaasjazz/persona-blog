@@ -1,19 +1,18 @@
 import { useEffect, useRef } from 'react'
 import { useBlocker } from 'react-router'
 
-// Asks before leaving a finished run that hasn't been saved: an in-app navigation is
-// held by the returned blocker, and closing or reloading the tab gets the browser's own
-// prompt. allowLeave lets a deliberate exit through, such as saving or discarding.
+// Blocks leaving an unsaved run; allowLeave lets a deliberate exit through.
 export function useUnsavedRunGuard(isGuarded: boolean) {
-  // A ref, not state: allowLeave runs right before navigate, so the blocker has to
-  // see the change without waiting for a render.
+  // A ref, not state: the blocker must see allowLeave before the next render
   const isLeaveAllowedRef = useRef(false)
 
+  // Block in-app navigation to another page
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       isGuarded && !isLeaveAllowedRef.current && currentLocation.pathname !== nextLocation.pathname,
   )
 
+  // Prompt on tab close or reload
   useEffect(() => {
     if (!isGuarded) {
       return

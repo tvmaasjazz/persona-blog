@@ -23,6 +23,7 @@ type DeletePersonaButtonProps = {
 }
 
 export function DeletePersonaButton({ personaIdentity, personaName }: DeletePersonaButtonProps) {
+  // Confirm, then delete and go to the list
   const navigate = useNavigate()
   const deletePersona = useDeletePersona()
 
