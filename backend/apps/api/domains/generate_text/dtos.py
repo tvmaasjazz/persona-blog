@@ -76,7 +76,6 @@ class GenerateTextRunResponseDto(BaseModel):
     tone: str | None
     target_audience: str | None
     additional_context: str | None
-    # TextType has only BLOG_POST today; a second type makes this a union keyed on text_type.
     options: BlogPostOptionsDto
     content: str
     character_count: int

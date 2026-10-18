@@ -28,6 +28,7 @@ class GenerateTextInstrumentationService:
         self, node_type: GenerateTextNodeType, node: GenerateTextNode
     ) -> GenerateTextNode:
         async def instrumented_node(state: GenerateTextState) -> dict[str, Any]:
+            # Record the step as started
             step_name = node_type.value
             create_generate_text_step_input = CreateGenerateTextStepInput(
                 run_id=state.generate_text_run_id, step_name=step_name, input=None
@@ -38,14 +39,14 @@ class GenerateTextInstrumentationService:
             )
             step_id = create_step_result.id
 
+            # Run the node, recording a pause or a failure
             node_state = state.model_copy(update={"current_step_id": step_id})
 
             start_time = DateTimeUtils.now_monotonic()
             try:
                 node_result = await node(node_state)
             except GraphBubbleUp:
-                # An interrupt is how a review node pauses, not a failure. LangGraph raises it
-                # to suspend the run, and calls the node again from the top when it resumes.
+                # An interrupt is a review pause; the node reruns from the top on resume
                 duration_ms = DateTimeUtils.elapsed_ms(start_time)
                 await self._step_service.record_awaiting_review(step_id, duration_ms)
                 raise
@@ -57,6 +58,7 @@ class GenerateTextInstrumentationService:
                 await self._run_service.fail_run(state.generate_text_run_id)
                 raise
 
+            # Record the step as complete
             duration_ms = DateTimeUtils.elapsed_ms(start_time)
             step_output = self._resolve_step_output(node_result, step_name)
             await self._step_service.complete_step(step_id, step_output, duration_ms)
@@ -67,7 +69,6 @@ class GenerateTextInstrumentationService:
 
     @staticmethod
     def _resolve_step_output(node_result: dict[str, Any], step_name: str) -> str:
-        """A node writes its output under its own name, so the step records what this
-        node produced rather than whatever key happened to come last."""
+        """Reads the output this node wrote under its own name."""
         step_outputs = node_result.get("step_outputs") or {}
         return step_outputs.get(step_name, "")

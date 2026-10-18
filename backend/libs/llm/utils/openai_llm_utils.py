@@ -100,8 +100,7 @@ class OpenAiLlmUtils:
 
     @staticmethod
     def resolve_reason(response: Response) -> tuple[LlmCallReasonType | None, str | None]:
-        """A reason of None means the call produced usable output. The second value is the
-        refusal text, which the provider returns in place of content."""
+        """Returns the failure reason (None for usable output) and any refusal text."""
         for output_item in response.output:
             for content_item in getattr(output_item, "content", []) or []:
                 if content_item.type == "refusal":
@@ -121,8 +120,7 @@ class OpenAiLlmUtils:
             if incomplete_reason == "content_filter":
                 return LlmCallReasonType.CONTENT_FILTER, None
 
-        # queued, in_progress, and the incomplete reasons we don't map yet: the call never
-        # reached a usable end, so it is recorded as unfinished rather than as a clean stop.
+        # queued, in_progress and unmapped incomplete reasons: the call never reached a usable end
         return LlmCallReasonType.NOT_FINISHED, None
 
     @staticmethod

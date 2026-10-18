@@ -32,17 +32,19 @@ async def get_db_transaction(request: Request) -> AsyncIterator[AsyncSession]:
 
 
 async def get_auth_user(request: Request, after_response_tasks: BackgroundTasks) -> AuthUser:
+    # Read the session cookie
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     if session_id is None:
         raise UnauthorizedException("Not signed in")
 
+    # Resolve the session to its user
     app_settings: AppSettings = request.app.state.settings
     auth_session_service = AuthSessionService(
         redis_client=request.app.state.redis_client, auth_settings=app_settings.auth
     )
     auth_user = await auth_session_service.find_session(session_id)
 
-    # After the response, so a signed-in request never waits on the activity write.
+    # Record activity after the response, so the request never waits on the write
     after_response_tasks.add_task(
         record_user_activity,
         db_session_factory=request.app.state.db_session_factory,
@@ -53,11 +55,8 @@ async def get_auth_user(request: Request, after_response_tasks: BackgroundTasks)
     return auth_user
 
 
-# Two domains reach an LLM now, dev_llm and generate_text, and domains can't import each
-# other — so the alternative to core/ is each of them rebuilding the same provider map.
-# Worth revisiting if a third arrives and the shape has settled.
 def build_llm_service(app_state: State) -> LlmService:
-    """Takes the app state rather than a Request, so lifespan can build one too."""
+    """Builds the LLM service from app state, so lifespan and routes can both use it."""
     app_settings: AppSettings = app_state.settings
     openai_llm_service = OpenAiLlmService(
         openai_client=app_state.openai_client,

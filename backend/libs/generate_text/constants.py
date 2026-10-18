@@ -1,5 +1,4 @@
-# A step's output column is JSONB so a structured step can store more than prose later.
-# Text steps put their text under this key.
+# Key a text step's text is stored under in the JSONB output column
 STEP_OUTPUT_TEXT_KEY = "text"
 
 # The Redis list a stopping process pushes a released run's id onto. Every deployed

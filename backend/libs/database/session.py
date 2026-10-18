@@ -6,7 +6,7 @@ from libs.database.base import SoftDeleteMixin
 
 
 class SoftDeleteSession(Session):
-    """Hides soft-deleted rows from every ORM select, like Sequelize's paranoid mode."""
+    """Hides soft-deleted rows from every ORM select."""
 
 
 @event.listens_for(SoftDeleteSession, "do_orm_execute")

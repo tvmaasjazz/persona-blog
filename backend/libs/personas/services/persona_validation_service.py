@@ -15,7 +15,7 @@ class PersonaValidationService:
     async def validate_persona_name_available(
         self, persona_name: str, auth_user: AuthUser, persona_identity: UUID | None = None
     ) -> None:
-        """persona_identity is the persona being renamed, which may keep its own name."""
+        """Raises when the user has another persona with this name, ignoring persona_identity."""
         persona_query = select(PersonaOrm.id).where(
             PersonaOrm.created_by_id == auth_user.id,
             PersonaOrm.name == persona_name,

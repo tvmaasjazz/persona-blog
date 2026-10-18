@@ -1,9 +1,4 @@
-"""Exit non-zero when the migrated database and the Orm metadata disagree.
-
-Run from backend/ against a database already at `alembic upgrade head`:
-
-    uv run python -m scripts.db.check_schema_drift
-"""
+"""Exits non-zero when the migrated database and the Orm metadata disagree."""
 
 import asyncio
 import os

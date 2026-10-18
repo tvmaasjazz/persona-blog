@@ -117,8 +117,7 @@ class LlmService:
             provider_completion_result.cached_input_tokens,
         )
 
-        # The row is written first, so a call that produced no usable output is still on
-        # record with its tokens and cost before the exception leaves this method.
+        # Record the call before any exception leaves, so a call with no usable output is logged
         await self._llm_call_service.complete_llm_call(
             llm_call_id, provider_completion_result, cost_usd, duration_ms, auth_user
         )

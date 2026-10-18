@@ -9,9 +9,6 @@ from libs.generate_text.types import GenerateTextRunStatusType, TextType
 
 
 class GenerateTextRunResult(BaseModel):
-    """What a run looks like to a caller, whether it was just started, just resumed, or
-    simply read. Each domain's ResponseDto projects the fields it exposes."""
-
     run_identity: UUID
     text_type: TextType
     status: GenerateTextRunStatusType
@@ -80,8 +77,6 @@ class CreateGenerateTextStepResult(BaseModel):
 
 
 class FindLatestGenerateTextStepResult(BaseModel):
-    """The run's newest step: where it sits, and the text it produced."""
-
     step_name: str
     content: str
 

@@ -9,10 +9,7 @@ from libs.generate_text.types import TextType
 
 
 class GenerateTextGraphBuilderRegistry:
-    """Maps a text type to the builder that knows how to build its graph, the enum
-    dispatch pattern (python-naming.md > Enum dispatch). Every builder is constructed
-    here, in __init__, so the engine never imports a text type's graph module anywhere
-    else — a new text type is a new entry in the map below."""
+    """Maps a text type to the builder of its graph."""
 
     def __init__(
         self,

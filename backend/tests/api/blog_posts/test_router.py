@@ -296,9 +296,7 @@ async def test_create_blog_post_from_generate_text_run_already_saved_returns_409
 async def test_create_blog_post_from_generate_text_run_invalid_output_returns_422(
     api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
 ) -> None:
-    # Setup bypasses generation: the real draft step already fails its own format check
-    # (BlogPostBodyOutputFormat.validate_output) before a run with no leading "# Title" can
-    # ever reach COMPLETED, so the run and its step output are built directly here instead.
+    # Built directly: the real draft step rejects a body with no leading "# Title".
     persona_record = await insert_persona_row(db_session, created_by_id=signed_in_user.id)
     run_record = await insert_generate_text_run_row(
         db_session,

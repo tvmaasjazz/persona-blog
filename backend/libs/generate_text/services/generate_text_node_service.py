@@ -25,10 +25,7 @@ OUTPUT_FORMAT_PROBLEMS_USER_PROMPT_TEMPLATE = (
 
 
 class GenerateTextNodeService:
-    """Holds the nodes every text type's graph is built from. A node is generic: a
-    text type supplies the node type it records under, the LLM tier, and its step's
-    Prompt, through the three builders below, rather than this service knowing any
-    text type's steps by name."""
+    """Builds the generate, rewrite and review nodes every text type's graph uses."""
 
     def __init__(
         self, llm_service: LlmService, generate_text_settings: GenerateTextSettings
@@ -111,6 +108,7 @@ class GenerateTextNodeService:
 
         error_messages: list[str] = []
         for attempt_number in range(1, max_attempts + 1):
+            # Call the LLM
             llm_completion_input = LlmCompletionInput(
                 llm_type=llm_type,
                 purpose=node_type.value,
@@ -124,18 +122,21 @@ class GenerateTextNodeService:
             if output_format is None:
                 return completion_result.content
 
+            # Accept output that follows the format
             normalized_text = output_format.normalize_output(completion_result.content)
             validate_output_result = output_format.validate_output(normalized_text)
             error_messages = validate_output_result.error_messages
             if not error_messages:
                 return normalized_text
 
+            # Retry with the problems added to the user prompt
             if attempt_number < max_attempts:
                 problems_text = "\n".join(f"- {error_message}" for error_message in error_messages)
                 user_prompt = OUTPUT_FORMAT_PROBLEMS_USER_PROMPT_TEMPLATE.format(
                     user_prompt=build_prompt_result.user_prompt, problems_text=problems_text
                 )
 
+        # Out of retries
         problems_text = "\n".join(error_messages)
         raise GenerateTextOutputInvalidException(
             f"{node_type.value} produced output that does not follow the required "

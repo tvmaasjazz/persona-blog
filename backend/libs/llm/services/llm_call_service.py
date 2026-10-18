@@ -19,9 +19,7 @@ logger = structlog.get_logger(__name__)
 
 
 class LlmCallService:
-    """Owns every write to pb_llm_call. Each write opens its own session and commits in its
-    own transaction, so a row survives the caller's rollback. See fastapi-structure.md,
-    Services > Records that must survive a rollback."""
+    """Writes pb_llm_call rows, each in its own committed transaction so it survives a rollback."""
 
     def __init__(self, db_session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._db_session_factory = db_session_factory
@@ -132,6 +130,5 @@ class LlmCallService:
             )
             llm_call_failure_update_result = await db_session.execute(llm_call_failure_update)
             if llm_call_failure_update_result.rowcount == 0:
-                # The provider error is already on its way up; losing its row is not worth
-                # replacing it with a second exception.
+                # Warn instead of raising, so the provider error still propagates
                 logger.warning("llm_call_row_missing", llm_call_id=llm_call_id)

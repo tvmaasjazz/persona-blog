@@ -62,8 +62,7 @@ class GenerateTextRunLeaseService:
 
     @asynccontextmanager
     async def keep_lease_alive(self, run_id: int) -> AsyncIterator[None]:
-        """Renews the run's lease while the block runs, and hands the run off if the block
-        is cancelled."""
+        """Renews the run's lease while the block runs, handing the run off if cancelled."""
         job_task = asyncio.current_task()
         heartbeat_task = asyncio.create_task(self._renew_lease_until_lost(run_id, job_task))
         try:
@@ -78,8 +77,7 @@ class GenerateTextRunLeaseService:
     async def _renew_lease_until_lost(
         self, run_id: int, job_task: asyncio.Task[Any] | None
     ) -> None:
-        """Renews the lease every heartbeat, and cancels the job if another process owns
-        the run now."""
+        """Renews the lease each heartbeat, cancelling the job if the lease is lost."""
         while True:
             await asyncio.sleep(self._generate_text_settings.lease_heartbeat_seconds)
 

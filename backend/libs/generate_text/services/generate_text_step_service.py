@@ -19,9 +19,7 @@ from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionTy
 
 
 class GenerateTextStepService:
-    """Owns every write to pb_generate_text_step. Each write opens its own session and
-    commits in its own transaction, so a row survives the caller's rollback. See
-    fastapi-structure.md, Services > Records that must survive a rollback."""
+    """Writes pb_generate_text_step, each write in its own session and transaction."""
 
     def __init__(self, db_session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._db_session_factory = db_session_factory
@@ -33,8 +31,7 @@ class GenerateTextStepService:
         step_name = create_generate_text_step_input.step_name
 
         async with self._db_session_factory() as db_session, db_session.begin():
-            # A review node runs again when the graph resumes. Its paused row is picked back
-            # up rather than duplicated, so one pause stays one step.
+            # A review node reruns on resume; reuse its paused row instead of adding one
             paused_step_record = await self._find_awaiting_review_step(
                 db_session, run_id, step_name
             )
@@ -79,15 +76,13 @@ class GenerateTextStepService:
             # Sum what the step's LLM calls cost
             llm_call_rollup = await self._find_llm_call_rollup(db_session, step_id)
 
-            # Mark the step succeeded. A node that produced no text — a review node, say —
-            # stores nothing rather than an empty string, so "the latest output" skips it.
+            # Mark the step succeeded; no text stores nothing, so the latest-output query skips it
             step_completion_update = (
                 update(GenerateTextStepOrm)
                 .where(GenerateTextStepOrm.id == step_id)
                 .values(
                     status=GenerateTextStepStatusType.SUCCEEDED,
-                    # SQL NULL, not JSON null: a None here would store JSON null, which
-                    # the latest-output query's IS NOT NULL doesn't skip
+                    # SQL NULL, not JSON null, which IS NOT NULL wouldn't skip
                     output={STEP_OUTPUT_TEXT_KEY: output} if output else null(),
                     duration_ms=duration_ms,
                     finished_at=DatabaseClockUtils.build_utc_now_sql(),
@@ -144,7 +139,7 @@ class GenerateTextStepService:
                 raise NotFoundException(f"Generate text step {step_id} not found")
 
     async def find_awaiting_review_step_id(self, run_id: int) -> int | None:
-        """The step a paused run is waiting on, or None when no step is paused."""
+        """Returns the step a paused run waits on, or None."""
         async with self._db_session_factory() as db_session:
             query = (
                 select(GenerateTextStepOrm.id)
@@ -170,10 +165,8 @@ class GenerateTextStepService:
         return query_result.scalar_one_or_none()
 
     async def find_latest_step(self, run_id: int) -> FindLatestGenerateTextStepResult:
-        """Where the run sits, and the text it has produced. These are two different rows:
-        a run paused for review sits on its review step, which has no output of its own,
-        while the text came from the step before it. Read from the step rows rather than
-        the checkpoint, so both survive the checkpoint's TTL."""
+        """Finds the run's newest step name and its newest text output."""
+        # Two rows: a paused review step has no output, so the text comes from an earlier step
         latest_step_query = (
             select(GenerateTextStepOrm.step_name)
             .where(GenerateTextStepOrm.run_id == run_id)
@@ -199,7 +192,7 @@ class GenerateTextStepService:
         )
 
     async def record_awaiting_review(self, step_id: int, duration_ms: int) -> None:
-        """A review node paused rather than failed: the graph will call it again on resume."""
+        """Marks a review step as paused awaiting review."""
         step_pause_update = (
             update(GenerateTextStepOrm)
             .where(GenerateTextStepOrm.id == step_id)

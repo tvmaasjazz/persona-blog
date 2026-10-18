@@ -35,8 +35,7 @@ class LlmUtils:
         output_tokens: int,
         cached_input_tokens: int,
     ) -> Decimal | None:
-        """None when the model has no pricing entry: an unpriced call costs an unknown
-        amount, and 0 would read as free."""
+        """The call's cost in USD, or None for an unpriced model, since 0 would read as free."""
         model_pricing = llm_settings.model_pricing.get(model_name)
         if model_pricing is None:
             logger.warning("llm_pricing_missing", model_name=model_name)
