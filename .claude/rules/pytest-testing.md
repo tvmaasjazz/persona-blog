@@ -109,7 +109,7 @@ backend/tests/
 | `apps/api/lifespan.py`               | `tests/api/test_lifespan.py`           | Resources created at startup and closed at shutdown (§7) |
 | `libs/<d>/after_response_tasks.py`   | `tests/libs/<d>/test_after_response_tasks.py` | Call the task directly with the `db_session_factory` and `redis_client` fixtures, and assert the persisted effect |
 | A service method that starts a background job | That service's test file, and the route's | Drain the job before asserting (see Async) |
-| `apps/api/core/event_loop_monitor.py` | `tests/api/core/test_event_loop_monitor.py` | A blocked loop logs `event_loop_lag`; an idle one logs nothing. Pass a short sample and a generous threshold. The one test allowed to block and sleep (see Async) |
+| `apps/api/core/event_loop_monitor.py` | `tests/api/core/test_event_loop_monitor.py` | A blocked loop logs `event_loop_lag`; an idle one logs nothing. Pass a short sample and a generous threshold. The one test allowed to block the loop and sleep (see Async) |
 | Middleware                           | `tests/api/test_<module>.py`           | Observable effect on a real route (§9) |
 | `libs/database/orm/*.py`             | None                                   | Service database tests cover them; CI's drift check catches mismatches with migrations |
 | `migrations/`                        | `tests/migrations/test_revisions.py`   | One file covers every revision (§10) |
@@ -225,9 +225,13 @@ calls.
   different loop".
 - Never use `asyncio.run()`, `loop.run_until_complete()`, `time.sleep()`, or
   `asyncio.sleep()` in a test. If a test has to wait for something, it isn't
-  controlling that thing. The one exception is the event loop lag monitor's own test,
-  which may block the loop and sleep, because lag only exists when the loop is really
-  blocked.
+  controlling that thing. `asyncio.sleep(0)` is allowed: it only lets other tasks run
+  and never waits on the clock. The one other exception is the event loop lag
+  monitor's own test, which may block the loop and sleep, because lag only exists when
+  the loop is really blocked.
+- A test that must act while a job is mid-step uses the stub's blocking hooks, never a
+  sleep: set `<method>_is_blocked`, wait on `<method>_started_event` to know the job
+  got there, then set `<method>_unblock_event` to let it carry on.
 - A test that starts a background job waits for it with
   `await background_job_service.drain(...)` before asserting or touching the database
   again. The job and the test share one test connection, which can't serve two
@@ -266,12 +270,15 @@ How to write a stub:
 - Subclass the real class and override only the public methods tests need.
 - Never call `super().__init__()`. A method that isn't overridden then fails loudly
   instead of doing real work.
+- A stub may wrap a real instance of the class and pass calls through to it, when the
+  test needs the real effect plus a hook, such as an event to wait on.
 - Name the stub's attributes `<method>_` plus what they hold:
   - `<method>_inputs`: every input received, in order
   - `<method>_result`: the value to return
   - `<method>_results`: values popped in order, for when calls must differ (such as a
     rewrite loop). When it's set it wins over `<method>_result`, and running out
-    raises, so a test that makes more calls than it scripted fails
+    raises, so a test that makes more calls than it scripted fails. An exception in
+    the list is raised instead of returned, for "fails, then succeeds"
   - `<method>_error`: an exception to raise instead
 
 ```python
@@ -331,7 +338,10 @@ def _build_unique_email() -> str:
 - No network except local Postgres and Redis.
 - No wall clock in assertions. Assert that a TTL is within bounds or that a timestamp
   is not `None`. If behaviour depends on "now", stop and report it: the code needs an
-  injected clock.
+  injected clock. The exception is a stored time that code compares with now, such as
+  a lease expiry: the test stores a fixed literal far on the side it needs,
+  `datetime(2026, 1, 2, tzinfo=UTC)` for the past and a 2099 date for the future, never
+  an offset from now.
 - No randomness, apart from the unique-value defaults in factories.
 
 ### What not to test
