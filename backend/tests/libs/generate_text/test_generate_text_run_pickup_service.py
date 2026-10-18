@@ -1,6 +1,7 @@
 import asyncio
 from datetime import UTC, datetime
 
+import structlog
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy import select
@@ -19,6 +20,9 @@ from libs.generate_text.services.generate_text_instrumentation_service import (
     GenerateTextInstrumentationService,
 )
 from libs.generate_text.services.generate_text_node_service import GenerateTextNodeService
+from libs.generate_text.services.generate_text_run_handoff_queue_service import (
+    GenerateTextRunHandoffQueueService,
+)
 from libs.generate_text.services.generate_text_run_lease_service import (
     GenerateTextRunLeaseService,
 )
@@ -38,6 +42,7 @@ from tests.factories.personas import insert_persona_row
 from tests.factories.users import insert_user_row
 from tests.stubs.generate_text import (
     GenerateTextGraphBuilderRegistryStub,
+    GenerateTextRunHandoffQueueServiceStub,
     GenerateTextRunPickupServiceStub,
 )
 from tests.stubs.llm import LlmServiceStub
@@ -98,12 +103,14 @@ def _build_generate_text_service(
     db_session_factory: async_sessionmaker[AsyncSession],
     graph_builder_registry: GenerateTextGraphBuilderRegistry | GenerateTextGraphBuilderRegistryStub,
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
     generate_text_settings: GenerateTextSettings,
     checkpointer: BaseCheckpointSaver,
 ) -> GenerateTextService:
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     lease_service = GenerateTextRunLeaseService(
         run_service=run_service,
+        handoff_queue_service=handoff_queue_service,
         background_job_service=background_job_service,
         generate_text_settings=generate_text_settings,
     )
@@ -122,6 +129,7 @@ def _build_pickup_service(
     db_session_factory: async_sessionmaker[AsyncSession],
     graph_builder_registry: GenerateTextGraphBuilderRegistry | GenerateTextGraphBuilderRegistryStub,
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
     *,
     generate_text_settings: GenerateTextSettings | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
@@ -131,18 +139,21 @@ def _build_pickup_service(
         db_session_factory,
         graph_builder_registry,
         background_job_service,
+        handoff_queue_service,
         generate_text_settings,
         checkpointer or InMemorySaver(),
     )
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     lease_service = GenerateTextRunLeaseService(
         run_service=run_service,
+        handoff_queue_service=handoff_queue_service,
         background_job_service=background_job_service,
         generate_text_settings=generate_text_settings,
     )
     return GenerateTextRunPickupService(
         generate_text_service=generate_text_service,
         lease_service=lease_service,
+        handoff_queue_service=handoff_queue_service,
         run_service=run_service,
         background_job_service=background_job_service,
         generate_text_settings=generate_text_settings,
@@ -153,6 +164,7 @@ async def test_pick_up_next_expired_run_released_run_resumes_from_checkpoint_to_
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
@@ -167,6 +179,7 @@ async def test_pick_up_next_expired_run_released_run_resumes_from_checkpoint_to_
             db_session_factory, llm_service_stub, generate_text_settings
         ),
         background_job_service,
+        handoff_queue_service,
         generate_text_settings,
         graph_checkpointer,
     )
@@ -186,6 +199,7 @@ async def test_pick_up_next_expired_run_released_run_resumes_from_checkpoint_to_
             db_session_factory, llm_service_stub, generate_text_settings
         ),
         picking_up_job_service,
+        handoff_queue_service,
         checkpointer=graph_checkpointer,
     )
 
@@ -216,6 +230,7 @@ async def test_pick_up_next_expired_run_resumes_with_no_graph_input_under_new_le
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     run_record = await insert_generate_text_run_row(
@@ -234,6 +249,7 @@ async def test_pick_up_next_expired_run_resumes_with_no_graph_input_under_new_le
         db_session_factory,
         graph_builder_registry_stub,
         background_job_service,
+        handoff_queue_service,
         generate_text_settings=GenerateTextSettings(lease_seconds=LONG_LEASE_SECONDS),
     )
 
@@ -254,6 +270,7 @@ async def test_pick_up_next_expired_run_at_pickup_limit_still_resumes_run(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     run_record = await insert_generate_text_run_row(
@@ -270,6 +287,7 @@ async def test_pick_up_next_expired_run_at_pickup_limit_still_resumes_run(
         db_session_factory,
         GenerateTextGraphBuilderRegistryStub(),
         background_job_service,
+        handoff_queue_service,
         generate_text_settings=GenerateTextSettings(max_run_pickups=3),
     )
 
@@ -286,6 +304,7 @@ async def test_pick_up_next_expired_run_nothing_expired_returns_false(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     await insert_generate_text_run_row(
@@ -297,7 +316,10 @@ async def test_pick_up_next_expired_run_nothing_expired_returns_false(
     )
     await db_session.commit()
     run_pickup_service = _build_pickup_service(
-        db_session_factory, GenerateTextGraphBuilderRegistryStub(), background_job_service
+        db_session_factory,
+        GenerateTextGraphBuilderRegistryStub(),
+        background_job_service,
+        handoff_queue_service,
     )
 
     is_picked_up = await run_pickup_service.pick_up_next_expired_run()
@@ -309,6 +331,7 @@ async def test_pick_up_next_expired_run_stopping_returns_false_and_claims_nothin
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     run_record = await insert_generate_text_run_row(
@@ -320,7 +343,10 @@ async def test_pick_up_next_expired_run_stopping_returns_false_and_claims_nothin
     )
     await db_session.commit()
     run_pickup_service = _build_pickup_service(
-        db_session_factory, GenerateTextGraphBuilderRegistryStub(), background_job_service
+        db_session_factory,
+        GenerateTextGraphBuilderRegistryStub(),
+        background_job_service,
+        handoff_queue_service,
     )
     background_job_service.request_stop()
 
@@ -336,6 +362,7 @@ async def test_pick_up_next_expired_run_pending_run_fails_as_never_started(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     run_record = await insert_generate_text_run_row(
@@ -347,7 +374,10 @@ async def test_pick_up_next_expired_run_pending_run_fails_as_never_started(
     )
     await db_session.commit()
     run_pickup_service = _build_pickup_service(
-        db_session_factory, GenerateTextGraphBuilderRegistryStub(), background_job_service
+        db_session_factory,
+        GenerateTextGraphBuilderRegistryStub(),
+        background_job_service,
+        handoff_queue_service,
     )
 
     is_picked_up = await run_pickup_service.pick_up_next_expired_run()
@@ -365,6 +395,7 @@ async def test_pick_up_next_expired_run_picked_up_too_often_fails_run(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     run_record = await insert_generate_text_run_row(
@@ -381,6 +412,7 @@ async def test_pick_up_next_expired_run_picked_up_too_often_fails_run(
         db_session_factory,
         GenerateTextGraphBuilderRegistryStub(),
         background_job_service,
+        handoff_queue_service,
         generate_text_settings=GenerateTextSettings(max_run_pickups=3),
     )
 
@@ -398,6 +430,7 @@ async def test_pick_up_next_expired_run_graph_version_mismatch_fails_run(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     run_record = await insert_generate_text_run_row(
@@ -416,6 +449,7 @@ async def test_pick_up_next_expired_run_graph_version_mismatch_fails_run(
             db_session_factory, LlmServiceStub(), generate_text_settings
         ),
         background_job_service,
+        handoff_queue_service,
         generate_text_settings=generate_text_settings,
     )
 
@@ -432,6 +466,7 @@ async def test_pick_up_next_expired_run_unbuildable_graph_fails_run(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
     run_record = await insert_generate_text_run_row(
@@ -451,6 +486,7 @@ async def test_pick_up_next_expired_run_unbuildable_graph_fails_run(
             db_session_factory, LlmServiceStub(), generate_text_settings
         ),
         background_job_service,
+        handoff_queue_service,
         generate_text_settings=generate_text_settings,
     )
 
@@ -489,3 +525,58 @@ async def test_pick_up_expired_runs_failed_pickup_does_not_stop_next_pickup() ->
     pickup_task.cancel()
     await asyncio.gather(pickup_task, return_exceptions=True)
     assert run_pickup_service_stub.pick_up_next_expired_run_call_count == 2
+
+
+async def test_pick_up_handed_off_runs_received_run_id_picks_up_one_expired_run() -> None:
+    handoff_queue_service_stub = GenerateTextRunHandoffQueueServiceStub()
+    handoff_queue_service_stub.wait_for_run_results = [7]
+    run_pickup_service_stub = GenerateTextRunPickupServiceStub(
+        run_handoff_wait_seconds=2, handoff_queue_service=handoff_queue_service_stub
+    )
+    run_pickup_service_stub.pick_up_next_expired_run_results = [False]
+    pickup_task = asyncio.create_task(run_pickup_service_stub.pick_up_handed_off_runs())
+
+    await run_pickup_service_stub.pick_up_next_expired_run_exhausted_event.wait()
+
+    pickup_task.cancel()
+    await asyncio.gather(pickup_task, return_exceptions=True)
+    assert run_pickup_service_stub.pick_up_next_expired_run_call_count == 1
+    assert handoff_queue_service_stub.wait_for_run_inputs[0] == 2
+
+
+async def test_pick_up_handed_off_runs_empty_wait_picks_up_nothing() -> None:
+    handoff_queue_service_stub = GenerateTextRunHandoffQueueServiceStub()
+    handoff_queue_service_stub.wait_for_run_results = [None]
+    run_pickup_service_stub = GenerateTextRunPickupServiceStub(
+        run_handoff_wait_seconds=0, handoff_queue_service=handoff_queue_service_stub
+    )
+    pickup_task = asyncio.create_task(run_pickup_service_stub.pick_up_handed_off_runs())
+
+    await handoff_queue_service_stub.wait_for_run_exhausted_event.wait()
+
+    pickup_task.cancel()
+    await asyncio.gather(pickup_task, return_exceptions=True)
+    assert run_pickup_service_stub.pick_up_next_expired_run_call_count == 0
+
+
+async def test_pick_up_handed_off_runs_wait_raises_logs_failure_and_carries_on() -> None:
+    handoff_queue_service_stub = GenerateTextRunHandoffQueueServiceStub()
+    handoff_queue_service_stub.wait_for_run_results = [ConnectionError("redis unreachable"), 7]
+    run_pickup_service_stub = GenerateTextRunPickupServiceStub(
+        run_handoff_wait_seconds=0, handoff_queue_service=handoff_queue_service_stub
+    )
+    run_pickup_service_stub.pick_up_next_expired_run_results = [False]
+    pickup_task = asyncio.create_task(run_pickup_service_stub.pick_up_handed_off_runs())
+
+    with structlog.testing.capture_logs() as captured_log_events:
+        await run_pickup_service_stub.pick_up_next_expired_run_exhausted_event.wait()
+
+    pickup_task.cancel()
+    await asyncio.gather(pickup_task, return_exceptions=True)
+    handoff_pickup_failed_log_events = [
+        log_event
+        for log_event in captured_log_events
+        if log_event["event"] == "run_handoff_pickup_failed"
+    ]
+    assert len(handoff_pickup_failed_log_events) >= 1
+    assert run_pickup_service_stub.pick_up_next_expired_run_call_count == 1

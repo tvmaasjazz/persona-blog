@@ -14,6 +14,9 @@ from libs.generate_text.graphs.generate_text_graph_builder_registry import (
 )
 from libs.generate_text.prompts import BaseGenerateTextPrompt
 from libs.generate_text.results import BuildPromptResult
+from libs.generate_text.services.generate_text_run_handoff_queue_service import (
+    GenerateTextRunHandoffQueueService,
+)
 from libs.generate_text.services.generate_text_run_pickup_service import (
     GenerateTextRunPickupService,
 )
@@ -155,14 +158,47 @@ class GenerateTextRunServiceStub(GenerateTextRunService):
             self.renew_lease_event.set()
 
 
-class GenerateTextRunPickupServiceStub(GenerateTextRunPickupService):
-    """Overrides pick_up_next_expired_run only, so a test drives the real pickup loop."""
+class GenerateTextRunHandoffQueueServiceStub(GenerateTextRunHandoffQueueService):
+    """Scripts the handoff queue, so a test can fail a push or feed a loop its wait results."""
 
-    def __init__(self, *, run_pickup_interval_seconds: int) -> None:
-        # The loop reads the pickup interval from the settings the real __init__ would store
+    def __init__(self) -> None:
+        self.push_run_inputs: list[int] = []
+        self.push_run_error: Exception | None = None
+        self.wait_for_run_inputs: list[float] = []
+        self.wait_for_run_results: list[int | Exception | None] = []
+        self.wait_for_run_exhausted_event = asyncio.Event()
+
+    async def push_run(self, run_id: int) -> None:
+        self.push_run_inputs.append(run_id)
+        if self.push_run_error is not None:
+            raise self.push_run_error
+
+    async def wait_for_run(self, timeout_seconds: float) -> int | None:
+        self.wait_for_run_inputs.append(timeout_seconds)
+        wait_for_run_result = self.wait_for_run_results.pop(0)
+        if not self.wait_for_run_results:
+            self.wait_for_run_exhausted_event.set()
+        if isinstance(wait_for_run_result, Exception):
+            raise wait_for_run_result
+        return wait_for_run_result
+
+
+class GenerateTextRunPickupServiceStub(GenerateTextRunPickupService):
+    """Overrides pick_up_next_expired_run only, so a test drives the real pickup loops."""
+
+    def __init__(
+        self,
+        *,
+        run_pickup_interval_seconds: int = 3600,
+        run_handoff_wait_seconds: int = 5,
+        handoff_queue_service: GenerateTextRunHandoffQueueService | None = None,
+    ) -> None:
+        # The loops read their intervals from the settings the real __init__ would store
         self._generate_text_settings = GenerateTextSettings(
-            run_pickup_interval_seconds=run_pickup_interval_seconds
+            run_pickup_interval_seconds=run_pickup_interval_seconds,
+            run_handoff_wait_seconds=run_handoff_wait_seconds,
         )
+        self._handoff_queue_service = handoff_queue_service
         self.pick_up_next_expired_run_call_count = 0
         self.pick_up_next_expired_run_results: list[bool | Exception] = []
         self.pick_up_next_expired_run_exhausted_event = asyncio.Event()
