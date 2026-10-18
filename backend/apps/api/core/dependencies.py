@@ -1,5 +1,4 @@
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import BackgroundTasks, Depends, Request
@@ -50,7 +49,6 @@ async def get_auth_user(request: Request, after_response_tasks: BackgroundTasks)
         redis_client=request.app.state.redis_client,
         user_settings=app_settings.users,
         user_id=auth_user.id,
-        activity_at=datetime.now(UTC),
     )
     return auth_user
 

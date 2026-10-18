@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -6,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
+from libs.database.clock import fetch_utc_now
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.generate_text.constants import STEP_OUTPUT_TEXT_KEY
@@ -54,7 +54,7 @@ class GenerateTextStepService:
                 attempt=next_attempt,
                 status=GenerateTextStepStatusType.RUNNING,
                 input=create_generate_text_step_input.input,
-                started_at=datetime.now(UTC),
+                started_at=await fetch_utc_now(db_session),
                 created_by_id=auth_user.id,
                 updated_by_id=auth_user.id,
             )
@@ -73,7 +73,7 @@ class GenerateTextStepService:
             # an empty string, so "the latest output" skips it.
             step_record.output = {STEP_OUTPUT_TEXT_KEY: output} if output else None
             step_record.duration_ms = duration_ms
-            step_record.finished_at = datetime.now(UTC)
+            step_record.finished_at = await fetch_utc_now(db_session)
             await self._apply_rollup(db_session, step_record)
             await db_session.flush()
 
@@ -86,7 +86,7 @@ class GenerateTextStepService:
             step_record.error_code = error_code
             step_record.error_message = error_message
             step_record.duration_ms = duration_ms
-            step_record.finished_at = datetime.now(UTC)
+            step_record.finished_at = await fetch_utc_now(db_session)
             await db_session.flush()
 
     async def record_decision(
@@ -95,14 +95,13 @@ class GenerateTextStepService:
         human_decision: HumanDecisionType,
         human_feedback: str | None,
         auth_user: AuthUser,
-        decided_at: datetime,
     ) -> None:
         async with self._db_session_factory() as db_session, db_session.begin():
             step_record = await self._get_step(db_session, step_id)
             step_record.human_decision = human_decision
             step_record.human_feedback = human_feedback
             step_record.decided_by_id = auth_user.id
-            step_record.decided_at = decided_at
+            step_record.decided_at = await fetch_utc_now(db_session)
             step_record.updated_by_id = auth_user.id
             await db_session.flush()
 

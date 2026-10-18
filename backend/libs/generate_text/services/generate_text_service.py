@@ -1,5 +1,4 @@
 from contextlib import aclosing
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -86,7 +85,7 @@ class GenerateTextService:
             additional_context=generate_text_input.additional_context,
             options=options_dict,
             lease_owner=self._lease_service.worker_id,
-            lease_expires_at=self._lease_service.build_lease_expires_at(),
+            lease_seconds=self._generate_text_settings.lease_seconds,
         )
         # Built before the row exists, so bad options fail with nothing left behind.
         generate_text_graph = graph_builder.build_graph(options_dict, self._checkpointer)
@@ -219,7 +218,6 @@ class GenerateTextService:
             human_decision,
             resume_generate_text_input.feedback_text,
             auth_user,
-            datetime.now(UTC),
         )
 
     async def continue_generate_text(

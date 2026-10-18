@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
@@ -36,7 +35,7 @@ class CreateGenerateTextRunInput(BaseModel):
     additional_context: str | None
     options: dict[str, Any]
     lease_owner: str
-    lease_expires_at: datetime
+    lease_seconds: int
 
 
 class CreateGenerateTextStepInput(BaseModel):
