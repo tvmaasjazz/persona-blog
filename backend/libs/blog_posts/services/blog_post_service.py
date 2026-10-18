@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -24,6 +24,7 @@ from libs.content_items.types import ContentType
 from libs.content_items.utils.content_item_query_utils import ContentItemQueryUtils
 from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.core.utils.markdown_utils import MarkdownUtils
+from libs.database.clock import fetch_utc_now
 from libs.database.orm import BlogPostOrm, ContentItemOrm, PersonaOrm
 from libs.generate_text.services import GenerateTextRunService, GenerateTextStepService
 from libs.personas.services import PersonaService
@@ -171,7 +172,7 @@ class BlogPostService:
 
     async def delete_blog_post(self, blog_post_identity: UUID, auth_user: AuthUser) -> None:
         blog_post_record = await self._find_owned_blog_post_record(blog_post_identity, auth_user)
-        blog_post_record.deleted_at = datetime.now(UTC)
+        blog_post_record.deleted_at = await fetch_utc_now(self._db_session)
         blog_post_record.deleted_by_id = auth_user.id
         await self._db_session.flush()
 

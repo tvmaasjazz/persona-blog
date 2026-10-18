@@ -1,13 +1,11 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime
 from typing import Any
 
 import structlog
 
 from libs.core.services import BackgroundJobService
-from libs.core.utils import DateTimeUtils
 from libs.generate_text.results import ClaimExpiredGenerateTextRunResult
 from libs.generate_text.services.generate_text_run_handoff_queue_service import (
     GenerateTextRunHandoffQueueService,
@@ -37,17 +35,16 @@ class GenerateTextRunLeaseService:
     def worker_id(self) -> str:
         return self._background_job_service.worker_id
 
-    def build_lease_expires_at(self) -> datetime:
-        return DateTimeUtils.seconds_from_now(self._generate_text_settings.lease_seconds)
-
     async def claim_paused_run(self, run_id: int) -> bool:
         return await self._run_service.claim_paused_run(
-            run_id, self.worker_id, self.build_lease_expires_at()
+            run_id, self.worker_id, self._generate_text_settings.lease_seconds
         )
 
-    async def claim_expired_run(self) -> ClaimExpiredGenerateTextRunResult | None:
+    async def claim_expired_run(
+        self, run_id: int | None = None
+    ) -> ClaimExpiredGenerateTextRunResult | None:
         return await self._run_service.claim_expired_run(
-            self.worker_id, self.build_lease_expires_at()
+            self.worker_id, self._generate_text_settings.lease_seconds, run_id
         )
 
     async def hand_off_run(self, run_id: int) -> None:
@@ -89,7 +86,7 @@ class GenerateTextRunLeaseService:
             # Renew the lease, trying again next beat if the write fails
             try:
                 is_renewed = await self._run_service.renew_lease(
-                    run_id, self.worker_id, self.build_lease_expires_at()
+                    run_id, self.worker_id, self._generate_text_settings.lease_seconds
                 )
             except Exception:
                 logger.warning("lease_renewal_failed", run_id=run_id, exc_info=True)

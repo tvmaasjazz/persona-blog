@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -12,7 +10,6 @@ async def record_user_activity(
     redis_client: Redis,
     user_settings: UserSettings,
     user_id: int,
-    activity_at: datetime,
 ) -> None:
     """Runs after the response is sent, so it opens its own session and transaction.
 
@@ -22,4 +19,4 @@ async def record_user_activity(
         user_activity_service = UserActivityService(
             db_session=db_session, redis_client=redis_client, user_settings=user_settings
         )
-        await user_activity_service.record_activity(user_id, activity_at)
+        await user_activity_service.record_activity(user_id)
