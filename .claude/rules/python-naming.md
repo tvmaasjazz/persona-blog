@@ -169,8 +169,12 @@ Booleans start with `is_` wherever they live: columns, Orm attributes,
 Pydantic fields, and local variables. `is_active`, not `active`.
 
 An `Orm` class describes a table; an instance of it is a row, named `<entity>_record`:
-`user_record`, `user_auth_provider_record`. That holds whether the row was loaded or
-just created and flushed. Never `user_orm`.
+`user_record`, `user_auth_provider_record`. That holds whether the row was loaded or,
+in a test factory, just created. Never `user_orm`.
+
+A write statement is named for its row and what it does: `persona_insert`,
+`persona_update`, `persona_delete`, `run_start`, `run_claim`. What `execute()` returns
+for it adds `_result`: `persona_insert_result`.
 
 One exception: the root `AppSettings` instance is `app.state.settings`. There is only
 ever one settings object on `app.state`, so the qualifier adds nothing. Local

@@ -117,7 +117,7 @@ CREATE INDEX pb_persona_created_by_id_created_at_idx
   `TIMESTAMPTZ`.
 - `Mapped[datetime]` maps to `UtcDateTime` (`libs/database/column_types.py`), which
   stores naive UTC and returns aware UTC. Python code only ever handles aware UTC
-  datetimes. A naive datetime raises at flush.
+  datetimes. A naive datetime raises when it's written.
 - Every "now" a query compares with or a write stores comes from the database clock,
   never the app server's `datetime.now(UTC)`: servers' clocks drift apart, and the
   database's is the one they all share. `DatabaseClockUtils`
@@ -127,12 +127,8 @@ CREATE INDEX pb_persona_created_by_id_created_at_idx
     `.values(last_login_at=DatabaseClockUtils.build_utc_now_sql())`.
     `build_utc_now_plus_sql(seconds)` is a time that far ahead, such as a lease
     expiry.
-  - `updated_at` is set by `BaseOrm` from the same clock. While Orm writes still
-    flush, `eager_defaults` fetches it back with `RETURNING`.
-  - Never assign the SQL to an Orm attribute: async code can't read the
-    attribute back until the row is reloaded. A write that sets Orm attributes and
-    flushes still reads `datetime.now(UTC)` for now, marked `TODO(db-clock)`, until it
-    becomes an `update()` or `insert()` statement (`plans/plan.md`).
+  - `updated_at` is set by `BaseOrm`'s `onupdate` from the same clock on every
+    `update()`.
 - A service that writes a time takes none from its caller.
 - Inside one transaction the database clock is the transaction's start time, so every
   time one transaction writes is the same.

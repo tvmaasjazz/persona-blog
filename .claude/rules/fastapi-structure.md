@@ -639,25 +639,80 @@ flat projections and aggregates.
 `scalars().all()` for a list, which is empty rather than an error when nothing
 matches.
 
-Creates use `add()` then `flush()`, never `commit()`. `flush()` populates the primary
-key and other server-side defaults:
+Writes are one statement each: `insert()` to create and `update()` to change, never
+`add()` and `flush()`, and never setting attributes on a loaded record. A statement
+lists every column it sets in `.values(...)`, never `**input.model_dump()`, so a
+renamed field can't write to the wrong column. A time it writes is
+`DatabaseClockUtils.build_utc_now_sql()` (`database.md` › Timestamps). A nullable
+`JSONB` column is cleared with `null()`, never `None`, which stores JSON `null` and
+passes `IS NOT NULL`. A service never calls `commit()`; whoever owns the transaction
+commits.
+
+A create returns what its caller needs with `.returning(...)`:
 
 ```python
-    async def create_user(self, user_input: CreateUserInput) -> CreateUserResult:
-        user_record = UserOrm(
-            email=user_input.email,
-            display_name=user_input.display_name,
+    async def create_persona(
+        self, persona_input: PersonaInput, auth_user: AuthUser
+    ) -> CreatePersonaResult:
+        persona_insert = (
+            insert(PersonaOrm)
+            .values(
+                name=persona_input.name,
+                bio=persona_input.bio,
+                created_by_id=auth_user.id,
+                updated_by_id=auth_user.id,
+            )
+            .returning(PersonaOrm.identity)
         )
-        self._db_session.add(user_record)
-        await self._db_session.flush()
+        persona_insert_result = await self._db_session.execute(persona_insert)
+        persona_identity = persona_insert_result.scalar_one()
 
-        return CreateUserResult.model_validate(user_record, from_attributes=True)
+        return CreatePersonaResult(identity=persona_identity)
 ```
 
-Updates: load the Orm, mutate attributes, `flush()`. Use `update()` statements only
-for bulk operations, and for an atomic claim, where the `WHERE` clause is the check:
+An update that needs an access check reads the row first, in its own query that raises
+`NotFoundException` or `ForbiddenException`, then updates it by `id`:
+
+```python
+    async def update_persona(
+        self, persona_identity: UUID, persona_input: PersonaInput, auth_user: AuthUser
+    ) -> None:
+        persona_record = await self._find_owned_persona_record(persona_identity, auth_user)
+        persona_update = (
+            update(PersonaOrm)
+            .where(PersonaOrm.id == persona_record.id)
+            .values(
+                name=persona_input.name,
+                bio=persona_input.bio,
+                updated_by_id=auth_user.id,
+            )
+        )
+        await self._db_session.execute(persona_update)
+```
+
+An update with no access check skips the read: its `WHERE` is the lookup, and a row
+count of 0 raises `NotFoundException`. The soft-delete rule only filters selects, so
+when the row can be soft-deleted, that `WHERE` adds `<Orm>.deleted_at.is_(None)`:
+
+```python
+        run_start = (
+            update(GenerateTextRunOrm)
+            .where(GenerateTextRunOrm.id == run_id)
+            .values(
+                status=GenerateTextRunStatusType.RUNNING,
+                started_at=DatabaseClockUtils.build_utc_now_sql(),
+            )
+        )
+        run_start_result = await db_session.execute(run_start)
+        if run_start_result.rowcount == 0:
+            raise NotFoundException(f"Generate text run {run_id} not found")
+```
+
+An atomic claim works the same way, with its condition in the `WHERE`:
 `claim_paused_run` sets `RUNNING` only where the status is still `AWAITING_REVIEW`, and
-reports whether it changed a row. Deletes are updates too: set `deleted_at` and `deleted_by_id`.
+reports whether it changed a row. Deletes are updates too: set `deleted_at` from the
+database clock and `deleted_by_id`. `updated_at` needs nothing; `BaseOrm` sets it on
+every `update()`.
 
 ## Configuration and constants
 
