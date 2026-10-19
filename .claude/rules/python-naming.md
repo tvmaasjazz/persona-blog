@@ -276,9 +276,20 @@ The same applies to chained attribute access into a call:
 - A `Dto` name leads with its entity or domain: `PersonaListResponseDto`, never
   `ListPersonasResponseDto`. A `Result` is still named for its function
   (`FindUserPersonaListResult`).
-- A docstring is one plain sentence saying what the function or class does, never a
-  paragraph. A reason, a constraint or a trap goes in a comment beside the line it
-  concerns. Most `Result` and `Dto` classes and most short functions need no docstring.
+- Every public class, method and function has a docstring: one plain sentence saying
+  what its name doesn't, such as what it returns in an edge case, raises, writes or
+  starts. Never a paragraph, and never the name restated. A reason, a constraint or a
+  trap goes in a comment beside the line it concerns. Ruff's `D101`-`D103` enforce it.
+  Exempt: tests, and the shapes and declarations in `dtos.py`, `results.py`,
+  `inputs.py`, `settings.py`, `types.py`, `exceptions.py`, Orm modules and
+  `__init__.py`. A private helper gets one only when its name isn't enough.
+
+```python
+async def get_auth_user(request: Request, after_response_tasks: BackgroundTasks) -> AuthUser:
+    """Resolves the session cookie to the signed-in user, raising UnauthorizedException
+    when there isn't one, and records their activity after the response."""
+```
+
 - A function with several steps gets a short comment above each block saying what the
   block does, so its steps read from the comments alone, without reading the code:
 

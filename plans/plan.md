@@ -541,7 +541,7 @@ No run is lost, and at most one node is redone.
 - [x] **Comment cleanup** (the PR after instant handoff). Bring existing backend and
   frontend code in line with the comment rules: one-sentence docstrings, and a short
   comment above each block of a multi-step function
-- [ ] **Public docstrings** (the PR after comment cleanup). Every public function,
+- [x] **Public docstrings** (the PR after comment cleanup). Every public function,
   method and class gets a one-sentence docstring saying what its name doesn't: what it
   returns in an edge case, raises, writes or starts. Turn on ruff's `D1` rules to
   enforce it, exempting tests, `dtos.py`, `results.py`, `inputs.py`, `settings.py`,
