@@ -29,6 +29,7 @@ def _exclude_soft_deleted_rows(orm_execute_state: ORMExecuteState) -> None:
 def create_db_session_factory(
     db_bind: AsyncEngine | AsyncConnection,
 ) -> async_sessionmaker[AsyncSession]:
+    """A session factory whose sessions hide soft-deleted rows and keep objects after commit."""
     return async_sessionmaker(
         bind=db_bind, expire_on_commit=False, sync_session_class=SoftDeleteSession
     )

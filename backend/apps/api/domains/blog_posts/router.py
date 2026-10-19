@@ -30,6 +30,7 @@ async def find_user_blog_post_list(
     auth_user: AuthUserDep,
     blog_post_service: BlogPostServiceDep,
 ) -> BlogPostListResponseDto:
+    """Lists the signed-in user's blog posts, optionally only those of one persona."""
     find_user_blog_post_list_result = await blog_post_service.find_user_blog_post_list(
         auth_user, query_dto.persona_identity
     )
@@ -40,6 +41,7 @@ async def find_user_blog_post_list(
 async def find_blog_post(
     blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> BlogPostResponseDto:
+    """Returns one blog post, or 404 when it doesn't exist or the user can't access it."""
     find_blog_post_result = await blog_post_service.find_blog_post(blog_post_identity, auth_user)
     return BlogPostResponseDto.from_result(find_blog_post_result)
 
@@ -54,6 +56,7 @@ async def find_blog_post(
 async def create_blog_post(
     dto: CreateBlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> IdentityResponseDto:
+    """Creates a blog post, or 422 when it is public but its persona is private."""
     create_blog_post_result = await blog_post_service.create_blog_post(dto.to_input(), auth_user)
     return IdentityResponseDto(identity=create_blog_post_result.identity)
 
@@ -71,6 +74,7 @@ async def create_blog_post_from_generate_text_run(
     auth_user: AuthUserDep,
     blog_post_service: BlogPostServiceDep,
 ) -> IdentityResponseDto:
+    """Saves a completed generate text run's output as a blog post, or 404 when no such run."""
     create_blog_post_result = await blog_post_service.create_blog_post_from_generate_text_run(
         dto.to_input(), auth_user
     )
@@ -89,6 +93,7 @@ async def update_blog_post(
     auth_user: AuthUserDep,
     blog_post_service: BlogPostServiceDep,
 ) -> EmptyResponseDto:
+    """Updates a blog post, or 404 when it is missing and 403 when the user isn't its creator."""
     await blog_post_service.update_blog_post(blog_post_identity, dto.to_input(), auth_user)
     return EmptyResponseDto()
 
@@ -97,5 +102,6 @@ async def update_blog_post(
 async def delete_blog_post(
     blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> EmptyResponseDto:
+    """Soft-deletes a blog post, or 404 when it is missing and 403 when not its creator."""
     await blog_post_service.delete_blog_post(blog_post_identity, auth_user)
     return EmptyResponseDto()

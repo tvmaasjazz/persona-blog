@@ -16,6 +16,7 @@ google_auth_router = APIRouter(prefix="/auth/google", tags=["google-auth"])
 async def get_google_login(
     google_oauth_service: GoogleOAuthServiceDep,
 ) -> RedirectResponse:
+    """Redirects the browser to Google's sign-in page."""
     authorization_url = await google_oauth_service.build_authorization_url()
     return RedirectResponse(authorization_url, status_code=307)
 
@@ -27,6 +28,7 @@ async def get_google_callback(
     app_settings: AppSettingsDep,
     google_sign_in_service: GoogleSignInServiceDep,
 ) -> RedirectResponse:
+    """Completes Google sign-in, sets the session cookie and redirects to the frontend."""
     google_sign_in_result = await google_sign_in_service.sign_in_with_google(code, state)
 
     redirect_response = RedirectResponse(app_settings.auth.frontend_url, status_code=303)

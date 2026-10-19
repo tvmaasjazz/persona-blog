@@ -27,6 +27,7 @@ class GenerateTextStepService:
     async def create_step(
         self, create_generate_text_step_input: CreateGenerateTextStepInput, auth_user: AuthUser
     ) -> CreateGenerateTextStepResult:
+        """Inserts a RUNNING step, or sets a paused review step of that name back to RUNNING."""
         run_id = create_generate_text_step_input.run_id
         step_name = create_generate_text_step_input.step_name
 
@@ -72,6 +73,7 @@ class GenerateTextStepService:
         return CreateGenerateTextStepResult(id=step_id, identity=step_identity)
 
     async def complete_step(self, step_id: int, output: str, duration_ms: int) -> None:
+        """Marks the step SUCCEEDED with its cost totals; empty text stores no output."""
         async with self._db_session_factory() as db_session, db_session.begin():
             # Sum what the step's LLM calls cost
             llm_call_rollup = await self._find_llm_call_rollup(db_session, step_id)
@@ -99,6 +101,7 @@ class GenerateTextStepService:
     async def fail_step(
         self, step_id: int, error_code: str, error_message: str, duration_ms: int
     ) -> None:
+        """Marks the step FAILED with the error; NotFoundException for an unknown step."""
         step_failure_update = (
             update(GenerateTextStepOrm)
             .where(GenerateTextStepOrm.id == step_id)
@@ -122,6 +125,7 @@ class GenerateTextStepService:
         human_feedback: str | None,
         auth_user: AuthUser,
     ) -> None:
+        """Stores the reviewer's decision, feedback and time on the step."""
         step_decision_update = (
             update(GenerateTextStepOrm)
             .where(GenerateTextStepOrm.id == step_id)

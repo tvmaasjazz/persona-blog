@@ -9,6 +9,8 @@ from libs.personas.exceptions import PersonaNameTakenException
 
 
 class PersonaValidationService:
+    """The checks on an incoming persona payload that need the database."""
+
     def __init__(self, db_session: AsyncSession) -> None:
         self._db_session = db_session
 

@@ -16,6 +16,8 @@ from libs.users.settings import UserSettings
 
 
 class AppSettings(BaseSettings):
+    """The root settings, read from config.toml and the environment, which wins."""
+
     model_config = SettingsConfigDict(
         toml_file="config.toml",
         env_file=".env",
@@ -46,5 +48,6 @@ class AppSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Orders the sources so init values beat env vars, which beat .env, secrets and TOML."""
         toml_settings = TomlConfigSettingsSource(settings_cls)
         return (init_settings, env_settings, dotenv_settings, file_secret_settings, toml_settings)

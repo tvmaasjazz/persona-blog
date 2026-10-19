@@ -5,6 +5,7 @@ from apps.api.core.types import EnvironmentType
 
 
 def configure_logging(app_settings: AppSettings) -> None:
+    """Configures structlog, caching loggers on first use except in the test environment."""
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,

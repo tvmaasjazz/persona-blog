@@ -30,4 +30,6 @@ class BaseGenerateTextGraphBuilder(ABC):
     @abstractmethod
     def build_graph(
         self, options: dict[str, Any], checkpointer: BaseCheckpointSaver
-    ) -> CompiledStateGraph: ...
+    ) -> CompiledStateGraph:
+        """Compiles the graph with the checkpointer, raising if the options don't fit the type."""
+        ...

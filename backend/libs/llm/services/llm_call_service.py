@@ -30,6 +30,7 @@ class LlmCallService:
         tier_settings: LlmTierSettings,
         auth_user: AuthUser,
     ) -> CreatePendingLlmCallResult:
+        """Commits a PENDING call row before the provider is asked, so a crash leaves a trace."""
         async with self._db_session_factory() as db_session, db_session.begin():
             # Insert the pending call and read back its keys
             llm_call_insert = (
@@ -64,6 +65,7 @@ class LlmCallService:
         duration_ms: int,
         auth_user: AuthUser,
     ) -> None:
+        """Records the response, tokens and cost; NotFoundException if the row is gone."""
         response_json: dict[str, Any] | None = None
         if provider_completion_result.parsed_output is not None:
             response_json = provider_completion_result.parsed_output.model_dump(mode="json")
@@ -101,6 +103,7 @@ class LlmCallService:
         duration_ms: int,
         auth_user: AuthUser,
     ) -> None:
+        """Records the failure on the call; a missing row is only logged, never raised."""
         # Work out the failure's reason and the provider's message
         failure_reason = (
             llm_provider_exception.reason

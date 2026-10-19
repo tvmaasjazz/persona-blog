@@ -38,6 +38,7 @@ def build_worker_id(app_settings: AppSettings) -> str:
 
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
+    """Starts the app-scoped resources and loops, then stops and closes them at shutdown."""
     # Create the app-scoped resources
     app_settings = fastapi_app.state.settings
     configure_logging(app_settings)

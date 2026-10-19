@@ -22,6 +22,7 @@ persona_router = APIRouter(prefix="/personas", tags=["personas"])
 async def find_user_persona_list(
     auth_user: AuthUserDep, persona_service: PersonaServiceDep
 ) -> PersonaListResponseDto:
+    """Lists the personas the signed-in user can access."""
     find_user_persona_list_result = await persona_service.find_user_persona_list(auth_user)
     return PersonaListResponseDto.from_result(find_user_persona_list_result)
 
@@ -30,6 +31,7 @@ async def find_user_persona_list(
 async def find_persona(
     persona_identity: UUID, auth_user: AuthUserDep, persona_service: PersonaServiceDep
 ) -> PersonaResponseDto:
+    """Returns one persona, or 404 when it doesn't exist or the user can't access it."""
     find_persona_result = await persona_service.find_persona(persona_identity, auth_user)
     return PersonaResponseDto.from_result(find_persona_result)
 
@@ -38,6 +40,7 @@ async def find_persona(
 async def create_persona(
     dto: PersonaDto, auth_user: AuthUserDep, persona_service: PersonaServiceDep
 ) -> IdentityResponseDto:
+    """Creates a persona owned by the signed-in user, or 409 when they already use the name."""
     create_persona_result = await persona_service.create_persona(dto.to_input(), auth_user)
     return IdentityResponseDto(identity=create_persona_result.identity)
 
@@ -49,6 +52,7 @@ async def update_persona(
     auth_user: AuthUserDep,
     persona_service: PersonaServiceDep,
 ) -> EmptyResponseDto:
+    """Updates a persona, or 404 when it is missing and 403 when the user isn't its creator."""
     await persona_service.update_persona(persona_identity, dto.to_input(), auth_user)
     return EmptyResponseDto()
 
@@ -57,5 +61,6 @@ async def update_persona(
 async def delete_persona(
     persona_identity: UUID, auth_user: AuthUserDep, persona_service: PersonaServiceDep
 ) -> EmptyResponseDto:
+    """Soft-deletes a persona, or 404 when it is missing and 403 when the user isn't its creator."""
     await persona_service.delete_persona(persona_identity, auth_user)
     return EmptyResponseDto()

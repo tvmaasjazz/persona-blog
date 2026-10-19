@@ -23,6 +23,7 @@ async def generate_blog_post(
     auth_user: AuthUserDep,
     generate_text_service: GenerateTextServiceDep,
 ) -> GenerateTextRunResponseDto:
+    """Starts generating a blog post as the persona in the background and returns its run."""
     generate_text_result = await generate_text_service.generate_text(
         dto.to_input(), find_user_persona_result, auth_user
     )
@@ -33,6 +34,7 @@ async def generate_blog_post(
 async def find_generate_text_run(
     run_identity: UUID, auth_user: AuthUserDep, generate_text_service: GenerateTextServiceDep
 ) -> GenerateTextRunResponseDto:
+    """Returns a generate text run with its current status and output."""
     find_generate_text_run_result = await generate_text_service.find_generate_text_run(
         run_identity, auth_user
     )
@@ -46,6 +48,7 @@ async def resume_generate_text(
     auth_user: AuthUserDep,
     generate_text_service: GenerateTextServiceDep,
 ) -> GenerateTextRunResponseDto:
+    """Resumes a run paused for review with the reviewer's decision and returns the run."""
     resume_generate_text_result = await generate_text_service.resume_generate_text(
         run_identity, resume_generate_text_dto.to_input(), auth_user
     )

@@ -31,6 +31,8 @@ from libs.personas.services import PersonaService
 
 
 class BlogPostService:
+    """Creates, reads, updates and soft-deletes blog posts together with their content items."""
+
     def __init__(
         self,
         db_session: AsyncSession,
@@ -48,6 +50,7 @@ class BlogPostService:
     async def create_blog_post(
         self, create_blog_post_input: CreateBlogPostInput, auth_user: AuthUser
     ) -> CreateBlogPostResult:
+        """Creates a post under one of the caller's personas; NotFoundException if it isn't."""
         find_user_persona_result = await self._persona_service.find_user_persona(
             create_blog_post_input.persona_identity, auth_user
         )
@@ -67,6 +70,8 @@ class BlogPostService:
         create_blog_post_from_generate_text_run_input: CreateBlogPostFromGenerateTextRunInput,
         auth_user: AuthUser,
     ) -> CreateBlogPostResult:
+        """Saves a run's latest output as a post, raising
+        BlogPostGenerateTextRunOutputInvalidException when it isn't a valid post."""
         generate_text_run_identity = (
             create_blog_post_from_generate_text_run_input.generate_text_run_identity
         )
@@ -103,6 +108,7 @@ class BlogPostService:
     async def find_blog_post(
         self, blog_post_identity: UUID, auth_user: AuthUser
     ) -> BlogPostDetailResult:
+        """The caller's own post or anyone's published public one; NotFoundException otherwise."""
         query = (
             select(BlogPostOrm)
             .join(ContentItemOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
@@ -125,6 +131,7 @@ class BlogPostService:
     async def find_user_blog_post_list(
         self, auth_user: AuthUser, persona_identity: UUID | None
     ) -> FindUserBlogPostListResult:
+        """The caller's own posts, newest first, optionally limited to one persona."""
         query = (
             select(BlogPostOrm)
             .join(ContentItemOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
@@ -154,6 +161,7 @@ class BlogPostService:
         update_blog_post_input: UpdateBlogPostInput,
         auth_user: AuthUser,
     ) -> None:
+        """Updates the post and its content item; ForbiddenException unless the creator."""
         blog_post_record = await self._find_owned_blog_post_record(blog_post_identity, auth_user)
         blog_post_update = (
             update(BlogPostOrm)
@@ -177,6 +185,7 @@ class BlogPostService:
         )
 
     async def delete_blog_post(self, blog_post_identity: UUID, auth_user: AuthUser) -> None:
+        """Soft-deletes the post and its content item; ForbiddenException unless the creator."""
         blog_post_record = await self._find_owned_blog_post_record(blog_post_identity, auth_user)
         blog_post_soft_delete_update = (
             update(BlogPostOrm)

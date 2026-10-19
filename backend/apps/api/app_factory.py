@@ -15,6 +15,7 @@ from apps.api.lifespan import lifespan
 
 
 def create_app() -> FastAPI:
+    """Builds the app with every router, adding the dev LLM router only in development."""
     app_settings = AppSettings()
     fastapi_app = FastAPI(lifespan=lifespan)
     fastapi_app.state.settings = app_settings

@@ -19,6 +19,7 @@ class UserActivityService:
         self._user_settings = user_settings
 
     async def record_sign_in(self, user_id: int, user_auth_provider_id: int) -> None:
+        """Stamps the user's last login and the auth provider's last use."""
         sign_in_update = (
             update(UserOrm)
             .where(UserOrm.id == user_id)
@@ -33,6 +34,7 @@ class UserActivityService:
         await self._db_session.execute(auth_provider_update)
 
     async def record_activity(self, user_id: int) -> None:
+        """Stamps the user's last activity, at most once per configured interval."""
         # The Redis key is the throttle: it sets only when absent, so one request per
         # interval writes to the database
         is_activity_due = await self._redis_client.set(

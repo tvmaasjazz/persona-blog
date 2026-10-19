@@ -16,6 +16,7 @@ from libs.personas.services import PersonaService
 
 
 def get_content_item_service(db_session: DbTransactionDep) -> ContentItemService:
+    """Builds the content item service on the request's transaction."""
     return ContentItemService(db_session=db_session)
 
 
@@ -25,6 +26,7 @@ ContentItemServiceDep = Annotated[ContentItemService, Depends(get_content_item_s
 def get_content_item_validation_service(
     db_session: DbTransactionDep,
 ) -> ContentItemValidationService:
+    """Builds the content item validation service on the request's transaction."""
     return ContentItemValidationService(db_session=db_session)
 
 
@@ -34,6 +36,7 @@ ContentItemValidationServiceDep = Annotated[
 
 
 def get_persona_service(db_session: DbTransactionDep) -> PersonaService:
+    """Builds the persona service on the request's transaction."""
     return PersonaService(db_session=db_session)
 
 
@@ -41,6 +44,7 @@ PersonaServiceDep = Annotated[PersonaService, Depends(get_persona_service)]
 
 
 def get_generate_text_run_service(request: Request) -> GenerateTextRunService:
+    """Builds the generate text run service on the app's session factory, not a request session."""
     db_session_factory = request.app.state.db_session_factory
     return GenerateTextRunService(db_session_factory=db_session_factory)
 
@@ -51,6 +55,7 @@ GenerateTextRunServiceDep = Annotated[
 
 
 def get_generate_text_step_service(request: Request) -> GenerateTextStepService:
+    """Builds the generate text step service on the app's session factory, not a request session."""
     db_session_factory = request.app.state.db_session_factory
     return GenerateTextStepService(db_session_factory=db_session_factory)
 
@@ -67,6 +72,7 @@ def get_blog_post_service(
     generate_text_run_service: GenerateTextRunServiceDep,
     generate_text_step_service: GenerateTextStepServiceDep,
 ) -> BlogPostService:
+    """Builds the blog post service on the request's transaction and its sibling services."""
     return BlogPostService(
         db_session=db_session,
         content_item_service=content_item_service,
@@ -83,6 +89,7 @@ def get_blog_post_validation_service(
     db_session: DbTransactionDep,
     content_item_validation_service: ContentItemValidationServiceDep,
 ) -> BlogPostValidationService:
+    """Builds the blog post validation service on the request's transaction."""
     return BlogPostValidationService(
         db_session=db_session,
         content_item_validation_service=content_item_validation_service,
@@ -99,6 +106,7 @@ async def validate_new_blog_post_visibility(
     auth_user: AuthUserDep,
     content_item_validation_service: ContentItemValidationServiceDep,
 ) -> None:
+    """Rejects a new public blog post whose persona is private."""
     await content_item_validation_service.validate_persona_allows_public(
         dto.persona_identity, dto.is_public, auth_user
     )
@@ -110,6 +118,7 @@ async def validate_updated_blog_post_visibility(
     auth_user: AuthUserDep,
     blog_post_validation_service: BlogPostValidationServiceDep,
 ) -> None:
+    """Rejects making a blog post public when its persona is private."""
     await blog_post_validation_service.validate_blog_post_visibility(
         blog_post_identity, dto.is_public, auth_user
     )
@@ -120,6 +129,7 @@ async def validate_new_blog_post_from_run_availability(
     auth_user: AuthUserDep,
     content_item_validation_service: ContentItemValidationServiceDep,
 ) -> None:
+    """Rejects a run that isn't found, isn't completed, or was already saved as a blog post."""
     await content_item_validation_service.validate_generate_text_run_available(
         dto.generate_text_run_identity, auth_user
     )
@@ -130,6 +140,7 @@ async def validate_new_blog_post_from_run_visibility(
     auth_user: AuthUserDep,
     content_item_validation_service: ContentItemValidationServiceDep,
 ) -> None:
+    """Rejects a public blog post from a run whose persona is private."""
     await content_item_validation_service.validate_generate_text_run_allows_public(
         dto.generate_text_run_identity, dto.is_public, auth_user
     )

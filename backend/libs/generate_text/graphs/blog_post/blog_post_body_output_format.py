@@ -31,11 +31,15 @@ SKIPPED_HEADING_LEVEL_MESSAGE = (
 
 
 class BlogPostBodyOutputFormat(BaseGenerateTextOutputFormat):
+    """The Markdown shape a blog post body must follow."""
+
     def normalize_output(self, output_text: str) -> str:
+        """Strips a code fence wrapping the whole output, then surrounding whitespace."""
         unfenced_text = MarkdownUtils.strip_wrapping_code_fence(output_text)
         return unfenced_text.strip()
 
     def validate_output(self, output_text: str) -> ValidateOutputResult:
+        """Lists every rule the post breaks, with an empty list when it follows them all."""
         error_messages: list[str] = []
 
         split_markdown_post_result = MarkdownUtils.split_post(output_text)

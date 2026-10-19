@@ -15,12 +15,16 @@ from libs.generate_text.types import GenerateTextRunStatusType
 
 
 class ContentItemValidationService:
+    """The checks on an incoming content item payload that need the database."""
+
     def __init__(self, db_session: AsyncSession) -> None:
         self._db_session = db_session
 
     async def validate_persona_allows_public(
         self, persona_identity: UUID, is_public: bool, auth_user: AuthUser
     ) -> None:
+        """Raises ContentItemPersonaPrivateException when making content public under
+        the caller's private persona; passes for private content or an unknown persona."""
         if not is_public:
             return
 
@@ -41,6 +45,7 @@ class ContentItemValidationService:
     async def validate_generate_text_run_available(
         self, generate_text_run_identity: UUID, auth_user: AuthUser
     ) -> None:
+        """Raises unless the caller's run is completed and not yet saved to a content item."""
         run_query = select(GenerateTextRunOrm).where(
             GenerateTextRunOrm.identity == generate_text_run_identity,
             GenerateTextRunOrm.created_by_id == auth_user.id,
@@ -62,6 +67,8 @@ class ContentItemValidationService:
     async def validate_generate_text_run_allows_public(
         self, generate_text_run_identity: UUID, is_public: bool, auth_user: AuthUser
     ) -> None:
+        """Raises ContentItemPersonaPrivateException when making a run's content public
+        under a private persona; passes for private content or an unknown run."""
         if not is_public:
             return
 

@@ -22,6 +22,7 @@ class GoogleSignInService:
         self._auth_session_service = auth_session_service
 
     async def sign_in_with_google(self, code: str, oauth_state: str) -> GoogleSignInResult:
+        """Creates the user's account on first sign-in and returns a new session id."""
         google_identity_result = await self._google_oauth_service.exchange_code_for_identity(
             code, oauth_state
         )

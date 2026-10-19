@@ -19,13 +19,19 @@ ADDITIONAL_CONTEXT_PROMPT_SECTION_TEMPLATE = "\n\nAdditional context:\n\n{additi
 
 
 class BaseGenerateTextPrompt(ABC):
+    """Builds the system and user prompt for one step of a text type's graph."""
+
     @abstractmethod
-    def build_generate_prompt(self, state: GenerateTextState) -> BuildPromptResult: ...
+    def build_generate_prompt(self, state: GenerateTextState) -> BuildPromptResult:
+        """Builds the prompt for the step's first pass."""
+        ...
 
     @abstractmethod
     def build_rewrite_prompt(
         self, state: GenerateTextState, previous_output: str, feedback_text: str
-    ) -> BuildPromptResult: ...
+    ) -> BuildPromptResult:
+        """Builds the prompt for redoing the step after a reviewer's feedback."""
+        ...
 
     def _build_persona_prompt_section(
         self, persona: GenerateTextPersonaInput, field_names: list[str]

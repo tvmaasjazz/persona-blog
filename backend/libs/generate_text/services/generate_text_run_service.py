@@ -29,6 +29,7 @@ class GenerateTextRunService:
     async def create_run(
         self, create_generate_text_run_input: CreateGenerateTextRunInput, auth_user: AuthUser
     ) -> CreateGenerateTextRunResult:
+        """Inserts a run already leased to its creator, so the pickup loop leaves it alone."""
         run_insert = (
             insert(GenerateTextRunOrm)
             .values(
@@ -57,6 +58,7 @@ class GenerateTextRunService:
         return CreateGenerateTextRunResult(id=run_id, identity=run_identity)
 
     async def start_run(self, run_id: int) -> None:
+        """Marks the run RUNNING and stamps its start; NotFoundException if it is unknown."""
         run_start_update = (
             update(GenerateTextRunOrm)
             .where(GenerateTextRunOrm.id == run_id)
@@ -160,6 +162,7 @@ class GenerateTextRunService:
         return run_lease_release_update_result.rowcount == 1
 
     async def complete_run(self, run_id: int) -> None:
+        """Marks the run COMPLETED with its LLM cost totals and clears its lease."""
         async with self._db_session_factory() as db_session, db_session.begin():
             # Sum what the run's LLM calls cost
             llm_call_rollup = await self._find_llm_call_rollup(db_session, run_id)
@@ -184,6 +187,7 @@ class GenerateTextRunService:
                 raise NotFoundException(f"Generate text run {run_id} not found")
 
     async def record_awaiting_review(self, run_id: int) -> None:
+        """Marks the run AWAITING_REVIEW with its cost so far and clears its lease."""
         async with self._db_session_factory() as db_session, db_session.begin():
             # Sum what the run's LLM calls cost so far
             llm_call_rollup = await self._find_llm_call_rollup(db_session, run_id)
@@ -244,6 +248,7 @@ class GenerateTextRunService:
             await db_session.execute(run_failure_update)
 
     async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
+        """Finds any user's run, with a None persona identity once its persona is deleted."""
         async with self._db_session_factory() as db_session:
             # A soft-deleted persona drops out of the join, so its identity is None
             query = (

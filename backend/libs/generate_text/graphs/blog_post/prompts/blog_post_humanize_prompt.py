@@ -21,7 +21,10 @@ HUMANIZE_REWRITE_USER_TEMPLATE = (
 
 
 class BlogPostHumanizePrompt(BaseGenerateTextPrompt):
+    """Prompts for rewriting the draft so it reads as human-written."""
+
     def build_generate_prompt(self, state: GenerateTextState) -> BuildPromptResult:
+        """Puts the newest step output, the draft, in the user prompt."""
         additional_context_prompt_section = self._build_additional_context_prompt_section(
             state.additional_context
         )
@@ -36,6 +39,7 @@ class BlogPostHumanizePrompt(BaseGenerateTextPrompt):
     def build_rewrite_prompt(
         self, state: GenerateTextState, previous_output: str, feedback_text: str
     ) -> BuildPromptResult:
+        """Asks for the previous humanized version revised, leaving the brief out."""
         user_prompt = HUMANIZE_REWRITE_USER_TEMPLATE.format(
             previous_output=previous_output,
             feedback_text=feedback_text,

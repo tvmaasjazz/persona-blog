@@ -18,7 +18,10 @@ OUTLINE_REWRITE_USER_TEMPLATE = (
 
 
 class BlogPostOutlinePrompt(BaseGenerateTextPrompt):
+    """Prompts for planning a blog post's sections before any prose is written."""
+
     def build_generate_prompt(self, state: GenerateTextState) -> BuildPromptResult:
+        """Builds the outline prompt from the brief alone, since no earlier step exists."""
         additional_context_prompt_section = self._build_additional_context_prompt_section(
             state.additional_context
         )
@@ -33,6 +36,7 @@ class BlogPostOutlinePrompt(BaseGenerateTextPrompt):
     def build_rewrite_prompt(
         self, state: GenerateTextState, previous_output: str, feedback_text: str
     ) -> BuildPromptResult:
+        """Asks for the previous outline rewritten to address the reviewer's feedback."""
         user_prompt = OUTLINE_REWRITE_USER_TEMPLATE.format(
             prompt_text=state.prompt_text,
             previous_output=previous_output,

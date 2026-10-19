@@ -15,6 +15,7 @@ async def logout(
     auth_session_service: AuthSessionServiceDep,
     session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ) -> EmptyResponseDto:
+    """Signs the user out by deleting their session and clearing the session cookie."""
     if session_id is not None:
         await auth_session_service.delete_session(session_id)
 

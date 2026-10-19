@@ -32,8 +32,11 @@ OPENAI_REASONING_EFFORT_BY_TYPE: dict[LlmReasoningEffortType, str] = {
 
 
 class OpenAiLlmUtils:
+    """Builds OpenAI request arguments and maps OpenAI responses and errors to ours."""
+
     @staticmethod
     def build_instructions_kwargs(provider_input: LlmProviderCompletionInput) -> dict[str, str]:
+        """The instructions argument, left out when there is no system prompt."""
         if provider_input.system_prompt is None:
             return {}
         return {"instructions": provider_input.system_prompt}
@@ -42,6 +45,7 @@ class OpenAiLlmUtils:
     def build_reasoning_kwargs(
         provider_input: LlmProviderCompletionInput,
     ) -> dict[str, dict[str, str]]:
+        """The reasoning argument, left out when no effort is set."""
         if provider_input.reasoning_effort is None:
             return {}
         openai_reasoning_effort = OPENAI_REASONING_EFFORT_BY_TYPE.get(
@@ -55,6 +59,7 @@ class OpenAiLlmUtils:
 
     @staticmethod
     def is_retryable_error(openai_error: OpenAIError) -> bool:
+        """True for rate limits, server errors and dropped connections, but not timeouts."""
         # APITimeoutError subclasses APIConnectionError, so it is ruled out first.
         if isinstance(openai_error, APITimeoutError):
             return False
@@ -64,6 +69,7 @@ class OpenAiLlmUtils:
     def compute_retry_delay_seconds(
         attempt: int, base_delay_seconds: float, max_delay_seconds: float
     ) -> float:
+        """A random wait up to the exponentially growing, capped delay (full jitter)."""
         return random.uniform(0, min(max_delay_seconds, base_delay_seconds * 2**attempt))
 
     @staticmethod
@@ -72,6 +78,8 @@ class OpenAiLlmUtils:
         provider_request_reference: str | None,
         parsed_output: BaseModel | None,
     ) -> LlmProviderCompletionResult:
+        """Maps a response to our result, counting a missing usage as zero tokens and
+        using the refusal text as content when the model refused."""
         reason, refusal_text = OpenAiLlmUtils.resolve_reason(response)
         usage = response.usage
         input_tokens = usage.input_tokens if usage is not None else 0
@@ -125,6 +133,7 @@ class OpenAiLlmUtils:
 
     @staticmethod
     def map_openai_error(openai_error: OpenAIError) -> Exception:
+        """The LlmException for an OpenAI error, carrying its message as provider_message."""
         provider_message = str(openai_error)
         if isinstance(openai_error, RateLimitError):
             return LlmRateLimitedException(provider_message=provider_message)

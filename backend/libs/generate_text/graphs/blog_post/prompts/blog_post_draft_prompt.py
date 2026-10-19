@@ -23,7 +23,10 @@ DRAFT_REWRITE_USER_TEMPLATE = (
 
 
 class BlogPostDraftPrompt(BaseGenerateTextPrompt):
+    """Prompts for writing the full blog post draft from the outline and brief."""
+
     def build_generate_prompt(self, state: GenerateTextState) -> BuildPromptResult:
+        """Puts the newest step output, normally the outline, in the user prompt."""
         additional_context_prompt_section = self._build_additional_context_prompt_section(
             state.additional_context
         )
@@ -39,6 +42,7 @@ class BlogPostDraftPrompt(BaseGenerateTextPrompt):
     def build_rewrite_prompt(
         self, state: GenerateTextState, previous_output: str, feedback_text: str
     ) -> BuildPromptResult:
+        """Asks for the previous draft rewritten to address the reviewer's feedback."""
         user_prompt = DRAFT_REWRITE_USER_TEMPLATE.format(
             prompt_text=state.prompt_text,
             previous_output=previous_output,

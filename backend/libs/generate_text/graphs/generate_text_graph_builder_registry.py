@@ -24,6 +24,7 @@ class GenerateTextGraphBuilderRegistry:
         }
 
     def get_by_text_type(self, text_type: TextType) -> BaseGenerateTextGraphBuilder:
+        """Raises NotImplementedError for a text type with no builder registered."""
         graph_builder = self._builder_by_text_type.get(text_type)
         if graph_builder is None:
             raise NotImplementedError(f"No graph builder registered for {text_type}")

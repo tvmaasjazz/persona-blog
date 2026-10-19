@@ -12,12 +12,15 @@ from libs.database.utils import DatabaseClockUtils
 
 
 class ContentItemService:
+    """Writes the content item row shared by every kind of published content."""
+
     def __init__(self, db_session: AsyncSession) -> None:
         self._db_session = db_session
 
     async def create_content_item(
         self, create_content_item_input: CreateContentItemInput, auth_user: AuthUser
     ) -> CreateContentItemResult:
+        """Inserts the item and links a generate text run to it when the input names one."""
         content_item_insert = (
             insert(ContentItemOrm)
             .values(
@@ -46,6 +49,7 @@ class ContentItemService:
         update_content_item_input: UpdateContentItemInput,
         auth_user: AuthUser,
     ) -> None:
+        """Sets visibility and publish time; NotFoundException if the item is gone."""
         # The where clause is the lookup; a soft-deleted row counts as missing
         content_item_update = (
             update(ContentItemOrm)
@@ -61,6 +65,7 @@ class ContentItemService:
             raise NotFoundException("Content item not found")
 
     async def delete_content_item(self, content_item_id: int, auth_user: AuthUser) -> None:
+        """Soft-deletes the item; NotFoundException if it is missing or already deleted."""
         # The where clause is the lookup; a soft-deleted row counts as missing
         content_item_soft_delete_update = (
             update(ContentItemOrm)

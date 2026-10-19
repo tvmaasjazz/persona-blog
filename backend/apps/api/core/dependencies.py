@@ -16,22 +16,27 @@ from libs.users.after_response_tasks import record_user_activity
 
 
 def get_app_settings(request: Request) -> AppSettings:
+    """Returns the settings instance stored on app state at startup."""
     return request.app.state.settings
 
 
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:
+    """Yields a db session for the request that never commits, so writes through it are lost."""
     db_session_factory = request.app.state.db_session_factory
     async with db_session_factory() as db_session:
         yield db_session
 
 
 async def get_db_transaction(request: Request) -> AsyncIterator[AsyncSession]:
+    """Yields a db session inside a transaction that commits after the route returns."""
     db_session_factory = request.app.state.db_session_factory
     async with db_session_factory() as db_session, db_session.begin():
         yield db_session
 
 
 async def get_auth_user(request: Request, after_response_tasks: BackgroundTasks) -> AuthUser:
+    """Resolves the session cookie to the signed-in user, raising UnauthorizedException
+    when there isn't one, and records their activity after the response."""
     # Read the session cookie
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     if session_id is None:
@@ -71,6 +76,7 @@ def build_llm_service(app_state: State) -> LlmService:
 
 
 def get_llm_service(request: Request) -> LlmService:
+    """Builds the LLM service from the app state of the request's app."""
     return build_llm_service(request.app.state)
 
 

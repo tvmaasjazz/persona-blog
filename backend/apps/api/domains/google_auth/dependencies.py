@@ -11,6 +11,7 @@ from libs.users.services import UserActivityService, UserService
 
 
 def get_oauth_state_service(request: Request) -> OAuthStateService:
+    """Builds the OAuth state service on the app's Redis client and auth settings."""
     app_settings: AppSettings = request.app.state.settings
     return OAuthStateService(
         redis_client=request.app.state.redis_client, auth_settings=app_settings.auth
@@ -24,6 +25,7 @@ def get_google_oauth_service(
     request: Request,
     oauth_state_service: OAuthStateServiceDep,
 ) -> GoogleOAuthService:
+    """Builds the Google OAuth service on the app's HTTP client and Google credentials."""
     app_settings: AppSettings = request.app.state.settings
     return GoogleOAuthService(
         http_client=request.app.state.http_client,
@@ -43,6 +45,7 @@ def get_google_sign_in_service(
     auth_session_service: AuthSessionServiceDep,
     db_session: DbTransactionDep,
 ) -> GoogleSignInService:
+    """Builds the sign-in service with user and activity services on the request's transaction."""
     app_settings: AppSettings = request.app.state.settings
     user_activity_service = UserActivityService(
         db_session=db_session,

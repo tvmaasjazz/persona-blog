@@ -33,9 +33,11 @@ class GenerateTextRunLeaseService:
 
     @property
     def worker_id(self) -> str:
+        """The lease owner name this process writes on the runs it holds."""
         return self._background_job_service.worker_id
 
     async def claim_paused_run(self, run_id: int) -> bool:
+        """Leases a run awaiting review to this process; False when it wasn't paused."""
         return await self._run_service.claim_paused_run(
             run_id, self.worker_id, self._generate_text_settings.lease_seconds
         )
@@ -43,6 +45,7 @@ class GenerateTextRunLeaseService:
     async def claim_expired_run(
         self, run_id: int | None = None
     ) -> ClaimExpiredGenerateTextRunResult | None:
+        """Leases the given expired run, else the longest expired; None when none qualifies."""
         return await self._run_service.claim_expired_run(
             self.worker_id, self._generate_text_settings.lease_seconds, run_id
         )

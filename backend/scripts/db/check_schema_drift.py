@@ -37,6 +37,7 @@ async def _find_schema_differences() -> list[object]:
 
 
 def main() -> int:
+    """Prints any schema drift to stderr and returns 1, or returns 0 when there is none."""
     load_dotenv()
     schema_differences = asyncio.run(_find_schema_differences())
     if schema_differences:

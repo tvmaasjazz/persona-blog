@@ -24,6 +24,8 @@ SUBTITLE_PARAGRAPH_INLINE_TOKEN_INDEX = 4
 
 
 class MarkdownUtils:
+    """Parses Markdown text into the parts and facts the blog post checks need."""
+
     @staticmethod
     def strip_wrapping_code_fence(markdown_text: str) -> str:
         """Unwraps a document that is one fenced code block; a fence inside more text stays."""
@@ -92,6 +94,7 @@ class MarkdownUtils:
 
     @staticmethod
     def find_heading_levels(markdown_text: str) -> list[int]:
+        """The level of every heading, in document order."""
         tokens = MarkdownUtils._parse(markdown_text)
         return [
             MarkdownUtils._find_heading_level(token)
@@ -101,11 +104,13 @@ class MarkdownUtils:
 
     @staticmethod
     def has_raw_html(markdown_text: str) -> bool:
+        """True if the text holds any HTML, block or inline."""
         token_types = MarkdownUtils._find_all_token_types(markdown_text)
         return any(html_token_type in token_types for html_token_type in HTML_TOKEN_TYPES)
 
     @staticmethod
     def has_image(markdown_text: str) -> bool:
+        """True if the text holds a Markdown image, including one inside other inline text."""
         token_types = MarkdownUtils._find_all_token_types(markdown_text)
         return IMAGE_TOKEN_TYPE in token_types
 

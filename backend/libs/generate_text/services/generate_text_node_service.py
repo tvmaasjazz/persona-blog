@@ -40,6 +40,8 @@ class GenerateTextNodeService:
         prompt: BaseGenerateTextPrompt,
         output_format: BaseGenerateTextOutputFormat | None = None,
     ) -> GenerateTextNode:
+        """Builds a node that writes the step's first output into the state's step outputs."""
+
         async def generate_node(state: GenerateTextState) -> dict[str, Any]:
             build_prompt_result = prompt.build_generate_prompt(state)
             output_text = await self._complete_with_output_format(
@@ -58,6 +60,8 @@ class GenerateTextNodeService:
         prompt: BaseGenerateTextPrompt,
         output_format: BaseGenerateTextOutputFormat | None = None,
     ) -> GenerateTextNode:
+        """Builds a node that redoes the newest output from feedback and counts the rewrite."""
+
         async def rewrite_node(state: GenerateTextState) -> dict[str, Any]:
             previous_output = state.latest_output()
             feedback_text = state.step_feedback.get(reviewed_node_type.value, "")
@@ -76,6 +80,8 @@ class GenerateTextNodeService:
         return rewrite_node
 
     def build_review_node(self, node_type: GenerateTextNodeType) -> GenerateTextNode:
+        """Builds a node that pauses the graph for a human decision and stores it on resume."""
+
         async def review_node(state: GenerateTextState) -> dict[str, Any]:
             resume_payload = interrupt({"step_output": state.latest_output()})
             resume_generate_text_input = ResumeGenerateTextInput.model_validate(resume_payload)

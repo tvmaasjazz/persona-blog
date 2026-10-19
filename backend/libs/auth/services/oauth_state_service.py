@@ -16,6 +16,7 @@ class OAuthStateService:
         self._auth_settings = auth_settings
 
     async def create_state(self) -> OAuthStateResult:
+        """Stores a fresh state, nonce and PKCE code verifier in Redis and returns them."""
         oauth_state_result = OAuthStateResult(
             oauth_state=secrets.token_urlsafe(32),
             nonce=secrets.token_urlsafe(32),
