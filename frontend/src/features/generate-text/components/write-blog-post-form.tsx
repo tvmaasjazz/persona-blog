@@ -23,6 +23,7 @@ type WriteBlogPostFormProps = {
 }
 
 export function WriteBlogPostForm({ personas, initialValues }: WriteBlogPostFormProps) {
+  // Form that starts a run, then opens it
   const navigate = useNavigate()
   const generateBlogPost = useGenerateBlogPost()
 
@@ -30,7 +31,7 @@ export function WriteBlogPostForm({ personas, initialValues }: WriteBlogPostForm
     ...generateBlogPostFormOptions,
     defaultValues: initialValues,
     onSubmit: async ({ value }) => {
-      // The form folds into the status card, which sits where the top of the form was.
+      // The form folds into the status card at the top
       window.scrollTo({ top: 0 })
       try {
         const run = await generateBlogPost.mutateAsync(generateBlogPostFormSchema.parse(value))
@@ -41,10 +42,12 @@ export function WriteBlogPostForm({ personas, initialValues }: WriteBlogPostForm
     },
   })
 
+  // Values for the summary card
   const isSubmitting = useStore(form.store, (formState) => formState.isSubmitting)
   const values = useStore(form.store, (formState) => formState.values)
   const persona = personas.find((choice) => choice.identity === values.persona_identity)
 
+  // Summary while submitting, then the form
   return (
     <>
       {isSubmitting && (
@@ -67,7 +70,7 @@ export function WriteBlogPostForm({ personas, initialValues }: WriteBlogPostForm
           })}
         />
       )}
-      {/* Hidden rather than unmounted, so a failed request leaves every field as it was. */}
+      {/* Hidden, not unmounted, so a failed request keeps the fields */}
       <div hidden={isSubmitting}>
         <GenerateBlogPostForm form={form} personas={personas} />
       </div>

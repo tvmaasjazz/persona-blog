@@ -12,14 +12,7 @@ from libs.generate_text.settings import GenerateTextSettings
 
 
 class BaseGenerateTextGraphBuilder(ABC):
-    """A text type's graph builder: names its graph, knows its current version, and
-    builds the compiled graph a run needs. graph_name and graph_version are plain class
-    attributes, not properties, because they are fixed per builder and read with no
-    computation — a property would only add indirection.
-
-    Every builder takes the shared node and instrumentation services and the engine's
-    settings through __init__, since every text type's graph is wired from the same
-    nodes and rewrite budget."""
+    """Builds the compiled graph for one text type."""
 
     graph_name: str
     graph_version: str

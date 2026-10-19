@@ -9,7 +9,7 @@ export type PersonaChoice = {
   default_target_audience: string | null
 }
 
-// The generate form's fields and button. GenerateBlogPostForm owns what submitting does.
+// The generate form's fields; the parent owns submitting.
 export const GenerateBlogPostForm = withForm({
   ...generateBlogPostFormOptions,
   props: {
@@ -25,9 +25,11 @@ export const GenerateBlogPostForm = withForm({
           void form.handleSubmit()
         }}
       >
+        {/* Brief */}
         <FormSection title="Brief">
           <form.AppField
             name="persona_identity"
+            // Picking a persona fills its default tone and audience
             listeners={{
               onChange: ({ value }) => {
                 const persona = personas.find((choice) => choice.identity === value)
@@ -72,6 +74,7 @@ export const GenerateBlogPostForm = withForm({
           </form.AppField>
         </FormSection>
 
+        {/* Steps */}
         <FormSection title="Steps">
           <div className="flex flex-col gap-4">
             <h3 className="text-sm font-semibold">Outline</h3>
@@ -104,6 +107,7 @@ export const GenerateBlogPostForm = withForm({
           </div>
         </FormSection>
 
+        {/* Submit */}
         <form.AppForm>
           <form.SubmitButton
             label="Write post"

@@ -27,9 +27,7 @@ from libs.generate_text.types import HumanDecisionType, TextType
 
 
 class GenerateTextPromptStub(BaseGenerateTextPrompt):
-    """A Prompt double that returns fixed BuildPromptResults, so a test can assert a
-    node service passes them through to the llm without depending on any real step's
-    template text."""
+    """A Prompt double that returns fixed BuildPromptResults."""
 
     def __init__(self) -> None:
         self.build_generate_prompt_result = BuildPromptResult(
@@ -137,8 +135,7 @@ class GenerateTextStepServiceStub(GenerateTextStepService):
 
 
 class GenerateTextRunServiceStub(GenerateTextRunService):
-    """Wraps a real run service so a test can wait for a lease renewal, make one fail,
-    or read the renewals it saw, while the renewals that succeed still write the row."""
+    """Wraps a real run service so a test can wait for, fail or read lease renewals."""
 
     def __init__(self, run_service: GenerateTextRunService) -> None:
         self._run_service = run_service
@@ -157,7 +154,7 @@ class GenerateTextRunServiceStub(GenerateTextRunService):
 
 
 class GenerateTextRunHandoffQueueServiceStub(GenerateTextRunHandoffQueueService):
-    """Scripts the handoff queue, so a test can fail a push or feed a loop its wait results."""
+    """Scripts the handoff queue so a test can fail a push or feed a loop its wait results."""
 
     def __init__(self) -> None:
         self.push_run_inputs: list[int] = []
@@ -182,8 +179,7 @@ class GenerateTextRunHandoffQueueServiceStub(GenerateTextRunHandoffQueueService)
 
 
 class GenerateTextRunPickupServiceStub(GenerateTextRunPickupService):
-    """Overrides pick_up_next_expired_run and pick_up_handed_off_run only, so a test drives
-    the real pickup loops."""
+    """Overrides only the two pick-up methods so a test drives the real pickup loops."""
 
     def __init__(
         self,
@@ -192,7 +188,7 @@ class GenerateTextRunPickupServiceStub(GenerateTextRunPickupService):
         run_handoff_wait_seconds: int = 5,
         handoff_queue_service: GenerateTextRunHandoffQueueService | None = None,
     ) -> None:
-        # The loops read their intervals from the settings the real __init__ would store
+        # The pickup loops read their intervals from these settings
         self._generate_text_settings = GenerateTextSettings(
             run_pickup_interval_seconds=run_pickup_interval_seconds,
             run_handoff_wait_seconds=run_handoff_wait_seconds,

@@ -21,9 +21,7 @@ from libs.generate_text.types import GenerateTextRunStatusType
 
 
 class GenerateTextRunService:
-    """Owns every write to pb_generate_text_run. Each write opens its own session and
-    commits in its own transaction, so a row survives the caller's rollback. See
-    fastapi-structure.md, Services > Records that must survive a rollback."""
+    """Writes pb_generate_text_run, each write in its own session and transaction."""
 
     def __init__(self, db_session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._db_session_factory = db_session_factory
@@ -95,18 +93,15 @@ class GenerateTextRunService:
     async def claim_expired_run(
         self, lease_owner: str, lease_seconds: int, run_id: int | None = None
     ) -> ClaimExpiredGenerateTextRunResult | None:
-        """Takes the lease on the given run if its lease has expired, or with no run id, on
-        the run whose lease expired longest ago."""
-        # SKIP LOCKED keeps two processes from claiming the same row. A NULL lease never
-        # matches, so a run from before leases existed is left alone.
+        """Takes the lease on an expired run: the given one, else the longest expired."""
+        # SKIP LOCKED keeps two processes from claiming the same row; a NULL lease never matches
         expired_run_id_query = (
             select(GenerateTextRunOrm.id)
             .where(
                 GenerateTextRunOrm.status.in_(
                     [GenerateTextRunStatusType.PENDING, GenerateTextRunStatusType.RUNNING]
                 ),
-                # The database clock, so a process whose clock runs behind the one that
-                # released the run still sees it as expired
+                # The database clock, so process clock skew can't hide an expiry
                 GenerateTextRunOrm.lease_expires_at <= DatabaseClockUtils.build_utc_now_sql(),
                 # The session's soft-delete filter covers selects, not this update
                 GenerateTextRunOrm.deleted_at.is_(None),
@@ -137,7 +132,7 @@ class GenerateTextRunService:
             )
 
     async def renew_lease(self, run_id: int, lease_owner: str, lease_seconds: int) -> bool:
-        """Extends the lease. False when the lease isn't this owner's any more."""
+        """Extends the lease; False when the lease isn't this owner's."""
         run_lease_renewal_update = (
             update(GenerateTextRunOrm)
             .where(
@@ -151,8 +146,7 @@ class GenerateTextRunService:
         return run_lease_renewal_update_result.rowcount == 1
 
     async def release_lease(self, run_id: int, lease_owner: str) -> bool:
-        """Expires the lease now, so another process can pick the run up. False when the
-        lease isn't this owner's any more."""
+        """Expires the lease now; False when the lease isn't this owner's."""
         run_lease_release_update = (
             update(GenerateTextRunOrm)
             .where(
@@ -191,7 +185,7 @@ class GenerateTextRunService:
 
     async def record_awaiting_review(self, run_id: int) -> None:
         async with self._db_session_factory() as db_session, db_session.begin():
-            # A paused run is exactly when someone looks at what it has cost so far
+            # Sum what the run's LLM calls cost so far
             llm_call_rollup = await self._find_llm_call_rollup(db_session, run_id)
 
             # Mark the run paused; a paused run has no lease
@@ -215,9 +209,7 @@ class GenerateTextRunService:
     async def fail_run(
         self, run_id: int, error_code: str | None = None, error_message: str | None = None
     ) -> None:
-        """The error is recorded here only when no step owns it — a graph that failed to
-        run at all, say. A node's failure is recorded on its own step row, and the run
-        just goes FAILED."""
+        """Marks the run FAILED, recording an error only when no step owns it."""
         async with self._db_session_factory() as db_session, db_session.begin():
             # Read the status first: a WHERE on it couldn't tell an unknown run from a failed one
             status_query = select(GenerateTextRunOrm.status).where(GenerateTextRunOrm.id == run_id)
@@ -226,8 +218,7 @@ class GenerateTextRunService:
             if run_status is None:
                 raise NotFoundException(f"Generate text run {run_id} not found")
             if run_status is GenerateTextRunStatusType.FAILED:
-                # The first failure wins: a node's failure reaches here again as the
-                # exception travels up, and it must not overwrite what recorded it.
+                # The first failure wins; a node's failure arrives here again as it propagates
                 return
 
             # Sum what the run's LLM calls cost
@@ -254,7 +245,7 @@ class GenerateTextRunService:
 
     async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
         async with self._db_session_factory() as db_session:
-            # A soft-deleted persona is filtered out of the join, so its identity is None.
+            # A soft-deleted persona drops out of the join, so its identity is None
             query = (
                 select(GenerateTextRunOrm, PersonaOrm.identity)
                 .outerjoin(PersonaOrm, PersonaOrm.id == GenerateTextRunOrm.persona_id)
@@ -274,8 +265,7 @@ class GenerateTextRunService:
     async def _find_llm_call_rollup(
         self, db_session: AsyncSession, run_id: int
     ) -> FindLlmCallRollupResult:
-        """Sums this run's pb_llm_call rows. Aggregating by run_id, rather than summing
-        the step rows, means a call made outside a step still counts."""
+        """Sums this run's pb_llm_call rows, including calls made outside a step."""
         query = select(
             func.count(LlmCallOrm.id),
             func.coalesce(func.sum(LlmCallOrm.input_tokens), 0),

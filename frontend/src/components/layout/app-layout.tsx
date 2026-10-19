@@ -7,21 +7,21 @@ import { SignInCard } from '@/features/auth/components/sign-in-card'
 import { UserMenu } from '@/features/auth/components/user-menu'
 import { cn } from '@/lib/utils'
 
-// A route's handle. A page that lays out its own right sidebar with PageWithSidebar,
-// like a persona and their posts, sets hasSidebar so the main area spans the space
-// right of the nav instead of the usual centred column.
+// A route's handle; hasSidebar makes the main area span the space right of the nav.
 export type AppRouteHandle = {
   hasSidebar?: boolean
 }
 
 export function AppLayout() {
   const { data: user, isPending } = useCurrentUser()
+  // Whether the current route has its own sidebar
   const matches = useMatches()
   const hasSidebar = matches.some(
     (match) => (match.handle as AppRouteHandle | undefined)?.hasSidebar,
   )
   const isSignInCardShown = !isPending && !user
 
+  // Nav, then the page and the sign-in card
   return (
     <div className="flex min-h-screen">
       <ScrollRestoration />

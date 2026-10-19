@@ -33,8 +33,8 @@ class UserActivityService:
         await self._db_session.execute(auth_provider_update)
 
     async def record_activity(self, user_id: int) -> None:
-        # The Redis key is the throttle: it only sets when absent, so the first request in
-        # an interval wins and the rest cost one Redis round trip and no database write.
+        # The Redis key is the throttle: it sets only when absent, so one request per
+        # interval writes to the database
         is_activity_due = await self._redis_client.set(
             f"{USER_ACTIVITY_KEY_PREFIX}{user_id}",
             USER_ACTIVITY_KEY_VALUE,

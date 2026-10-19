@@ -26,12 +26,14 @@ type EditBlogPostFormProps = {
 }
 
 export function EditBlogPostForm({ blogPostIdentity, personas }: EditBlogPostFormProps) {
+  // Load the post
   const { data: blogPost, isPending, error } = useBlogPost(blogPostIdentity)
 
   if (isPending) {
     return <div className="h-40 rounded-2xl bg-accent" />
   }
 
+  // Not found or failed
   if (error) {
     const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
 
@@ -47,6 +49,7 @@ export function EditBlogPostForm({ blogPostIdentity, personas }: EditBlogPostFor
     )
   }
 
+  // The post's persona decides whether it can be public
   const persona = personas.find((candidate) => candidate.identity === blogPost.persona_identity)
 
   return (
@@ -59,8 +62,9 @@ type LoadedEditBlogPostFormProps = {
   isPersonaPublic: boolean
 }
 
-// Split out so useAppForm starts from the loaded post.
+// Split out so the form starts from the loaded post.
 function LoadedEditBlogPostForm({ blogPost, isPersonaPublic }: LoadedEditBlogPostFormProps) {
+  // Form starting from the post
   const navigate = useNavigate()
   const updateBlogPost = useUpdateBlogPost()
 
@@ -72,6 +76,7 @@ function LoadedEditBlogPostForm({ blogPost, isPersonaPublic }: LoadedEditBlogPos
       publishing: publishingValuesFromPost(blogPost),
     },
     onSubmit: async ({ value }) => {
+      // Save, then go to the post
       const values = blogPostFormSchema.parse(value)
       try {
         await updateBlogPost.mutateAsync({

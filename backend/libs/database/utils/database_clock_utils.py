@@ -9,8 +9,7 @@ from libs.database.constants import UTC_NOW_SQL
 class DatabaseClockUtils:
     @staticmethod
     def build_utc_now_sql() -> ColumnElement[datetime]:
-        """The database's current UTC time, for a query or a statement to compare with or
-        write."""
+        """The database's current UTC time, as SQL."""
         return literal_column(UTC_NOW_SQL, UtcDateTime)
 
     @staticmethod

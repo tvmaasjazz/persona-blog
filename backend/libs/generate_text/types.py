@@ -6,8 +6,7 @@ class TextType(StrEnum):
 
 
 class GenerateTextNodeType(StrEnum):
-    """The graph's nodes: the shared vocabulary every text type draws on. LangGraph
-    takes the member itself as the node name."""
+    """The graph's nodes, shared by every text type."""
 
     GENERATE_OUTLINE = "GENERATE_OUTLINE"
     REWRITE_OUTLINE = "REWRITE_OUTLINE"

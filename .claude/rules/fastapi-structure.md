@@ -469,7 +469,10 @@ class BlogPostResponseDto(BaseModel):
 created on `app.state` at startup and closed at shutdown. Nothing per-request. It
 also starts the app-lifetime loops (Services), each from a service built by a
 `build_<service>(app_state)` in its domain's `dependencies.py`, which takes `app.state`
-rather than a `Request`.
+rather than a `Request`. A loop starts after the resources it uses, and at shutdown it
+is cancelled before background jobs drain, so a stopping process claims no new work.
+Loops don't start in the test environment; a test calls the method one pass runs,
+such as `pick_up_next_expired_run()`.
 
 Domain `dependencies.py` reads `Request`, pulls from `app.state`, builds
 request-scoped objects, and constructs the service. Each factory is followed

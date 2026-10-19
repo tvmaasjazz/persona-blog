@@ -3,8 +3,7 @@ import { withForm } from '@/components/form/use-app-form'
 import { Button } from '@/components/ui/button'
 import { personaFormOptions } from '@/features/personas/persona-form-schema'
 
-// The persona form's fields and buttons. The component that creates the form with
-// useAppForm owns what submitting does.
+// The persona form's fields; the parent owns submitting.
 export const PersonaForm = withForm({
   ...personaFormOptions,
   props: {
@@ -21,6 +20,7 @@ export const PersonaForm = withForm({
           void form.handleSubmit()
         }}
       >
+        {/* Profile */}
         <FormSection title="Profile">
           <form.AppField name="name">
             {(field) => (
@@ -58,6 +58,7 @@ export const PersonaForm = withForm({
           </form.AppField>
         </FormSection>
 
+        {/* Voice */}
         <FormSection title="Voice">
           <form.AppField name="background">
             {(field) => (
@@ -86,6 +87,7 @@ export const PersonaForm = withForm({
           </form.AppField>
         </FormSection>
 
+        {/* Defaults */}
         <FormSection title="Defaults">
           <form.AppField name="default_tone">
             {(field) => (
@@ -105,6 +107,7 @@ export const PersonaForm = withForm({
           </form.AppField>
         </FormSection>
 
+        {/* Buttons */}
         <div className="flex gap-3">
           <form.AppForm>
             <form.SubmitButton label={submitLabel} />

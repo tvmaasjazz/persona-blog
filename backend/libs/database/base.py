@@ -11,11 +11,9 @@ from libs.database.utils import DatabaseClockUtils
 
 
 class SoftDeleteMixin:
-    """Holds deleted_at apart from BaseOrm so session.py's soft-delete rule has a class to target.
+    """Holds deleted_at so the soft-delete rule has a class to target."""
 
-    DeclarativeBase doesn't keep mapped attributes on itself, so the rule can't target BaseOrm.
-    """
-
+    # DeclarativeBase doesn't keep mapped attributes, so the rule can't target BaseOrm
     deleted_at: Mapped[datetime | None] = mapped_column()
 
 
@@ -32,8 +30,7 @@ class BaseOrm(SoftDeleteMixin, DeclarativeBase):
         server_default=text(UTC_NOW_SQL), onupdate=DatabaseClockUtils.build_utc_now_sql()
     )
 
-    # The audit columns reference pb_user by name: UserOrm itself extends BaseOrm, so the
-    # class can't be imported here.
+    # The audit columns name pb_user because UserOrm extends BaseOrm and can't be imported
     @declared_attr
     def created_by_id(cls) -> Mapped[int]:
         return mapped_column(BigInteger, ForeignKey("pb_user.id"))

@@ -22,8 +22,7 @@ function toLocalDateTime(date: Date): string {
   )
 }
 
-// Validates the publishing controls shared by the save-from-run and edit-post forms. The
-// parent forms nest these values under a `publishing` key.
+// Validates the publishing controls nested under `publishing` in the parent forms.
 export const publishingFormSchema = z
   .object({
     isPublic: z.boolean(),
@@ -58,13 +57,13 @@ export const EMPTY_PUBLISHING_VALUES: PublishingFormValues = {
   scheduledAt: '',
 }
 
-// The published_at to send. Publish now keeps an existing past date, so saving an edit
-// to a published post doesn't move it. The offset is always included: the backend
-// rejects a naive datetime.
+// The published_at to send; keeps an existing past date, and always has an offset.
 export function toPublishedAt(values: PublishingFormValues): string | null {
+  // Drafts have no date
   if (values.publishMode === 'draft') {
     return null
   }
+  // Publish now, or at the scheduled time
   const now = new Date()
   const scheduledDate = parseLocalDateTime(values.scheduledAt)
   if (values.publishMode === 'now') {

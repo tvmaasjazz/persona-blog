@@ -7,14 +7,7 @@ from libs.generate_text.inputs import GenerateTextPersonaInput
 
 
 class GenerateTextState(BaseModel):
-    """The graph's state: the acting user, the run it belongs to, and every step's
-    output, decision, and feedback so far.
-
-    Every field is a primitive, because the state is a persisted wire format. A domain
-    class here would tie old checkpoints to that class's import path, and LangGraph will
-    refuse to deserialize unregistered types in a future version.
-    """
-
+    # Primitives only: the state is persisted in checkpoints
     auth_user_id: int
     auth_user_identity: UUID
     generate_text_run_id: int
@@ -39,16 +32,13 @@ class GenerateTextState(BaseModel):
     @field_validator("auth_user_identity", "generate_text_run_identity", mode="after")
     @classmethod
     def _coerce_plain_uuid(cls, identity: UUID) -> UUID:
-        """asyncpg returns its own UUID subclass. LangGraph would checkpoint that as an
-        unregistered type, which a future version refuses to read back."""
+        # asyncpg returns a UUID subclass that checkpoints as an unregistered type
         return identity if type(identity) is UUID else UUID(str(identity))
 
     def build_auth_user(self) -> AuthUser:
-        """Groups the stored primitives back into the shape LlmService takes."""
         return AuthUser(id=self.auth_user_id, identity=self.auth_user_identity)
 
     def build_persona(self) -> GenerateTextPersonaInput:
-        """Groups the stored primitives back into the shape a Prompt takes."""
         return GenerateTextPersonaInput(
             name=self.persona_name,
             bio=self.persona_bio,
@@ -58,7 +48,7 @@ class GenerateTextState(BaseModel):
         )
 
     def latest_output(self) -> str:
-        """The most recently written step output, or "" before any step has run."""
+        """Returns the newest step output, or "" before any step has run."""
         if not self.step_outputs:
             return ""
         return next(reversed(self.step_outputs.values()))

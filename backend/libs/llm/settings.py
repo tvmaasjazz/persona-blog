@@ -15,9 +15,7 @@ class LlmTierSettings(BaseModel):
     reasoning_effort: LlmReasoningEffortType | None = None
 
 
-# One class per tier, each with its own defaults, so a single value can be overridden
-# on its own: LLM__STRONG__MODEL_NAME=gpt-4o-mini. Overriding a dict entry instead
-# would replace the whole tier.
+# One class per tier, so one value can be overridden alone (LLM__STRONG__MODEL_NAME)
 class FastLlmTierSettings(LlmTierSettings):
     provider: LlmProviderType = LlmProviderType.OPENAI
     model_name: str = "gpt-5.4-nano"

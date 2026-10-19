@@ -26,10 +26,10 @@ from libs.personas.services import PersonaService
 
 
 def build_generate_text_service(app_state: State, llm_service: LlmService) -> GenerateTextService:
-    """Takes the app state rather than a Request, so lifespan can build one too."""
+    """Builds the generate-text service from app state."""
     graph_checkpointer = app_state.graph_checkpointer
     if graph_checkpointer is None:
-        # lifespan says why: RediSearch only indexes Redis database 0.
+        # No checkpointer when Redis isn't on database 0
         raise ServiceUnavailableException("Text generation is unavailable")
 
     app_settings: AppSettings = app_state.settings
@@ -68,7 +68,7 @@ def build_generate_text_service(app_state: State, llm_service: LlmService) -> Ge
 
 
 def build_generate_text_run_pickup_service(app_state: State) -> GenerateTextRunPickupService:
-    """Built once by lifespan, which runs its pickup loops for as long as the app does."""
+    """Builds the pickup service whose loops lifespan runs."""
     app_settings: AppSettings = app_state.settings
     generate_text_run_service = GenerateTextRunService(
         db_session_factory=app_state.db_session_factory

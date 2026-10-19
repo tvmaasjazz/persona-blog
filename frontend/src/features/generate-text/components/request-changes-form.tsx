@@ -11,8 +11,7 @@ type RequestChangesFormProps = {
   onCancel: () => void
 }
 
-// The feedback half of a review. RunReview owns the resume call, so Approve and Send
-// share one working state.
+// The feedback form for requesting changes to a step.
 export function RequestChangesForm({ isDisabled, onSend, onCancel }: RequestChangesFormProps) {
   const form = useAppForm({
     ...reviewFeedbackFormOptions,

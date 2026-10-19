@@ -10,17 +10,18 @@ function isWorking(status: string | undefined) {
   return status === 'PENDING' || status === 'RUNNING'
 }
 
-// Tells the user when a run they are watching stops working: a toast, and back to the
-// top so the new text is in view. A run that loads already paused or finished is silent.
+// Toasts and scrolls to the top when a watched run stops working.
 export function useRunReadyNotice(run: GenerateTextRunResponseDto) {
   const previousStatusRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
+    // Only react when the run goes from working to something else
     const wasWorking = isWorking(previousStatusRef.current)
     previousStatusRef.current = run.status
     if (!wasWorking || isWorking(run.status)) {
       return
     }
+    // Report the failure, or what's ready to review
     if (run.status === 'FAILED') {
       toast.error('Something went wrong while writing this post.')
       return

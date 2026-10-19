@@ -5,9 +5,11 @@ import { usePersonaList } from '@/features/personas/api/persona-list-query'
 import { apiErrorMessage } from '@/lib/api-error'
 
 export function WritePage() {
+  // Load the personas to write as
   const [searchParams] = useSearchParams()
   const { data, isPending, error } = usePersonaList()
 
+  // Loading, error, or the write form
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-extrabold">Write a post</h1>

@@ -6,11 +6,13 @@ import { PersonaFilter } from '@/features/blog-posts/components/persona-filter'
 import { usePersonaList } from '@/features/personas/api/persona-list-query'
 
 export function BlogPostsPage() {
+  // The persona filter lives in the URL
   const [searchParams, setSearchParams] = useSearchParams()
   const { data: personaList } = usePersonaList()
   const personaIdentity = searchParams.get('persona') ?? undefined
   const personas = personaList?.personas ?? []
 
+  // Heading, filter, list
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-extrabold">My Posts</h1>

@@ -6,7 +6,7 @@ import type { components } from '@/lib/api-schema.gen'
 
 type PersonaResponseDto = components['schemas']['PersonaResponseDto']
 
-// The limits mirror PersonaDto in backend/apps/api/domains/personas/dtos.py.
+// Limits mirror PersonaDto in the backend.
 function requiredText(label: string, maxLength: number) {
   return z
     .string()
@@ -54,7 +54,6 @@ const EMPTY_PERSONA_FORM_VALUES: PersonaFormValues = {
   default_target_audience: '',
 }
 
-// Checks nothing until the first submit, then rechecks as the user types.
 export const personaFormOptions = formOptions({
   defaultValues: EMPTY_PERSONA_FORM_VALUES,
   validationLogic: revalidateLogic(),

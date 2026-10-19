@@ -1,13 +1,4 @@
-"""Reads Markdown through markdown-it, which parses a document into a flat list of tokens
-rather than a tree.
-
-Each top-level block becomes a run of tokens: a heading is `heading_open` (its `tag` is
-"h1".."h6"), then an `inline` token holding the heading's text, then `heading_close`. A
-paragraph is `paragraph_open`, `inline`, `paragraph_close`. Anything inside a line of
-text, such as an image or a `<span>`, is not in that list at all: it sits among the
-`inline` token's `children`. A fenced code block is a single `fence` token whose `info` is
-the language after the opening backticks and whose `content` is the code inside.
-"""
+"""Reads Markdown through markdown-it's flat token list."""
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -35,9 +26,7 @@ SUBTITLE_PARAGRAPH_INLINE_TOKEN_INDEX = 4
 class MarkdownUtils:
     @staticmethod
     def strip_wrapping_code_fence(markdown_text: str) -> str:
-        """Unwraps a document that is nothing but one fenced code block, the way a model
-        sometimes wraps Markdown in a ```markdown fence. A fence inside a larger document
-        is left alone."""
+        """Unwraps a document that is one fenced code block; a fence inside more text stays."""
         trimmed_text = markdown_text.strip()
         tokens = MarkdownUtils._parse(trimmed_text)
         if len(tokens) != 1 or tokens[0].type != FENCE_TOKEN_TYPE:
@@ -52,8 +41,7 @@ class MarkdownUtils:
 
     @staticmethod
     def find_title(markdown_text: str) -> str | None:
-        """The text of the H1 the document opens with. None when it opens with anything
-        else, or the H1 is empty."""
+        """The text of the H1 the document opens with, or None."""
         tokens = MarkdownUtils._parse(markdown_text)
         if not tokens or tokens[0].type != HEADING_OPEN_TOKEN_TYPE:
             return None
@@ -67,10 +55,8 @@ class MarkdownUtils:
 
     @staticmethod
     def split_post(markdown_text: str) -> SplitMarkdownPostResult:
-        """Splits a post into its title, optional subtitle, and body. The subtitle is
-        the paragraph right after the title's H1, when that paragraph's entire content
-        is one italic span. The body is everything after, sliced by source line so its
-        original formatting survives untouched."""
+        """Splits a post into its title, optional italic subtitle, and body."""
+        # A post without a title is all body
         tokens = MarkdownUtils._parse(markdown_text)
         if (
             not tokens
@@ -79,12 +65,14 @@ class MarkdownUtils:
         ):
             return SplitMarkdownPostResult(title=None, subtitle=None, body=markdown_text.strip())
 
+        # Read the title
         title_token = tokens[1]
         title = title_token.content.strip() or None
 
         heading_open_token = tokens[0]
         body_start_line = heading_open_token.map[1]
 
+        # Take the paragraph after the title as the subtitle when it is one italic span
         subtitle = None
         has_subtitle_paragraph = (
             len(tokens) > SUBTITLE_PARAGRAPH_INLINE_TOKEN_INDEX
@@ -97,6 +85,7 @@ class MarkdownUtils:
             if subtitle is not None:
                 body_start_line = paragraph_open_token.map[1]
 
+        # Slice the body by source line, so its formatting is untouched
         lines = markdown_text.splitlines()
         body = "\n".join(lines[body_start_line:]).strip()
         return SplitMarkdownPostResult(title=title, subtitle=subtitle, body=body)

@@ -8,8 +8,7 @@ type PublishingFieldsProps = {
   isPersonaPublic: boolean
 }
 
-// The publishing controls, reusable inside any form that nests PublishingFormValues:
-// <PublishingFields form={form} fields="publishing" isPersonaPublic={...} />
+// The publishing controls, for any form that nests PublishingFormValues.
 export const PublishingFields = withFieldGroup({
   defaultValues: EMPTY_PUBLISHING_VALUES as PublishingFormValues,
   props: { isPersonaPublic: false } as PublishingFieldsProps,

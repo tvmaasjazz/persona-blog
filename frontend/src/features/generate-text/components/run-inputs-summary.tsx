@@ -32,8 +32,7 @@ function SummaryRow({ label, value }: SummaryRowProps) {
   )
 }
 
-// The inputs a run was asked for, folded: the persona and the start of the prompt show,
-// and everything else opens with Show details.
+// The run's inputs, folded behind Show details.
 export function RunInputsSummary({
   title,
   status,

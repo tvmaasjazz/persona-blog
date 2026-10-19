@@ -16,6 +16,7 @@ type BlogPostCardProps = {
 export function BlogPostCard({ blogPost, persona, isCompact = false }: BlogPostCardProps) {
   const personaName = persona?.name ?? 'Unknown persona'
 
+  // Compact: title and status
   if (isCompact) {
     return (
       <Link
@@ -28,6 +29,7 @@ export function BlogPostCard({ blogPost, persona, isCompact = false }: BlogPostC
     )
   }
 
+  // Full: title, subtitle, author, status
   return (
     <Link
       to={`/posts/${blogPost.identity}`}

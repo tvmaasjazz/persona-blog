@@ -13,8 +13,7 @@ async def monitor_event_loop_lag(
     sample_seconds: float = EVENT_LOOP_SAMPLE_SECONDS,
     warning_seconds: float = EVENT_LOOP_LAG_WARNING_SECONDS,
 ) -> None:
-    """Sleeps a fixed interval and measures how late it wakes: a blocked loop wakes late.
-    Runs until cancelled."""
+    """Logs a warning when a fixed sleep wakes late, which means the loop was blocked."""
     event_loop = asyncio.get_running_loop()
     while True:
         sleep_started_at = event_loop.time()

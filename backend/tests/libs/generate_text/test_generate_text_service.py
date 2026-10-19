@@ -63,16 +63,14 @@ from tests.stubs.generate_text import (
 from tests.stubs.llm import LlmServiceStub
 
 DRAIN_TIMEOUT_SECONDS = 30
-# A lease this long (about 95 years) ends after LONG_LEASE_BOUND, and a lease released
-# "now" ends before it, so a test can tell the two apart without reading the clock.
+# A lease this long (about 95 years) ends after LONG_LEASE_BOUND; a released one ends before it.
 LONG_LEASE_SECONDS = 3_000_000_000
 LONG_LEASE_BOUND = datetime(2100, 1, 1, tzinfo=UTC)
 OTHER_WORKER_LEASE_EXPIRES_AT = datetime(2099, 1, 2, 3, 4, 5, tzinfo=UTC)
 
 
 class _InvalidBlogPostOptionsInput(BaseModel):
-    """A wrong-shaped options payload: BlogPostOptionsInput.draft expects an object,
-    not an int, so build_graph's model_validate rejects it."""
+    """An options payload whose draft is an int where an object is expected."""
 
     draft: int = 5
 
@@ -86,8 +84,7 @@ async def _insert_auth_user(db_session: AsyncSession) -> AuthUser:
 async def _insert_owner_persona(
     db_session: AsyncSession, auth_user: AuthUser
 ) -> FindUserPersonaResult:
-    """A persona a run's real FK must point at, so every generate_text() call that
-    reaches create_run needs one inserted first."""
+    """A persona for the run's foreign key to point at."""
     persona_record = await insert_persona_row(db_session, created_by_id=auth_user.id)
     await db_session.commit()
     return FindUserPersonaResult.model_validate(persona_record, from_attributes=True)
@@ -103,8 +100,7 @@ def _build_generate_text_service(
     checkpointer: BaseCheckpointSaver | None = None,
     step_service: GenerateTextStepService | None = None,
 ) -> GenerateTextService:
-    """step_service replaces only the one GenerateTextService holds; the graph's nodes keep
-    the real one."""
+    """Replaces only the step service the service holds, not the graph nodes' one."""
     generate_text_settings = generate_text_settings or GenerateTextSettings()
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     real_step_service = GenerateTextStepService(db_session_factory=db_session_factory)

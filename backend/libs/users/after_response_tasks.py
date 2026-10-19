@@ -11,10 +11,8 @@ async def record_user_activity(
     user_settings: UserSettings,
     user_id: int,
 ) -> None:
-    """Runs after the response is sent, so it opens its own session and transaction.
-
-    A request's session is already closed by the time an after-response task runs.
-    """
+    """Records a user's activity in a session of its own."""
+    # The request's session is closed by the time this runs
     async with db_session_factory() as db_session, db_session.begin():
         user_activity_service = UserActivityService(
             db_session=db_session, redis_client=redis_client, user_settings=user_settings

@@ -22,13 +22,7 @@ from libs.llm.types import LlmType
 
 
 class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
-    """Builds the blog post graph: outline (optional) → draft → humanize (optional),
-    with a review and rewrite loop around any step the caller didn't auto-approve.
-
-    Every node and edge is written out here rather than generated from a table, so the
-    whole topology reads top to bottom. That repeats the review-and-rewrite block once
-    per reviewable step; worth revisiting if this ever grows past a handful of steps.
-    """
+    """Builds the blog post graph, with a review loop around each step not auto-approved."""
 
     graph_name = "blog_post"
     graph_version = "2026-10-07.2"
@@ -36,15 +30,16 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
     def build_graph(
         self, options: dict[str, Any], checkpointer: BaseCheckpointSaver
     ) -> CompiledStateGraph:
+        # Validate the caller's options
         try:
             blog_post_options = BlogPostOptionsInput.model_validate(options)
         except ValidationError as validation_error:
-            # Options a text type can't read are the caller's mistake, not a 500. A
-            # pydantic error must not reach apps/ (fastapi-structure.md > Errors).
+            # Invalid options are the caller's mistake; don't leak the pydantic error
             raise GenerateTextOptionsInvalidException(
                 "These options are not valid for a blog post"
             ) from validation_error
 
+        # Prompts, output format and enabled steps
         outline_prompt = BlogPostOutlinePrompt()
         draft_prompt = BlogPostDraftPrompt()
         humanize_prompt = BlogPostHumanizePrompt()
@@ -55,7 +50,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
         is_outline_enabled = outline_options is not None and outline_options.is_enabled
         is_humanize_enabled = humanize_options is not None and humanize_options.is_enabled
 
-        # Where each step hands off, decided by which later steps the caller enabled.
+        # Where each step hands off, by which later steps are enabled
         after_draft = GenerateTextNodeType.HUMANIZE if is_humanize_enabled else END
         after_outline = GenerateTextNodeType.GENERATE_DRAFT
         first_node = (
@@ -64,10 +59,11 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
             else GenerateTextNodeType.GENERATE_DRAFT
         )
 
+        # Graph entry
         state_graph = StateGraph(GenerateTextState)
         state_graph.add_edge(START, first_node)
 
-        # Outline: a cheap pass at the shape of the post, before anything writes prose.
+        # Outline: optional first pass at the post's shape
         if outline_options is not None and outline_options.is_enabled:
             outline_node = self._node_service.build_generate_node(
                 GenerateTextNodeType.GENERATE_OUTLINE, LlmType.FAST, outline_prompt
@@ -91,8 +87,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
                         GenerateTextNodeType.REVIEW_OUTLINE, review_outline_node
                     ),
                 )
-                # A rewrite is its own node, not a rerun: its own prompt, and its own
-                # tier, which is why an outline rewrite can stay cheap.
+                # A rewrite is its own node so it can use its own LLM tier
                 rewrite_outline_node = self._node_service.build_rewrite_node(
                     GenerateTextNodeType.REWRITE_OUTLINE,
                     LlmType.FAST,
@@ -125,7 +120,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
                     },
                 )
 
-        # Draft: always runs. A blog post without a draft isn't one.
+        # Draft: always runs
         draft_node = self._node_service.build_generate_node(
             GenerateTextNodeType.GENERATE_DRAFT,
             LlmType.STRONG,
@@ -184,7 +179,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
                 },
             )
 
-        # Humanize: a last pass over the draft, when the caller asked for one.
+        # Humanize: optional last pass over the draft
         if humanize_options is not None and humanize_options.is_enabled:
             humanize_node = self._node_service.build_generate_node(
                 GenerateTextNodeType.HUMANIZE,
@@ -246,6 +241,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
                     },
                 )
 
+        # Compile with the checkpointer
         return state_graph.compile(checkpointer=checkpointer)
 
     def _route_after_review(
@@ -255,8 +251,7 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
         rewrite_node_type: GenerateTextNodeType,
         next_entry: str,
     ) -> str:
-        """Approved, or out of rewrite passes, and the run moves on; rejected, and it
-        loops back through the rewrite node into the same review."""
+        """Moves on when approved or out of rewrite passes, otherwise rewrites."""
         is_approved = (
             state.step_decisions.get(review_node_type.value) == HumanDecisionType.APPROVED.value
         )

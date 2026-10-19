@@ -49,8 +49,7 @@ from tests.stubs.llm import LlmServiceStub
 
 DRAIN_TIMEOUT_SECONDS = 30
 LONG_PICKUP_INTERVAL_SECONDS = 3600
-# A lease this long (about 95 years) ends after LONG_LEASE_BOUND, so a test can tell a
-# fresh lease from a released one without reading the clock.
+# A lease this long (about 95 years) ends after LONG_LEASE_BOUND; a released one ends before it.
 LONG_LEASE_SECONDS = 3_000_000_000
 LONG_LEASE_BOUND = datetime(2100, 1, 1, tzinfo=UTC)
 EXPIRED_LEASE_EXPIRES_AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)

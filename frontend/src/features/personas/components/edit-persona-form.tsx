@@ -22,12 +22,14 @@ type EditPersonaFormProps = {
 }
 
 export function EditPersonaForm({ personaIdentity }: EditPersonaFormProps) {
+  // Load the persona
   const { data: persona, isPending, error } = usePersona(personaIdentity)
 
   if (isPending) {
     return <div className="h-40 rounded-2xl bg-accent" />
   }
 
+  // Not found or failed
   if (error) {
     const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
 
@@ -50,8 +52,9 @@ type LoadedEditPersonaFormProps = {
   persona: PersonaResponseDto
 }
 
-// Split out so useAppForm starts from the loaded persona.
+// Split out so the form starts from the loaded persona.
 function LoadedEditPersonaForm({ persona }: LoadedEditPersonaFormProps) {
+  // Form starting from the persona
   const navigate = useNavigate()
   const updatePersona = useUpdatePersona()
 
@@ -59,6 +62,7 @@ function LoadedEditPersonaForm({ persona }: LoadedEditPersonaFormProps) {
     ...personaFormOptions,
     defaultValues: toPersonaFormValues(persona),
     onSubmit: async ({ value, formApi }) => {
+      // Save, then go to the persona; a name clash shows on the field
       try {
         await updatePersona.mutateAsync({
           personaIdentity: persona.identity,

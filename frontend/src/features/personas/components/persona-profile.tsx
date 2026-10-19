@@ -12,8 +12,7 @@ import { ApiError, apiErrorMessage } from '@/lib/api-error'
 
 type PersonaProfileProps = {
   personaIdentity: string
-  // The persona's posts, which the route composes from the blog-posts feature. They sit
-  // in a right column on wide screens and under the header on narrow ones.
+  // The persona's posts, composed by the route
   posts: ReactNode
 }
 
@@ -37,12 +36,14 @@ function ProfileField({ label, value, className }: ProfileFieldProps): ReactNode
 }
 
 export function PersonaProfile({ personaIdentity, posts }: PersonaProfileProps) {
+  // Load the persona
   const { data: persona, isPending, error } = usePersona(personaIdentity)
 
   if (isPending) {
     return <div className="mx-auto h-40 max-w-[720px] rounded-2xl bg-accent" />
   }
 
+  // Not found or failed
   if (error) {
     const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
 
@@ -58,6 +59,7 @@ export function PersonaProfile({ personaIdentity, posts }: PersonaProfileProps) 
     )
   }
 
+  // Header, voice and defaults, posts sidebar
   return (
     <PageWithSidebar
       header={

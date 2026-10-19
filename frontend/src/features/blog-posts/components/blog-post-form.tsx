@@ -4,8 +4,7 @@ import { Button } from '@/components/ui/button'
 import { blogPostFormOptions } from '@/features/blog-posts/blog-post-form-schema'
 import { PublishingFields } from '@/features/blog-posts/components/publishing-fields'
 
-// The blog post form's fields and buttons. The component that creates the form with
-// useAppForm owns what submitting does.
+// The blog post form's fields; the parent owns submitting.
 export const BlogPostForm = withForm({
   ...blogPostFormOptions,
   props: {
@@ -23,6 +22,7 @@ export const BlogPostForm = withForm({
           void form.handleSubmit()
         }}
       >
+        {/* Post */}
         <FormSection title="Post">
           <form.AppField name="title">{(field) => <field.TextField label="Title" />}</form.AppField>
           <form.AppField name="subtitle">
@@ -33,10 +33,12 @@ export const BlogPostForm = withForm({
           </p>
         </FormSection>
 
+        {/* Publishing */}
         <FormSection title="Publishing">
           <PublishingFields form={form} fields="publishing" isPersonaPublic={isPersonaPublic} />
         </FormSection>
 
+        {/* Buttons */}
         <div className="flex gap-3">
           <form.AppForm>
             <form.SubmitButton label={submitLabel} />

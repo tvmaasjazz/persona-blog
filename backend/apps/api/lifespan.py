@@ -38,6 +38,7 @@ def build_worker_id(app_settings: AppSettings) -> str:
 
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
+    # Create the app-scoped resources
     app_settings = fastapi_app.state.settings
     configure_logging(app_settings)
     db_engine = create_async_engine(app_settings.database_url)
@@ -52,11 +53,8 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     fastapi_app.state.http_client = http_client
     fastapi_app.state.openai_client = openai_client
 
-    # LangGraph's Redis checkpointer indexes its threads with RediSearch, which only
-    # works on database 0. The suite runs on database 15 and puts an InMemorySaver on
-    # app.state instead, so graph routes still run there. A production deployment
-    # pointed anywhere but database 0 is a misconfiguration: it would start, then answer
-    # 503 on every generate route, so it fails here instead.
+    # Set up the graph checkpointer: RediSearch only indexes Redis database 0, so
+    # production on any other database fails here and other environments go without
     redis_database_index = redis_client.connection_pool.connection_kwargs.get("db")
     fastapi_app.state.graph_checkpointer = None
     if redis_database_index != 0 and app_settings.environment is EnvironmentType.PRODUCTION:
@@ -81,6 +79,7 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
         app_name=app_settings.app_name,
         environment=app_settings.environment,
     )
+    # Start the background loops
     event_loop_monitor_task = None
     if app_settings.environment is EnvironmentType.DEVELOPMENT:
         event_loop_monitor_task = asyncio.create_task(monitor_event_loop_lag())
@@ -100,8 +99,7 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        # First, so a stopping process never claims a new run. Both are cancelled, then
-        # waited on together.
+        # Stop the pickup loops first, so a stopping process claims no new run
         generate_text_run_tasks = [
             generate_text_run_task
             for generate_text_run_task in (
@@ -113,12 +111,13 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
         for generate_text_run_task in generate_text_run_tasks:
             generate_text_run_task.cancel()
         await asyncio.gather(*generate_text_run_tasks, return_exceptions=True)
-        # Before the clients close: a running graph still needs them.
+        # Drain running jobs before the clients close, since a running graph still needs them
         background_job_service.request_stop()
         await background_job_service.drain(app_settings.background_jobs.shutdown_drain_seconds)
         if event_loop_monitor_task is not None:
             event_loop_monitor_task.cancel()
             await asyncio.gather(event_loop_monitor_task, return_exceptions=True)
+        # Close the clients and the engine
         await http_client.aclose()
         await redis_client.aclose()
         await db_engine.dispose()

@@ -35,9 +35,7 @@ from libs.generate_text.types import GenerateTextRunStatusType, HumanDecisionTyp
 from libs.personas.results import FindUserPersonaResult
 
 if TYPE_CHECKING:
-    # Imported for the annotation only: the builders this registry holds import the node
-    # and instrumentation services, so importing it at runtime closes a cycle through
-    # services/__init__.py. The registry itself arrives through __init__.
+    # Annotation only: importing the registry at runtime closes an import cycle
     from libs.generate_text.graphs.generate_text_graph_builder_registry import (
         GenerateTextGraphBuilderRegistry,
     )
@@ -70,6 +68,7 @@ class GenerateTextService:
         find_user_persona_result: FindUserPersonaResult,
         auth_user: AuthUser,
     ) -> GenerateTextRunResult:
+        # Look up the graph builder for the text type
         text_type = generate_text_input.text_type
         graph_builder = self._graph_builder_registry.get_by_text_type(text_type)
         options_dict = generate_text_input.options.model_dump(mode="json")
@@ -87,11 +86,12 @@ class GenerateTextService:
             lease_owner=self._lease_service.worker_id,
             lease_seconds=self._generate_text_settings.lease_seconds,
         )
-        # Built before the row exists, so bad options fail with nothing left behind.
+        # Build the graph before creating the run, so bad options leave no row behind
         generate_text_graph = graph_builder.build_graph(options_dict, self._checkpointer)
         create_run_result = await self._run_service.create_run(
             create_generate_text_run_input, auth_user
         )
+        # Build the graph's starting state
         initial_state = GenerateTextState(
             auth_user_id=auth_user.id,
             auth_user_identity=auth_user.identity,
@@ -110,11 +110,10 @@ class GenerateTextService:
             additional_context=generate_text_input.additional_context,
         )
 
-        # Read before the task starts, so the caller is told PENDING whatever the task does.
+        # Read before the job starts, so the caller is told PENDING
         find_run_result = await self._run_service.find_run_by_identity(create_run_result.identity)
 
-        # The run's identity is its LangGraph thread id, so no separate thread_id needs
-        # to be minted or stored.
+        # Start the graph in the background; the run's identity is its thread id
         graph_run_config = {"configurable": {"thread_id": str(create_run_result.identity)}}
         self._background_job_service.start(
             self._run_graph_in_background(
@@ -142,13 +141,14 @@ class GenerateTextService:
         resume_generate_text_input: ResumeGenerateTextInput,
         auth_user: AuthUser,
     ) -> GenerateTextRunResult:
+        # Find the caller's run
         find_run_result = await self._run_service.find_run_by_identity(run_identity)
         if find_run_result.created_by_id != auth_user.id:
             raise NotFoundException(f"Generate text run {run_identity} not found")
 
+        # Refuse a run whose checkpoint was built on another graph version
         graph_builder = self._graph_builder_registry.get_by_text_type(find_run_result.text_type)
         if find_run_result.graph_version != graph_builder.graph_version:
-            # The checkpoint is shaped by a topology that no longer exists.
             raise GenerateTextRunVersionMismatchException(
                 f"Generate text run {run_identity} was built on graph version "
                 f"{find_run_result.graph_version}, not the current {graph_builder.graph_version}"
@@ -157,19 +157,20 @@ class GenerateTextService:
         generate_text_graph = graph_builder.build_graph(find_run_result.options, self._checkpointer)
         graph_run_config = {"configurable": {"thread_id": str(run_identity)}}
 
+        # Claim the paused run
         is_claimed = await self._lease_service.claim_paused_run(find_run_result.id)
         if not is_claimed:
             raise GenerateTextRunNotPausedException(
                 f"Generate text run {run_identity} is not awaiting review"
             )
 
+        # Record the reviewer's decision
         try:
             await self._record_review_decision(
                 find_run_result.id, resume_generate_text_input, auth_user
             )
         except Exception as record_decision_exception:
-            # The run is already claimed as RUNNING, and no task exists yet to move it
-            # on, so it's failed here rather than left RUNNING forever.
+            # The run is claimed as RUNNING with no job to move it on, so fail it
             await self._run_service.fail_run(
                 find_run_result.id,
                 type(record_decision_exception).__name__,
@@ -177,13 +178,13 @@ class GenerateTextService:
             )
             raise
 
-        # Read before the task starts: once it runs it writes steps of its own, and the
-        # response would depend on how far it had got.
+        # Read before the job starts, so the response doesn't depend on its progress
         claimed_run_result = find_run_result.model_copy(
             update={"status": GenerateTextRunStatusType.RUNNING}
         )
         resume_run_result = await self._build_run_result_from_steps(claimed_run_result)
 
+        # Resume the graph in the background
         resume_payload = resume_generate_text_input.model_dump()
         self._background_job_service.start(
             self._run_graph_in_background(
@@ -202,9 +203,8 @@ class GenerateTextService:
         resume_generate_text_input: ResumeGenerateTextInput,
         auth_user: AuthUser,
     ) -> None:
-        """Records the decision on the step the run is paused on. That step is read from the
-        step rows, not the checkpoint: a review node interrupts before its state update is
-        saved, so the checkpoint never holds its step."""
+        """Records the decision on the step the run is paused on."""
+        # Read from the step rows: the checkpoint never holds an interrupted review step
         awaiting_review_step_id = await self._step_service.find_awaiting_review_step_id(run_id)
         if awaiting_review_step_id is None:
             return
@@ -301,8 +301,7 @@ class GenerateTextService:
         graph_input: object,
         graph_run_config: dict[str, object],
     ) -> bool:
-        """Runs the graph one step at a time. Returns True when it stopped early because
-        the process is shutting down."""
+        """Runs the graph step by step; returns True when it stopped early for shutdown."""
         # Each step is saved to the checkpointer before its update arrives here
         graph_stream = generate_text_graph.astream(
             graph_input, graph_run_config, stream_mode="updates", durability="sync"
@@ -324,11 +323,11 @@ class GenerateTextService:
     async def _build_run_result_from_steps(
         self, find_run_result: FindGenerateTextRunByIdentityResult
     ) -> GenerateTextRunResult:
-        """Where the run sits and what it has produced both come from its newest step."""
+        """Builds the run result from the run's newest step."""
         try:
             find_latest_step_result = await self._step_service.find_latest_step(find_run_result.id)
         except NotFoundException:
-            # A run whose first node hasn't finished has no step to report yet.
+            # No step yet when the first node hasn't started
             return self._build_run_result(find_run_result, last_step=None, content="")
 
         return self._build_run_result(

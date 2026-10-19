@@ -15,9 +15,9 @@ import { ApiError } from '@/lib/api-error'
 type SaveRunAsPostFormProps = {
   runIdentity: string
   isPersonaPublic: boolean
-  // Called once the post is saved, just before navigating to it.
+  // Called after saving, before navigating
   onSaved?: () => void
-  // Shown beside Save, such as a Discard button.
+  // Shown beside Save
   secondaryAction?: ReactNode
 }
 
@@ -27,12 +27,14 @@ export function SaveRunAsPostForm({
   onSaved,
   secondaryAction,
 }: SaveRunAsPostFormProps) {
+  // Form that saves the run
   const navigate = useNavigate()
   const createBlogPostFromRun = useCreateBlogPostFromRun()
 
   const form = useAppForm({
     ...saveRunAsPostFormOptions,
     onSubmit: async ({ value }) => {
+      // Save the post, then open it
       const { publishing } = saveRunAsPostFormSchema.parse(value)
       try {
         const blogPostIdentity = await createBlogPostFromRun.mutateAsync({
@@ -53,6 +55,7 @@ export function SaveRunAsPostForm({
     },
   })
 
+  // Publishing fields, then Save and any extra action
   return (
     <form
       noValidate

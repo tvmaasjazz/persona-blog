@@ -12,6 +12,7 @@ type RunStepTrackerProps = {
 
 // Outline → Draft → Humanize → Save, with the run's current step marked.
 export function RunStepTracker({ run }: RunStepTrackerProps) {
+  // Steps to show, and where the run is
   const stepNames = [
     ...listSteps({
       isOutlineEnabled: run.options.outline?.is_enabled ?? false,
@@ -22,6 +23,7 @@ export function RunStepTracker({ run }: RunStepTrackerProps) {
   const currentStepName = run.status === 'COMPLETED' ? 'Save' : findRunStepName(run.last_step)
   const currentStepIndex = currentStepName ? stepNames.indexOf(currentStepName) : 0
 
+  // One marked item per step
   return (
     <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
       {stepNames.map((stepName, stepIndex) => {

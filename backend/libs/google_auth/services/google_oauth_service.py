@@ -95,9 +95,7 @@ class GoogleOAuthService:
         return id_token
 
     def _validate_id_token_claims(self, id_token_claims: dict[str, Any], nonce: str) -> None:
-        # The id token came straight from Google's token endpoint over TLS, so the channel
-        # already proves who issued it. These checks prove it was issued for this client and
-        # for this sign-in attempt.
+        # TLS already proves Google issued the token; check it was for this client and attempt
         if id_token_claims.get("aud") != self._google_client_id:
             raise UnauthorizedException("Google id token was issued for another client")
         if id_token_claims.get("iss") not in GOOGLE_ISSUERS:

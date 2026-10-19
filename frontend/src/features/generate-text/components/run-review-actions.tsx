@@ -11,14 +11,15 @@ type RunReviewActionsProps = {
   lastStep: string | null
 }
 
-// Approve or request changes for the step a run is paused on. The step's text is in
-// the main column; these sit in the sidebar so they're always in view.
+// Approve or request changes for the step a run is paused on.
 export function RunReviewActions({ runIdentity, lastStep }: RunReviewActionsProps) {
+  // State
   const resumeGenerateText = useResumeGenerateText()
   const [isRequestingChanges, setIsRequestingChanges] = useState(false)
   const stepName = findReviewStepName(lastStep)
   const isWorking = resumeGenerateText.isPending
 
+  // Send the approval or feedback
   async function resume(isApproved: boolean, feedbackText: string | null) {
     if (isWorking) {
       return
@@ -33,6 +34,7 @@ export function RunReviewActions({ runIdentity, lastStep }: RunReviewActionsProp
     }
   }
 
+  // Review heading, buttons, then the feedback form
   return (
     <section className="flex flex-col gap-4 rounded-2xl border bg-card p-5">
       <div className="flex flex-col gap-1">

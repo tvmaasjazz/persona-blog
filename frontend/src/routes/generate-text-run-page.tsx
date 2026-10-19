@@ -12,6 +12,7 @@ type LoadedRunProps = {
 }
 
 function LoadedRun({ runIdentity }: LoadedRunProps) {
+  // Load the run and personas
   const { data: run, isPending, error } = useGenerateTextRun(runIdentity)
   const { data: personaList } = usePersonaList()
 
@@ -19,6 +20,7 @@ function LoadedRun({ runIdentity }: LoadedRunProps) {
     return <div className="mx-auto h-40 max-w-[720px] rounded-2xl bg-accent" />
   }
 
+  // Not found or failed
   if (error) {
     const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
 
@@ -34,6 +36,7 @@ function LoadedRun({ runIdentity }: LoadedRunProps) {
     )
   }
 
+  // Run view with the save form from blog-posts
   const persona = personaList?.personas.find(
     (candidate) => candidate.identity === run.persona_identity,
   )

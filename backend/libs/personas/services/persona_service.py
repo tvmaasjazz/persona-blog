@@ -70,8 +70,7 @@ class PersonaService:
     async def find_user_persona(
         self, persona_identity: UUID, auth_user: AuthUser
     ) -> FindUserPersonaResult:
-        """The caller's own live persona only. Anyone else's persona, public or
-        private, is not found here, so a caller can only generate text as their own."""
+        """Finds the caller's own persona; anyone else's is not found."""
         persona_query = select(PersonaOrm).where(
             PersonaOrm.identity == persona_identity,
             PersonaOrm.created_by_id == auth_user.id,
@@ -120,8 +119,7 @@ class PersonaService:
     async def _find_accessible_persona_record(
         self, persona_identity: UUID, auth_user: AuthUser
     ) -> PersonaOrm:
-        """The caller's own persona, or anyone's public one. A private persona of someone
-        else's is not found, so its existence never leaks."""
+        """Finds the caller's own or any public persona; someone else's private one is not found."""
         persona_query = select(PersonaOrm).where(
             PersonaOrm.identity == persona_identity,
             or_(PersonaOrm.created_by_id == auth_user.id, PersonaOrm.is_public),
@@ -136,8 +134,7 @@ class PersonaService:
     async def _find_owned_persona_record(
         self, persona_identity: UUID, auth_user: AuthUser
     ) -> PersonaOrm:
-        """Only the creator may change a persona. Someone who can see a public persona
-        but didn't create it is forbidden."""
+        """Finds a persona only its creator may change; anyone else gets forbidden."""
         persona_record = await self._find_accessible_persona_record(persona_identity, auth_user)
         if persona_record.created_by_id != auth_user.id:
             raise ForbiddenException("Only the persona's creator can change it")

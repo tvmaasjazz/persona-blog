@@ -44,8 +44,7 @@ class GenerateTextRunPickupService:
         self._generate_text_settings = generate_text_settings
 
     async def pick_up_expired_runs(self) -> None:
-        """Picks up every expired run at startup and then every pickup interval, until
-        cancelled."""
+        """Picks up expired runs at startup and every pickup interval, until cancelled."""
         while True:
             try:
                 is_run_picked_up = True
@@ -66,8 +65,7 @@ class GenerateTextRunPickupService:
                 if handed_off_run_id is not None:
                     await self.pick_up_handed_off_run(handed_off_run_id)
             except Exception:
-                # Log and wait before trying again, so a Redis outage doesn't spin the loop.
-                # The pickup loop still catches the run.
+                # Wait before retrying so a Redis outage doesn't spin the loop
                 logger.exception("run_handoff_pickup_failed")
                 await asyncio.sleep(wait_seconds)
 
@@ -77,8 +75,7 @@ class GenerateTextRunPickupService:
         if self._background_job_service.is_stopping:
             return
 
-        # Claim the run, finding nothing when a duplicate or stale message names a run
-        # another process already took
+        # Claim the run; a duplicate or stale message may name one already taken
         claim_expired_run_result = await self._lease_service.claim_expired_run(run_id)
         if claim_expired_run_result is None:
             return
@@ -86,8 +83,7 @@ class GenerateTextRunPickupService:
         await self._fail_or_continue_run(claim_expired_run_result)
 
     async def pick_up_next_expired_run(self) -> bool:
-        """Claims one run whose lease expired and fails or continues it. Returns whether
-        it claimed a run."""
+        """Claims one expired run and fails or continues it; returns whether it claimed one."""
         # A stopping process takes on no new runs
         if self._background_job_service.is_stopping:
             return False

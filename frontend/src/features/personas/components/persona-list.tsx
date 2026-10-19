@@ -5,6 +5,7 @@ import { usePersonaList } from '@/features/personas/api/persona-list-query'
 import { PersonaCard } from '@/features/personas/components/persona-card'
 
 export function PersonaList() {
+  // Load the personas
   const { data: personaList, isPending, isError } = usePersonaList()
 
   if (isPending) {
@@ -17,6 +18,7 @@ export function PersonaList() {
     )
   }
 
+  // Failed or empty
   if (isError) {
     return <p className="text-muted-foreground">Couldn't load your personas. Try again.</p>
   }
@@ -34,6 +36,7 @@ export function PersonaList() {
     )
   }
 
+  // One card per persona
   return (
     <div className="flex flex-col gap-3">
       {personaList.personas.map((persona) => (
