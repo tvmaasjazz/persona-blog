@@ -486,7 +486,7 @@ line, with a trailing comma, so each dependency reads as one line of the diff.
 # apps/api/core/dependencies.py
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:
     db_session_factory = request.app.state.db_session_factory
-    async with db_session_factory() as db_session:
+    async with db_session_factory() as db_session, db_session.begin():
         yield db_session
 
 
@@ -583,19 +583,10 @@ application code uses the database.
   (`database.md` › Timestamps).
 - Deleting a row means setting `deleted_at` and `deleted_by_id`, never `DELETE`. ORM
   selects already exclude soft-deleted rows (`database.md` › Soft delete).
-- `get_db_session` does **not** commit — a write through it is silently discarded.
-  Write routes use a second dependency that owns the transaction:
-
-```python
-async def get_db_transaction(request: Request) -> AsyncIterator[AsyncSession]:
-    db_session_factory = request.app.state.db_session_factory
-    async with db_session_factory() as db_session, db_session.begin():
-        yield db_session
-
-
-DbTransactionDep = Annotated[AsyncSession, Depends(get_db_transaction)]
-```
-
+- There is one request session, `DbSessionDep` (App-scoped vs request-scoped). It
+  opens a transaction that commits after the route returns and rolls back if the route
+  raises. Every route uses it, reads included: a read-only request commits an empty
+  transaction, which costs nothing, and a write can never be silently discarded.
 - Never hand-roll a transaction decorator.
 - The commit runs in dependency teardown, after the route returns, so a constraint
   violation surfaces as a 500, and that's intended: a service never catches

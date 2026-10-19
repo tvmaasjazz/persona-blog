@@ -413,8 +413,8 @@ What these fixtures guarantee:
 - **Real lifespan.** `fastapi_app` runs the real lifespan, because httpx's
   `ASGITransport` never sends lifespan events. It then points
   `app.state.db_session_factory` at the test connection. Each request still opens its
-  own session through the real `get_db_session` or `get_db_transaction`, so a write
-  route wired to `DbSessionDep` loses its write in tests, just as in production.
+  own session through the real `get_db_session`, which commits and rolls back just as
+  in production.
 - **No leaked overrides.** `fastapi_app` is function-scoped, so `dependency_overrides`
   never carry over between tests and never need clearing. It also requests
   `redis_client`, so every route test starts with an empty Redis.
@@ -671,7 +671,7 @@ async def signed_in_user(
 | Create (`POST`)               | Select the row by the returned `identity` and assert its columns. The body is `{"identity": "<uuid>"}` |
 | Malformed identity → 422      | One test per route with an identity path parameter: a non-UUID value returns 422 |
 | Update (`PUT`) or `DELETE`    | Assert the body `== {}`, then select to prove the row changed or is gone. `await db_session.refresh(<entity>_record)` before reading a row the test already holds: `expire_on_commit=False` leaves its copy stale |
-| Write persists                | After a 2xx, select the row through `db_session`. This catches a write route wired to `DbSessionDep` |
+| Write persists                | After a 2xx, select the row through `db_session`. This catches a write that never reaches the database |
 | List (`GET` with a `FetchAllQueryDto`) | An invalid query value → 422 with `loc` starting `"query"`. Pagination and filter cases wait on the conventions `fastapi-structure.md` hasn't settled yet |
 | Write rolls back on failure   | Make the route fail after its first write; assert no row |
 | Response hides internals      | Whole-body equality already covers it: an extra field like `google_subject_id` fails |
@@ -771,9 +771,8 @@ test's `fastapi_app` inside the test body.
 | `test_lifespan.py`      | Startup creates resources            | Enter `lifespan_context` on a fresh `create_app()`; assert the `app.state` attributes |
 | `test_lifespan.py`      | Shutdown closes them                 | After the `async with` exits, assert closed (`http_client.is_closed`) |
 | `test_lifespan.py`      | Invalid settings fail startup        | `monkeypatch.setenv` a bad value; `pytest.raises(ValidationError)` around entering the lifespan |
-| `test_dependencies.py`  | `get_db_session` discards writes     | A throwaway route with `DbSessionDep` inserts a row; select through `db_session` and assert it's absent |
-| `test_dependencies.py`  | `get_db_transaction` commits         | Same, with `DbTransactionDep`; assert present |
-| `test_dependencies.py`  | `get_db_transaction` rolls back on error | The route inserts, then raises. Wrap the request in `pytest.raises`, then assert the row is absent |
+| `test_dependencies.py`  | `get_db_session` commits             | A throwaway route with `DbSessionDep` inserts a row; select through `db_session` and assert it's present |
+| `test_dependencies.py`  | `get_db_session` rolls back on error | The route inserts, then raises. Wrap the request in `pytest.raises`, then assert the row is absent |
 | `test_dependencies.py`  | Auth guard                           | No cookie, unknown session id, session for a deleted user: each 401. A valid session reaches the route |
 
 ```python
@@ -804,19 +803,19 @@ async def test_exception_handler_maps_standard_exception_to_status_code(
 
 ```python
 # tests/api/core/test_dependencies.py
-async def test_get_db_session_discards_uncommitted_writes(
+async def test_get_db_session_commits_writes(
     fastapi_app: FastAPI, api_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    @fastapi_app.post("/insert-user-without-transaction")
-    async def insert_user_without_transaction(request_db_session: DbSessionDep) -> None:
+    @fastapi_app.post("/insert-user")
+    async def insert_user(request_db_session: DbSessionDep) -> None:
         await insert_user_row(request_db_session, email="ada@example.com")
 
-    insert_user_response = await api_client.post("/insert-user-without-transaction")
+    insert_user_response = await api_client.post("/insert-user")
 
     user_query = select(UserOrm).where(UserOrm.email == "ada@example.com")
     inserted_user_record = await db_session.scalar(user_query)
     assert insert_user_response.status_code == 200
-    assert inserted_user_record is None
+    assert inserted_user_record is not None
 ```
 
 ## §8 Settings
