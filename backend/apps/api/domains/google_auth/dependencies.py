@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from apps.api.core.config import AppSettings
-from apps.api.core.dependencies import DbTransactionDep
+from apps.api.core.dependencies import DbSessionDep
 from apps.api.domains.auth.dependencies import AuthSessionServiceDep
 from libs.auth.services import OAuthStateService
 from libs.google_auth.services import GoogleOAuthService, GoogleSignInService
@@ -41,7 +41,7 @@ def get_google_sign_in_service(
     request: Request,
     google_oauth_service: GoogleOAuthServiceDep,
     auth_session_service: AuthSessionServiceDep,
-    db_session: DbTransactionDep,
+    db_session: DbSessionDep,
 ) -> GoogleSignInService:
     app_settings: AppSettings = request.app.state.settings
     user_activity_service = UserActivityService(
