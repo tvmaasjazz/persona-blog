@@ -15,7 +15,7 @@ class LlmUtils:
 
     @staticmethod
     def resolve_status(reason: LlmCallReasonType | None) -> LlmCallStatusType:
-        """SUCCEEDED for no reason; NotImplementedError for a reason with no status."""
+        """Maps a call's failure reason to its status, SUCCEEDED when there is none."""
         if reason is None:
             return LlmCallStatusType.SUCCEEDED
         call_status = LLM_STATUS_BY_REASON.get(reason)

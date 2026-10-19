@@ -16,19 +16,19 @@ from libs.users.after_response_tasks import record_user_activity
 
 
 def get_app_settings(request: Request) -> AppSettings:
-    """Returns the settings instance stored on app state at startup."""
     return request.app.state.settings
 
 
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:
-    """Yields a db session for the request that never commits, so writes through it are lost."""
+    """Yields a session for read-only routes; it never commits, so write routes use
+    get_db_transaction."""
     db_session_factory = request.app.state.db_session_factory
     async with db_session_factory() as db_session:
         yield db_session
 
 
 async def get_db_transaction(request: Request) -> AsyncIterator[AsyncSession]:
-    """Yields a db session inside a transaction that commits after the route returns."""
+    """Yields a session for write routes, committing its transaction after the route returns."""
     db_session_factory = request.app.state.db_session_factory
     async with db_session_factory() as db_session, db_session.begin():
         yield db_session
@@ -76,7 +76,6 @@ def build_llm_service(app_state: State) -> LlmService:
 
 
 def get_llm_service(request: Request) -> LlmService:
-    """Builds the LLM service from the app state of the request's app."""
     return build_llm_service(request.app.state)
 
 

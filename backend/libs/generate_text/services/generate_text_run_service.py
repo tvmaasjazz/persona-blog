@@ -29,7 +29,7 @@ class GenerateTextRunService:
     async def create_run(
         self, create_generate_text_run_input: CreateGenerateTextRunInput, auth_user: AuthUser
     ) -> CreateGenerateTextRunResult:
-        """Inserts a run already leased to its creator, so the pickup loop leaves it alone."""
+        """Inserts a run already leased to this process, so the pickup loop leaves it alone."""
         run_insert = (
             insert(GenerateTextRunOrm)
             .values(
@@ -248,7 +248,8 @@ class GenerateTextRunService:
             await db_session.execute(run_failure_update)
 
     async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
-        """Finds any user's run, with a None persona identity once its persona is deleted."""
+        """Finds a run by identity without checking who owns it; persona_identity is None once
+        its persona is deleted."""
         async with self._db_session_factory() as db_session:
             # A soft-deleted persona drops out of the join, so its identity is None
             query = (

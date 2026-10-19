@@ -50,7 +50,8 @@ class BlogPostService:
     async def create_blog_post(
         self, create_blog_post_input: CreateBlogPostInput, auth_user: AuthUser
     ) -> CreateBlogPostResult:
-        """Creates a post under one of the caller's personas; NotFoundException if it isn't."""
+        """Creates a post under one of the caller's own personas; NotFoundException for any other
+        persona."""
         find_user_persona_result = await self._persona_service.find_user_persona(
             create_blog_post_input.persona_identity, auth_user
         )

@@ -9,7 +9,6 @@ from libs.personas.services import PersonaService, PersonaValidationService
 
 
 def get_persona_service(db_session: DbTransactionDep) -> PersonaService:
-    """Builds the persona service on the request's transaction."""
     return PersonaService(db_session=db_session)
 
 
@@ -17,7 +16,6 @@ PersonaServiceDep = Annotated[PersonaService, Depends(get_persona_service)]
 
 
 def get_persona_validation_service(db_session: DbTransactionDep) -> PersonaValidationService:
-    """Builds the persona validation service on the request's transaction."""
     return PersonaValidationService(db_session=db_session)
 
 

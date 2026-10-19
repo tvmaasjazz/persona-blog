@@ -51,7 +51,8 @@ class PersonaService:
     async def find_persona(
         self, persona_identity: UUID, auth_user: AuthUser
     ) -> PersonaDetailResult:
-        """The caller's own persona or anyone's public one; NotFoundException otherwise."""
+        """Returns the caller's own persona or anyone's public one; NotFoundException
+        otherwise."""
         persona_record = await self._find_accessible_persona_record(persona_identity, auth_user)
         return PersonaDetailResult.model_validate(persona_record, from_attributes=True)
 

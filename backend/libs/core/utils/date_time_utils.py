@@ -2,7 +2,7 @@ import time
 
 
 class DateTimeUtils:
-    """Measures durations on the monotonic clock, which never reaches the database."""
+    """Measures durations on the monotonic clock."""
 
     @staticmethod
     def now_monotonic() -> float:

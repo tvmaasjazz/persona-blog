@@ -22,7 +22,7 @@ persona_router = APIRouter(prefix="/personas", tags=["personas"])
 async def find_user_persona_list(
     auth_user: AuthUserDep, persona_service: PersonaServiceDep
 ) -> PersonaListResponseDto:
-    """Lists the personas the signed-in user can access."""
+    """Lists the signed-in user's own personas, newest first."""
     find_user_persona_list_result = await persona_service.find_user_persona_list(auth_user)
     return PersonaListResponseDto.from_result(find_user_persona_list_result)
 

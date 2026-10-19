@@ -22,8 +22,7 @@ class BlogPostValidationService:
     async def validate_blog_post_visibility(
         self, blog_post_identity: UUID, is_public: bool, auth_user: AuthUser
     ) -> None:
-        """Raises if the caller's post belongs to a private persona and is made public;
-        passes when the caller has no such post."""
+        """Rejects making the caller's post public when its persona is private."""
         persona_identity_query = (
             select(PersonaOrm.identity)
             .select_from(BlogPostOrm)

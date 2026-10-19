@@ -113,7 +113,7 @@ export interface paths {
         };
         /**
          * Find User Persona List
-         * @description Lists the personas the signed-in user can access.
+         * @description Lists the signed-in user's own personas, newest first.
          */
         get: operations["find_user_persona_list_personas_get"];
         put?: never;

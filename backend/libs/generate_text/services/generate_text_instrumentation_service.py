@@ -27,7 +27,8 @@ class GenerateTextInstrumentationService:
     def instrument(
         self, node_type: GenerateTextNodeType, node: GenerateTextNode
     ) -> GenerateTextNode:
-        """Fails the step and the run when the node raises, but lets a review pause through."""
+        """Wraps a node so each pass records a step row: completed, paused for review, or failed
+        along with its run."""
 
         async def instrumented_node(state: GenerateTextState) -> dict[str, Any]:
             # Record the step as started

@@ -16,7 +16,6 @@ from libs.personas.services import PersonaService
 
 
 def get_content_item_service(db_session: DbTransactionDep) -> ContentItemService:
-    """Builds the content item service on the request's transaction."""
     return ContentItemService(db_session=db_session)
 
 
@@ -26,7 +25,6 @@ ContentItemServiceDep = Annotated[ContentItemService, Depends(get_content_item_s
 def get_content_item_validation_service(
     db_session: DbTransactionDep,
 ) -> ContentItemValidationService:
-    """Builds the content item validation service on the request's transaction."""
     return ContentItemValidationService(db_session=db_session)
 
 
@@ -36,7 +34,6 @@ ContentItemValidationServiceDep = Annotated[
 
 
 def get_persona_service(db_session: DbTransactionDep) -> PersonaService:
-    """Builds the persona service on the request's transaction."""
     return PersonaService(db_session=db_session)
 
 
@@ -72,7 +69,6 @@ def get_blog_post_service(
     generate_text_run_service: GenerateTextRunServiceDep,
     generate_text_step_service: GenerateTextStepServiceDep,
 ) -> BlogPostService:
-    """Builds the blog post service on the request's transaction and its sibling services."""
     return BlogPostService(
         db_session=db_session,
         content_item_service=content_item_service,
@@ -89,7 +85,6 @@ def get_blog_post_validation_service(
     db_session: DbTransactionDep,
     content_item_validation_service: ContentItemValidationServiceDep,
 ) -> BlogPostValidationService:
-    """Builds the blog post validation service on the request's transaction."""
     return BlogPostValidationService(
         db_session=db_session,
         content_item_validation_service=content_item_validation_service,

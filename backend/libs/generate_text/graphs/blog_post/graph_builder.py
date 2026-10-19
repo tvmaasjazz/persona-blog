@@ -30,7 +30,8 @@ class BlogPostGraphBuilder(BaseGenerateTextGraphBuilder):
     def build_graph(
         self, options: dict[str, Any], checkpointer: BaseCheckpointSaver
     ) -> CompiledStateGraph:
-        """Raises GenerateTextOptionsInvalidException when the options aren't blog post options."""
+        """Builds the blog post graph from the run's options, outline to humanize with optional
+        reviews; GenerateTextOptionsInvalidException if the options don't fit."""
         # Validate the caller's options
         try:
             blog_post_options = BlogPostOptionsInput.model_validate(options)

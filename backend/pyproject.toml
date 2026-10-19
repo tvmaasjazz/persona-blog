@@ -53,6 +53,14 @@ ignore = ["N818"]
 "**/types.py" = ["D101", "D102", "D103"]
 "**/exceptions.py" = ["D101", "D102", "D103"]
 "libs/database/orm/*.py" = ["D101", "D102", "D103"]
+# App wiring whose names say what it does
+"apps/api/**/dependencies.py" = ["D101", "D102", "D103"]
+"apps/api/app_factory.py" = ["D101", "D102", "D103"]
+"apps/api/lifespan.py" = ["D101", "D102", "D103"]
+"apps/api/core/config.py" = ["D101", "D102", "D103"]
+"apps/api/core/logging.py" = ["D101", "D102", "D103"]
+"apps/api/core/exception_handlers.py" = ["D101", "D102", "D103"]
+"scripts/**/*.py" = ["D101", "D102", "D103"]
 
 [tool.ruff.lint.pep8-naming]
 # SQLAlchemy's declared_attr methods receive the class
