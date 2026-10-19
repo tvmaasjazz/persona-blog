@@ -20,15 +20,8 @@ def get_app_settings(request: Request) -> AppSettings:
 
 
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:
-    """Yields a session for read-only routes; it never commits, so write routes use
-    get_db_transaction."""
-    db_session_factory = request.app.state.db_session_factory
-    async with db_session_factory() as db_session:
-        yield db_session
-
-
-async def get_db_transaction(request: Request) -> AsyncIterator[AsyncSession]:
-    """Yields a session for write routes, committing its transaction after the route returns."""
+    """Yields the request's session in a transaction that commits after the route returns,
+    or rolls back if it raises."""
     db_session_factory = request.app.state.db_session_factory
     async with db_session_factory() as db_session, db_session.begin():
         yield db_session
@@ -85,4 +78,3 @@ LlmServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 AppSettingsDep = Annotated[AppSettings, Depends(get_app_settings)]
 AuthUserDep = Annotated[AuthUser, Depends(get_auth_user)]
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
-DbTransactionDep = Annotated[AsyncSession, Depends(get_db_transaction)]

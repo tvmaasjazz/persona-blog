@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import Depends, Request
 
-from apps.api.core.dependencies import AuthUserDep, DbTransactionDep
+from apps.api.core.dependencies import AuthUserDep, DbSessionDep
 from apps.api.domains.blog_posts.dtos import (
     BlogPostDto,
     CreateBlogPostDto,
@@ -15,7 +15,7 @@ from libs.generate_text.services import GenerateTextRunService, GenerateTextStep
 from libs.personas.services import PersonaService
 
 
-def get_content_item_service(db_session: DbTransactionDep) -> ContentItemService:
+def get_content_item_service(db_session: DbSessionDep) -> ContentItemService:
     return ContentItemService(db_session=db_session)
 
 
@@ -23,7 +23,7 @@ ContentItemServiceDep = Annotated[ContentItemService, Depends(get_content_item_s
 
 
 def get_content_item_validation_service(
-    db_session: DbTransactionDep,
+    db_session: DbSessionDep,
 ) -> ContentItemValidationService:
     return ContentItemValidationService(db_session=db_session)
 
@@ -33,7 +33,7 @@ ContentItemValidationServiceDep = Annotated[
 ]
 
 
-def get_persona_service(db_session: DbTransactionDep) -> PersonaService:
+def get_persona_service(db_session: DbSessionDep) -> PersonaService:
     return PersonaService(db_session=db_session)
 
 
@@ -63,7 +63,7 @@ GenerateTextStepServiceDep = Annotated[
 
 
 def get_blog_post_service(
-    db_session: DbTransactionDep,
+    db_session: DbSessionDep,
     content_item_service: ContentItemServiceDep,
     persona_service: PersonaServiceDep,
     generate_text_run_service: GenerateTextRunServiceDep,
@@ -82,7 +82,7 @@ BlogPostServiceDep = Annotated[BlogPostService, Depends(get_blog_post_service)]
 
 
 def get_blog_post_validation_service(
-    db_session: DbTransactionDep,
+    db_session: DbSessionDep,
     content_item_validation_service: ContentItemValidationServiceDep,
 ) -> BlogPostValidationService:
     return BlogPostValidationService(
