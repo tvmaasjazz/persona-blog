@@ -102,7 +102,7 @@ backend/tests/
 | `apps/api/domains/<d>/router.py`     | `tests/api/<d>/test_router.py`         | For each route: happy path, 422 per declared constraint, each exception the service raises, 401 if protected, persisted state for writes (§6) |
 | `apps/api/domains/<d>/dtos.py`, `apps/api/core/dtos.py` | None, unless a mapper has logic | Route tests cover plain field copying |
 | `apps/api/domains/<d>/dependencies.py` | None                                 | Route tests run the real factories |
-| `apps/api/core/dependencies.py`      | `tests/api/core/test_dependencies.py`  | Session discards writes, transaction commits and rolls back, auth guard cases (§7) |
+| `apps/api/core/dependencies.py`      | `tests/api/core/test_dependencies.py`  | Session commits and rolls back, auth guard cases (§7) |
 | `apps/api/core/config.py`            | `tests/api/core/test_config.py`        | TOML beats default, env beats TOML, missing secret fails (§8) |
 | `apps/api/core/exception_handlers.py` | `tests/api/core/test_exception_handlers.py` | Each standard exception maps to its status; a lib exception gets its parent's; unhandled errors return 500 without internals (§7) |
 | `libs/core/exceptions.py`, `libs/<d>/exceptions.py` | None                   | The app factory tests and the service tests that raise them cover these |
