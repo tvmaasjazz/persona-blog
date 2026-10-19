@@ -541,6 +541,12 @@ No run is lost, and at most one node is redone.
 - [x] **Comment cleanup** (the PR after instant handoff). Bring existing backend and
   frontend code in line with the comment rules: one-sentence docstrings, and a short
   comment above each block of a multi-step function
+- [ ] **Public docstrings** (the PR after comment cleanup). Every public function,
+  method and class gets a one-sentence docstring saying what its name doesn't: what it
+  returns in an edge case, raises, writes or starts. Turn on ruff's `D1` rules to
+  enforce it, exempting tests, `dtos.py`, `results.py`, `inputs.py`, `settings.py`,
+  `types.py` and `__init__.py`. Private helpers get one only when the name isn't
+  enough. Update `python-naming.md` › Other conventions to match
 - [x] **Writes as statements.** Switch Orm writes from setting attributes and calling
   `flush()` to one statement that sets every field, so a time it writes is
   `DatabaseClockUtils.build_utc_now_sql()` rather than the app server's clock. Updates
@@ -639,8 +645,16 @@ Assume any worker can restart mid-run and any request can land on any replica.
 Worth doing once the core flow works; none of it changes the API shape above. Some of
 it overlaps Steps 8, 9 and 10.
 
-- [ ] Move runs to a job queue with a separate worker process (`arq` on Redis, Celery,
-  or a Postgres-backed queue), so API deploys never touch running work
+- [ ] **Generation worker.** Move runs to a job queue with a separate worker app
+  (`apps/worker/`), so API deploys never touch running work. A job is one segment of a
+  run: start or resume, then run the graph until it pauses for review or ends, then
+  acknowledge. The queue's guarantees replace the lease machinery: delivery to one
+  worker replaces the claim, the acknowledgement deadline replaces the lease expiry,
+  extending it replaces the heartbeat, redelivery of unacknowledged jobs replaces the
+  pickup loop and the handoff list, and the delivery count replaces `pickup_count`.
+  Still needed: a guard against a redelivered job running beside a slow original, and
+  a deadline longer than a step. Compare `arq` (asyncio, on our Redis, with cron) and
+  Taskiq, including how each treats a worker that dies mid-job
 - [ ] An optional SSE progress stream, `GET /generate-text/runs/{run_identity}/events`
   (heartbeats, a final `done` event, `Last-Event-ID`), with polling as the fallback
 - [ ] Structured logs carrying the request ID and run ID on every line (Step 8)
