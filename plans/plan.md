@@ -544,8 +544,8 @@ No run is lost, and at most one node is redone.
 - [x] **Public docstrings** (the PR after comment cleanup). Every public function,
   method and class gets a one-sentence docstring saying what its name doesn't: what it
   returns in an edge case, raises, writes or starts. Turn on ruff's `D1` rules to
-  enforce it, exempting tests, `dtos.py`, `results.py`, `inputs.py`, `settings.py`,
-  `types.py` and `__init__.py`. Private helpers get one only when the name isn't
+  enforce it, exempting tests, migrations, `dtos.py`, `results.py`, `inputs.py`,
+  `settings.py`, `types.py`, `exceptions.py`, the Orm modules and `__init__.py`. Private helpers get one only when the name isn't
   enough. Update `python-naming.md` › Other conventions to match
 - [x] **Writes as statements.** Switch Orm writes from setting attributes and calling
   `flush()` to one statement that sets every field, so a time it writes is

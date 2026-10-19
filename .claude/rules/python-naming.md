@@ -280,9 +280,9 @@ The same applies to chained attribute access into a call:
   what its name doesn't, such as what it returns in an edge case, raises, writes or
   starts. Never a paragraph, and never the name restated. A reason, a constraint or a
   trap goes in a comment beside the line it concerns. Ruff's `D101`-`D103` enforce it.
-  Exempt: tests, and the shapes and declarations in `dtos.py`, `results.py`,
-  `inputs.py`, `settings.py`, `types.py`, `exceptions.py`, Orm modules and
-  `__init__.py`. A private helper gets one only when its name isn't enough.
+  Exempt: tests, migration revisions and `migrations/env.py`, and the shapes and
+  declarations in `dtos.py`, `results.py`, `inputs.py`, `settings.py`, `types.py`,
+  `exceptions.py`, the Orm modules in `libs/database/orm/` and `__init__.py`. A private helper gets one only when its name isn't enough.
 
 ```python
 async def get_auth_user(request: Request, after_response_tasks: BackgroundTasks) -> AuthUser:
