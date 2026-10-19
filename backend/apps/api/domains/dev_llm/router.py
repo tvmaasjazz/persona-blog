@@ -12,5 +12,6 @@ async def complete_llm(
     auth_user: AuthUserDep,
     llm_service: LlmServiceDep,
 ) -> LlmCompletionResponseDto:
+    """Runs one LLM completion for the signed-in user, for trying prompts in development."""
     complete_result = await llm_service.complete(dto.to_input(), auth_user)
     return LlmCompletionResponseDto.from_result(complete_result)

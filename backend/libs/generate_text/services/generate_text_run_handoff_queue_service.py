@@ -10,6 +10,7 @@ class GenerateTextRunHandoffQueueService:
         self._redis_client = redis_client
 
     async def push_run(self, run_id: int) -> None:
+        """Adds the run id to the end of the list for the next waiting process to take."""
         await self._redis_client.rpush(RUN_HANDOFF_QUEUE_KEY, run_id)
 
     async def wait_for_run(self, timeout_seconds: float) -> int | None:

@@ -15,6 +15,8 @@ logger = structlog.get_logger(__name__)
 
 
 class OpenAiLlmService(BaseLlmProviderService):
+    """Runs completions on OpenAI's Responses API, retrying errors worth retrying."""
+
     def __init__(self, openai_client: AsyncOpenAI, llm_settings: LlmSettings) -> None:
         self._openai_client = openai_client
         self._llm_settings = llm_settings
@@ -22,6 +24,7 @@ class OpenAiLlmService(BaseLlmProviderService):
     async def complete(
         self, provider_input: LlmProviderCompletionInput
     ) -> LlmProviderCompletionResult:
+        """Runs a free-text completion; OpenAI errors surface as mapped LlmExceptions."""
         raw_response = await self._send_with_retries(
             lambda: self._openai_client.responses.with_raw_response.create(
                 model=provider_input.model_name,
@@ -41,6 +44,7 @@ class OpenAiLlmService(BaseLlmProviderService):
     async def complete_structured(
         self, provider_input: LlmProviderCompletionInput, output_type: type[BaseModel]
     ) -> LlmProviderCompletionResult:
+        """Runs a completion OpenAI parses into output_type, set on the result's parsed_output."""
         raw_response = await self._send_with_retries(
             lambda: self._openai_client.responses.with_raw_response.parse(
                 model=provider_input.model_name,

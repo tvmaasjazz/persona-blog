@@ -17,13 +17,16 @@ class BackgroundJobService:
 
     @property
     def worker_id(self) -> str:
+        """The id of the worker process this service runs jobs for."""
         return self._worker_id
 
     @property
     def is_stopping(self) -> bool:
+        """True once request_stop() has been called, so jobs should take on no new work."""
         return self._is_stopping
 
     def start(self, job_coroutine: Coroutine[Any, Any, object]) -> None:
+        """Runs the coroutine as a task without waiting; a failure is logged, never raised."""
         job_task = asyncio.create_task(job_coroutine)
         self._running_job_tasks.add(job_task)
         job_task.add_done_callback(self._handle_job_done)

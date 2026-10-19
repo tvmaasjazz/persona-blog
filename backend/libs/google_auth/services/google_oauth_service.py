@@ -21,6 +21,8 @@ from libs.google_auth.settings import GoogleAuthSettings
 
 
 class GoogleOAuthService:
+    """Talks to Google's OAuth endpoints and checks the id token that comes back."""
+
     def __init__(
         self,
         http_client: AsyncClient,
@@ -36,6 +38,7 @@ class GoogleOAuthService:
         self._google_client_secret = google_client_secret
 
     async def build_authorization_url(self) -> str:
+        """Stores a new sign-in state and returns the Google URL to send the user to."""
         oauth_state_result = await self._oauth_state_service.create_state()
         authorization_query = urlencode(
             {
@@ -54,6 +57,8 @@ class GoogleOAuthService:
         return f"{GOOGLE_AUTHORIZATION_URL}?{authorization_query}"
 
     async def exchange_code_for_identity(self, code: str, oauth_state: str) -> GoogleIdentityResult:
+        """Consumes the state and trades the code for the verified identity; UnauthorizedException
+        on a bad state, code or token, ServiceUnavailableException if Google can't be reached."""
         oauth_state_result = await self._oauth_state_service.consume_state(oauth_state)
         id_token = await self._exchange_code_for_id_token(code, oauth_state_result)
         id_token_claims = jwt.decode(id_token, verify=False)

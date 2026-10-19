@@ -93,6 +93,7 @@ def build_generate_text_run_pickup_service(app_state: State) -> GenerateTextRunP
 
 
 def get_generate_text_service(request: Request, llm_service: LlmServiceDep) -> GenerateTextService:
+    """Builds the generate text service; ServiceUnavailableException with no checkpointer."""
     return build_generate_text_service(request.app.state, llm_service)
 
 
@@ -104,6 +105,7 @@ async def get_generate_text_persona(
     dto: GenerateBlogPostDto,
     auth_user: AuthUserDep,
 ) -> FindUserPersonaResult:
+    """Loads the requested persona on its own short session, closed before the route runs."""
     db_session_factory = request.app.state.db_session_factory
     async with db_session_factory() as db_session:
         persona_service = PersonaService(db_session=db_session)

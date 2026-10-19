@@ -9,6 +9,8 @@ from libs.database.orm import BlogPostOrm, ContentItemOrm, PersonaOrm
 
 
 class BlogPostValidationService:
+    """The checks on an incoming blog post payload that need the database."""
+
     def __init__(
         self,
         db_session: AsyncSession,
@@ -20,6 +22,7 @@ class BlogPostValidationService:
     async def validate_blog_post_visibility(
         self, blog_post_identity: UUID, is_public: bool, auth_user: AuthUser
     ) -> None:
+        """Rejects making the caller's post public when its persona is private."""
         persona_identity_query = (
             select(PersonaOrm.identity)
             .select_from(BlogPostOrm)

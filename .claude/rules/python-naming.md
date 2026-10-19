@@ -276,9 +276,28 @@ The same applies to chained attribute access into a call:
 - A `Dto` name leads with its entity or domain: `PersonaListResponseDto`, never
   `ListPersonasResponseDto`. A `Result` is still named for its function
   (`FindUserPersonaListResult`).
-- A docstring is one plain sentence saying what the function or class does, never a
-  paragraph. A reason, a constraint or a trap goes in a comment beside the line it
-  concerns. Most `Result` and `Dto` classes and most short functions need no docstring.
+- Every public class, method and function in `libs/` and in a `router.py` has a
+  docstring, one plain sentence. It starts with what the function does or returns,
+  then adds what the name doesn't say, such as an edge case, what it raises, writes or
+  starts: "Returns X; NotFoundException if Y." Never a paragraph, never only the edge
+  case, and never the name restated. A reason, a constraint or a trap goes in a comment
+  beside the line it concerns. A route's docstring is also its description in the API
+  docs. Ruff's `D101`-`D103` enforce it.
+- Exempt from the requirement: tests, migrations, the shapes and declarations in
+  `dtos.py`, `results.py`, `inputs.py`, `settings.py`, `types.py`, `exceptions.py`,
+  the Orm modules in `libs/database/orm/` and `__init__.py`, and the app wiring
+  (`dependencies.py`, `app_factory.py`, `lifespan.py`, `core/config.py`,
+  `core/logging.py`, `core/exception_handlers.py`) and `scripts/`. There, and on a
+  private helper, a docstring is written only when the name isn't enough, such as a
+  dependency that raises or a guard that states its check.
+
+```python
+    async def find_persona(
+        self, persona_identity: UUID, auth_user: AuthUser
+    ) -> PersonaDetailResult:
+        """Returns the caller's own persona or anyone's public one; NotFoundException
+        otherwise."""
+```
 - A function with several steps gets a short comment above each block saying what the
   block does, so its steps read from the comments alone, without reading the code:
 

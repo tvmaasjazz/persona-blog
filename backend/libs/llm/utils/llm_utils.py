@@ -11,8 +11,11 @@ logger = structlog.get_logger(__name__)
 
 
 class LlmUtils:
+    """Maps a call's failure reason to its status and exception, and prices its tokens."""
+
     @staticmethod
     def resolve_status(reason: LlmCallReasonType | None) -> LlmCallStatusType:
+        """Maps a call's failure reason to its status, SUCCEEDED when there is none."""
         if reason is None:
             return LlmCallStatusType.SUCCEEDED
         call_status = LLM_STATUS_BY_REASON.get(reason)
@@ -22,6 +25,7 @@ class LlmUtils:
 
     @staticmethod
     def build_reason_exception(reason: LlmCallReasonType) -> LlmException:
+        """The exception to raise for a reason; NotImplementedError for one with none."""
         exception_class = LLM_EXCEPTION_BY_REASON.get(reason)
         if exception_class is None:
             raise NotImplementedError(f"No exception registered for {reason}")

@@ -9,6 +9,7 @@ health_router = APIRouter(tags=["health"])
 
 @health_router.get("/health")
 async def get_health(app_settings: AppSettingsDep) -> HealthResponseDto:
+    """Reports that the API is up, with its app name and environment."""
     return HealthResponseDto(
         status=HealthStatusType.OK,
         app_name=app_settings.app_name,

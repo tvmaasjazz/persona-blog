@@ -27,6 +27,8 @@ STATUS_CODE_BY_EXCEPTION: dict[type[Exception], int] = {
 def build_exception_handler(
     status_code: int,
 ) -> Callable[[Request, Exception], Awaitable[JSONResponse]]:
+    """Builds a handler that answers with the status code and the exception message as detail."""
+
     async def handle_exception(request: Request, exception: Exception) -> JSONResponse:
         return JSONResponse(status_code=status_code, content={"detail": str(exception)})
 
@@ -34,5 +36,6 @@ def build_exception_handler(
 
 
 def register_exception_handlers(fastapi_app: FastAPI) -> None:
+    """Registers one handler per standard exception, which its subclasses inherit."""
     for exception_class, status_code in STATUS_CODE_BY_EXCEPTION.items():
         fastapi_app.add_exception_handler(exception_class, build_exception_handler(status_code))

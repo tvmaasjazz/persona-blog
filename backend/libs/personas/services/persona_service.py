@@ -17,12 +17,15 @@ from libs.personas.results import (
 
 
 class PersonaService:
+    """Creates, reads, updates and soft-deletes personas."""
+
     def __init__(self, db_session: AsyncSession) -> None:
         self._db_session = db_session
 
     async def create_persona(
         self, persona_input: PersonaInput, auth_user: AuthUser
     ) -> CreatePersonaResult:
+        """Inserts a persona owned by the caller and returns its identity."""
         persona_insert = (
             insert(PersonaOrm)
             .values(
@@ -48,10 +51,13 @@ class PersonaService:
     async def find_persona(
         self, persona_identity: UUID, auth_user: AuthUser
     ) -> PersonaDetailResult:
+        """Returns the caller's own persona or anyone's public one; NotFoundException
+        otherwise."""
         persona_record = await self._find_accessible_persona_record(persona_identity, auth_user)
         return PersonaDetailResult.model_validate(persona_record, from_attributes=True)
 
     async def find_user_persona_list(self, auth_user: AuthUser) -> FindUserPersonaListResult:
+        """The caller's own personas, newest first; empty when they have none."""
         persona_query = (
             select(PersonaOrm)
             .where(PersonaOrm.created_by_id == auth_user.id)
@@ -85,6 +91,7 @@ class PersonaService:
     async def update_persona(
         self, persona_identity: UUID, persona_input: PersonaInput, auth_user: AuthUser
     ) -> None:
+        """Replaces the persona's fields; ForbiddenException unless the caller created it."""
         persona_record = await self._find_owned_persona_record(persona_identity, auth_user)
         persona_update = (
             update(PersonaOrm)
@@ -105,6 +112,7 @@ class PersonaService:
         await self._db_session.execute(persona_update)
 
     async def delete_persona(self, persona_identity: UUID, auth_user: AuthUser) -> None:
+        """Soft-deletes the persona; ForbiddenException unless the caller created it."""
         persona_record = await self._find_owned_persona_record(persona_identity, auth_user)
         persona_soft_delete_update = (
             update(PersonaOrm)

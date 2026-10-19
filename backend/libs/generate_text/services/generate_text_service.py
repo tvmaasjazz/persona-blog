@@ -68,6 +68,7 @@ class GenerateTextService:
         find_user_persona_result: FindUserPersonaResult,
         auth_user: AuthUser,
     ) -> GenerateTextRunResult:
+        """Creates a run and starts its graph in the background, returning it still PENDING."""
         # Look up the graph builder for the text type
         text_type = generate_text_input.text_type
         graph_builder = self._graph_builder_registry.get_by_text_type(text_type)
@@ -129,6 +130,7 @@ class GenerateTextService:
     async def find_generate_text_run(
         self, run_identity: UUID, auth_user: AuthUser
     ) -> GenerateTextRunResult:
+        """The caller's own run with its newest text; NotFoundException for anyone else's."""
         find_run_result = await self._run_service.find_run_by_identity(run_identity)
         if find_run_result.created_by_id != auth_user.id:
             raise NotFoundException(f"Generate text run {run_identity} not found")
@@ -141,6 +143,7 @@ class GenerateTextService:
         resume_generate_text_input: ResumeGenerateTextInput,
         auth_user: AuthUser,
     ) -> GenerateTextRunResult:
+        """Records the review decision and resumes a paused run in the background as RUNNING."""
         # Find the caller's run
         find_run_result = await self._run_service.find_run_by_identity(run_identity)
         if find_run_result.created_by_id != auth_user.id:

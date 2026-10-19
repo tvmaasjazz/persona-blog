@@ -7,6 +7,8 @@ from libs.generate_text.inputs import GenerateTextPersonaInput
 
 
 class GenerateTextState(BaseModel):
+    """What a generate-text graph carries between nodes and saves in its checkpoints."""
+
     # Primitives only: the state is persisted in checkpoints
     auth_user_id: int
     auth_user_identity: UUID
@@ -36,9 +38,11 @@ class GenerateTextState(BaseModel):
         return identity if type(identity) is UUID else UUID(str(identity))
 
     def build_auth_user(self) -> AuthUser:
+        """Groups the stored user id and identity back into an AuthUser."""
         return AuthUser(id=self.auth_user_id, identity=self.auth_user_identity)
 
     def build_persona(self) -> GenerateTextPersonaInput:
+        """Groups the stored persona fields back into a persona input."""
         return GenerateTextPersonaInput(
             name=self.persona_name,
             bio=self.persona_bio,

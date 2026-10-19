@@ -33,12 +33,15 @@ class BaseOrm(SoftDeleteMixin, DeclarativeBase):
     # The audit columns name pb_user because UserOrm extends BaseOrm and can't be imported
     @declared_attr
     def created_by_id(cls) -> Mapped[int]:
+        """The user who created the row."""
         return mapped_column(BigInteger, ForeignKey("pb_user.id"))
 
     @declared_attr
     def updated_by_id(cls) -> Mapped[int]:
+        """The user who last changed the row."""
         return mapped_column(BigInteger, ForeignKey("pb_user.id"))
 
     @declared_attr
     def deleted_by_id(cls) -> Mapped[int | None]:
+        """The user who soft-deleted the row; null while it is live."""
         return mapped_column(BigInteger, ForeignKey("pb_user.id"))

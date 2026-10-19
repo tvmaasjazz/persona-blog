@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Health */
+        /**
+         * Get Health
+         * @description Reports that the API is up, with its app name and environment.
+         */
         get: operations["get_health_health_get"];
         put?: never;
         post?: never;
@@ -30,7 +33,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Logout */
+        /**
+         * Logout
+         * @description Signs the user out by deleting their session and clearing the session cookie.
+         */
         post: operations["logout_auth_logout_post"];
         delete?: never;
         options?: never;
@@ -45,7 +51,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Google Login */
+        /**
+         * Get Google Login
+         * @description Redirects the browser to Google's sign-in page.
+         */
         get: operations["get_google_login_auth_google_login_get"];
         put?: never;
         post?: never;
@@ -62,7 +71,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Google Callback */
+        /**
+         * Get Google Callback
+         * @description Completes Google sign-in, sets the session cookie and redirects to the frontend.
+         */
         get: operations["get_google_callback_auth_google_callback_get"];
         put?: never;
         post?: never;
@@ -79,7 +91,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Find Signed In User */
+        /**
+         * Find Signed In User
+         * @description Returns the signed-in user's own profile, or 404 when the account no longer exists.
+         */
         get: operations["find_signed_in_user_users_me_get"];
         put?: never;
         post?: never;
@@ -96,10 +111,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Find User Persona List */
+        /**
+         * Find User Persona List
+         * @description Lists the signed-in user's own personas, newest first.
+         */
         get: operations["find_user_persona_list_personas_get"];
         put?: never;
-        /** Create Persona */
+        /**
+         * Create Persona
+         * @description Creates a persona owned by the signed-in user, or 409 when they already use the name.
+         */
         post: operations["create_persona_personas_post"];
         delete?: never;
         options?: never;
@@ -114,12 +135,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Find Persona */
+        /**
+         * Find Persona
+         * @description Returns one persona, or 404 when it doesn't exist or the user can't access it.
+         */
         get: operations["find_persona_personas__persona_identity__get"];
-        /** Update Persona */
+        /**
+         * Update Persona
+         * @description Updates a persona, or 404 when it is missing and 403 when the user isn't its creator.
+         */
         put: operations["update_persona_personas__persona_identity__put"];
         post?: never;
-        /** Delete Persona */
+        /**
+         * Delete Persona
+         * @description Soft-deletes a persona, or 404 when it is missing and 403 when the user isn't its creator.
+         */
         delete: operations["delete_persona_personas__persona_identity__delete"];
         options?: never;
         head?: never;
@@ -133,10 +163,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Find User Blog Post List */
+        /**
+         * Find User Blog Post List
+         * @description Lists the signed-in user's blog posts, optionally only those of one persona.
+         */
         get: operations["find_user_blog_post_list_blog_posts_get"];
         put?: never;
-        /** Create Blog Post */
+        /**
+         * Create Blog Post
+         * @description Creates a blog post, or 422 when it is public but its persona is private.
+         */
         post: operations["create_blog_post_blog_posts_post"];
         delete?: never;
         options?: never;
@@ -151,12 +187,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Find Blog Post */
+        /**
+         * Find Blog Post
+         * @description Returns one blog post, or 404 when it doesn't exist or the user can't access it.
+         */
         get: operations["find_blog_post_blog_posts__blog_post_identity__get"];
-        /** Update Blog Post */
+        /**
+         * Update Blog Post
+         * @description Updates a blog post, or 404 when it is missing and 403 when the user isn't its creator.
+         */
         put: operations["update_blog_post_blog_posts__blog_post_identity__put"];
         post?: never;
-        /** Delete Blog Post */
+        /**
+         * Delete Blog Post
+         * @description Soft-deletes a blog post, or 404 when it is missing and 403 when not its creator.
+         */
         delete: operations["delete_blog_post_blog_posts__blog_post_identity__delete"];
         options?: never;
         head?: never;
@@ -172,7 +217,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Blog Post From Generate Text Run */
+        /**
+         * Create Blog Post From Generate Text Run
+         * @description Saves a completed generate text run's output as a blog post, or 404 when no such run.
+         */
         post: operations["create_blog_post_from_generate_text_run_blog_posts_from_generate_text_run_post"];
         delete?: never;
         options?: never;
@@ -189,7 +237,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Generate Blog Post */
+        /**
+         * Generate Blog Post
+         * @description Starts generating a blog post as the persona in the background and returns its run.
+         */
         post: operations["generate_blog_post_generate_text_blog_post_post"];
         delete?: never;
         options?: never;
@@ -204,7 +255,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Find Generate Text Run */
+        /**
+         * Find Generate Text Run
+         * @description Returns a generate text run with its current status and output.
+         */
         get: operations["find_generate_text_run_generate_text_runs__run_identity__get"];
         put?: never;
         post?: never;
@@ -223,7 +277,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Resume Generate Text */
+        /**
+         * Resume Generate Text
+         * @description Resumes a run paused for review with the reviewer's decision and returns the run.
+         */
         post: operations["resume_generate_text_generate_text_runs__run_identity__resume_post"];
         delete?: never;
         options?: never;
@@ -240,7 +297,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Complete Llm */
+        /**
+         * Complete Llm
+         * @description Runs one LLM completion for the signed-in user, for trying prompts in development.
+         */
         post: operations["complete_llm_dev_llm_complete_post"];
         delete?: never;
         options?: never;

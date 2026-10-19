@@ -15,8 +15,11 @@ IMAGE_PROBLEM = "The body must not contain images"
 
 
 class BlogPostValidationUtils:
+    """Pure checks of a blog post's Markdown body against the allowed structure."""
+
     @staticmethod
     def find_body_problems(body: str) -> list[str]:
+        """Every rule the body breaks, as readable messages; empty when the body is valid."""
         problems: list[str] = []
         heading_levels = MarkdownUtils.find_heading_levels(body)
 

@@ -34,13 +34,33 @@ line-length = 100
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "UP", "B", "ASYNC", "N", "SIM", "RUF", "TID"]
+# D101-D103: every public class, method and function has a docstring
+select = ["E", "W", "F", "I", "UP", "B", "ASYNC", "N", "SIM", "RUF", "TID", "D101", "D102", "D103"]
 # python-naming.md suffixes exceptions with Exception, not Error
 ignore = ["N818"]
 
 [tool.ruff.lint.per-file-ignores]
 # Revision filenames start with a timestamp, which isn't a valid module name
-"migrations/revisions/*.py" = ["N999"]
+"migrations/revisions/*.py" = ["N999", "D101", "D102", "D103"]
+# Shapes and declarations whose names say what they are
+"tests/**/*.py" = ["D101", "D102", "D103"]
+"migrations/env.py" = ["D101", "D102", "D103"]
+"**/__init__.py" = ["D101", "D102", "D103"]
+"**/dtos.py" = ["D101", "D102", "D103"]
+"**/results.py" = ["D101", "D102", "D103"]
+"**/inputs.py" = ["D101", "D102", "D103"]
+"**/settings.py" = ["D101", "D102", "D103"]
+"**/types.py" = ["D101", "D102", "D103"]
+"**/exceptions.py" = ["D101", "D102", "D103"]
+"libs/database/orm/*.py" = ["D101", "D102", "D103"]
+# App wiring whose names say what it does
+"apps/api/**/dependencies.py" = ["D101", "D102", "D103"]
+"apps/api/app_factory.py" = ["D101", "D102", "D103"]
+"apps/api/lifespan.py" = ["D101", "D102", "D103"]
+"apps/api/core/config.py" = ["D101", "D102", "D103"]
+"apps/api/core/logging.py" = ["D101", "D102", "D103"]
+"apps/api/core/exception_handlers.py" = ["D101", "D102", "D103"]
+"scripts/**/*.py" = ["D101", "D102", "D103"]
 
 [tool.ruff.lint.pep8-naming]
 # SQLAlchemy's declared_attr methods receive the class

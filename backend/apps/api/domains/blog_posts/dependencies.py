@@ -41,6 +41,7 @@ PersonaServiceDep = Annotated[PersonaService, Depends(get_persona_service)]
 
 
 def get_generate_text_run_service(request: Request) -> GenerateTextRunService:
+    """Builds the generate text run service on the app's session factory, not a request session."""
     db_session_factory = request.app.state.db_session_factory
     return GenerateTextRunService(db_session_factory=db_session_factory)
 
@@ -51,6 +52,7 @@ GenerateTextRunServiceDep = Annotated[
 
 
 def get_generate_text_step_service(request: Request) -> GenerateTextStepService:
+    """Builds the generate text step service on the app's session factory, not a request session."""
     db_session_factory = request.app.state.db_session_factory
     return GenerateTextStepService(db_session_factory=db_session_factory)
 
@@ -99,6 +101,7 @@ async def validate_new_blog_post_visibility(
     auth_user: AuthUserDep,
     content_item_validation_service: ContentItemValidationServiceDep,
 ) -> None:
+    """Rejects a new public blog post whose persona is private."""
     await content_item_validation_service.validate_persona_allows_public(
         dto.persona_identity, dto.is_public, auth_user
     )
@@ -110,6 +113,7 @@ async def validate_updated_blog_post_visibility(
     auth_user: AuthUserDep,
     blog_post_validation_service: BlogPostValidationServiceDep,
 ) -> None:
+    """Rejects making a blog post public when its persona is private."""
     await blog_post_validation_service.validate_blog_post_visibility(
         blog_post_identity, dto.is_public, auth_user
     )
@@ -120,6 +124,7 @@ async def validate_new_blog_post_from_run_availability(
     auth_user: AuthUserDep,
     content_item_validation_service: ContentItemValidationServiceDep,
 ) -> None:
+    """Rejects a run that isn't found, isn't completed, or was already saved as a blog post."""
     await content_item_validation_service.validate_generate_text_run_available(
         dto.generate_text_run_identity, auth_user
     )
@@ -130,6 +135,7 @@ async def validate_new_blog_post_from_run_visibility(
     auth_user: AuthUserDep,
     content_item_validation_service: ContentItemValidationServiceDep,
 ) -> None:
+    """Rejects a public blog post from a run whose persona is private."""
     await content_item_validation_service.validate_generate_text_run_allows_public(
         dto.generate_text_run_identity, dto.is_public, auth_user
     )

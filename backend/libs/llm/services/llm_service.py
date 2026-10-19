@@ -20,6 +20,8 @@ logger = structlog.get_logger(__name__)
 
 
 class LlmService:
+    """Runs completions on the provider each tier is configured for and logs every call."""
+
     def __init__(
         self,
         llm_provider_services: dict[LlmProviderType, BaseLlmProviderService],
@@ -38,6 +40,7 @@ class LlmService:
     async def complete(
         self, llm_completion_input: LlmCompletionInput, auth_user: AuthUser
     ) -> LlmCompletionResult:
+        """Runs a free-text completion; an LlmException if the provider fails or stops early."""
         complete_llm_call_result = await self._complete(
             llm_completion_input, auth_user, output_type=None
         )
@@ -55,6 +58,7 @@ class LlmService:
         output_type: type[T],
         auth_user: AuthUser,
     ) -> LlmStructuredCompletionResult[T]:
+        """Runs a completion parsed into output_type; LlmUnavailableException if none comes back."""
         complete_llm_call_result = await self._complete(
             llm_completion_input, auth_user, output_type=output_type
         )

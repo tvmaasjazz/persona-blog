@@ -541,11 +541,11 @@ No run is lost, and at most one node is redone.
 - [x] **Comment cleanup** (the PR after instant handoff). Bring existing backend and
   frontend code in line with the comment rules: one-sentence docstrings, and a short
   comment above each block of a multi-step function
-- [ ] **Public docstrings** (the PR after comment cleanup). Every public function,
+- [x] **Public docstrings** (the PR after comment cleanup). Every public function,
   method and class gets a one-sentence docstring saying what its name doesn't: what it
   returns in an edge case, raises, writes or starts. Turn on ruff's `D1` rules to
-  enforce it, exempting tests, `dtos.py`, `results.py`, `inputs.py`, `settings.py`,
-  `types.py` and `__init__.py`. Private helpers get one only when the name isn't
+  enforce it, exempting tests, migrations, `dtos.py`, `results.py`, `inputs.py`,
+  `settings.py`, `types.py`, `exceptions.py`, the Orm modules and `__init__.py`. Private helpers get one only when the name isn't
   enough. Update `python-naming.md` › Other conventions to match
 - [x] **Writes as statements.** Switch Orm writes from setting attributes and calling
   `flush()` to one statement that sets every field, so a time it writes is
@@ -646,15 +646,52 @@ Worth doing once the core flow works; none of it changes the API shape above. So
 it overlaps Steps 8, 9 and 10.
 
 - [ ] **Generation worker.** Move runs to a job queue with a separate worker app
-  (`apps/worker/`), so API deploys never touch running work. A job is one segment of a
-  run: start or resume, then run the graph until it pauses for review or ends, then
-  acknowledge. The queue's guarantees replace the lease machinery: delivery to one
-  worker replaces the claim, the acknowledgement deadline replaces the lease expiry,
-  extending it replaces the heartbeat, redelivery of unacknowledged jobs replaces the
-  pickup loop and the handoff list, and the delivery count replaces `pickup_count`.
-  Still needed: a guard against a redelivered job running beside a slow original, and
-  a deadline longer than a step. Compare `arq` (asyncio, on our Redis, with cron) and
-  Taskiq, including how each treats a worker that dies mid-job
+  (`apps/worker/`), so API deploys never touch running work. Compare `arq` (asyncio,
+  on our Redis, with cron) and Taskiq, including how each treats a worker that dies
+  mid-job and whether a stopping worker can hand a job back at once.
+
+  **A job is one segment of a run:** start or resume, then run the graph until it
+  pauses for review or ends, then acknowledge. A review pause ends the job; the resume
+  is a new job, and whichever worker takes it continues from the LangGraph checkpoint.
+
+  **The queue replaces the lease machinery:**
+
+  | Today | With the queue |
+  | --- | --- |
+  | Claim with `FOR UPDATE SKIP LOCKED` | The queue delivers each job to one worker, hidden from the rest while held |
+  | `lease_expires_at` | The acknowledgement deadline |
+  | Heartbeat | The worker extends that deadline while it works |
+  | Release on shutdown | The worker hands the job back unfinished |
+  | 30s pickup loop and the handoff list | The queue redelivers any job not acknowledged in time |
+  | `pickup_count` and its limit | The delivery count, and a dead-letter queue after N tries |
+
+  **The deadline measures liveness, not how long the work takes.** Job length varies
+  too much to predict: one step after a review takes seconds, four steps on heavy
+  models take minutes. So the deadline is short and fixed, and a heartbeat extends it
+  for as long as the worker is alive, whatever the job:
+  - Heartbeat every N seconds, deadline about 2 to 3 times N (10s and 30s, say), so one
+    missed beat is tolerated and a dead worker is noticed within the deadline whatever
+    the job's size. The worker never predicts a job's length.
+  - The heartbeat runs as its own task beside the work, so it beats through a long LLM
+    call. Nothing may block the event loop, or the beats stop and the job is redelivered
+    while still running.
+  - A worker that's alive but stuck keeps beating, so the heartbeat can't catch it. The
+    per-operation timeouts do (STRONG's 120s, FAST's, Redis and database timeouts),
+    with an optional maximum total runtime per job as a backstop.
+
+  **Between steps, the job checks two things**, where `_stream_graph` checks for
+  shutdown today. The graph itself knows nothing about shutdown; this check decides
+  whether a worker carries on to the next step:
+  1. Is this worker shutting down? Then stop, the finished step already saved, and hand
+     the job back.
+  2. Does this worker still own the run? One `UPDATE ... WHERE id = :run_id AND owner =
+     :worker_id`. If it changes no row, another worker has the run, so stop without
+     writing more. The final status write carries the same `WHERE owner`.
+
+  **What's left:** the queue delivers at least once, so a job redelivered while a slow
+  original is still mid-step runs that step twice at worst: the ownership guard stops
+  the original at its next check, but not the LLM call already in flight. Keeping the
+  deadline short and the heartbeat steady makes it rare.
 - [ ] An optional SSE progress stream, `GET /generate-text/runs/{run_identity}/events`
   (heartbeats, a final `done` event, `Last-Event-ID`), with polling as the fallback
 - [ ] Structured logs carrying the request ID and run ID on every line (Step 8)

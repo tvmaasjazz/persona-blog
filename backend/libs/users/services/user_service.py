@@ -10,6 +10,8 @@ from libs.users.results import FindOrCreateUserFromAuthProviderResult, FindUserB
 
 
 class UserService:
+    """Finds users and creates them on first sign-in through an auth provider."""
+
     def __init__(self, db_session: AsyncSession) -> None:
         self._db_session = db_session
 
@@ -17,6 +19,8 @@ class UserService:
         self,
         find_or_create_user_from_auth_provider_input: FindOrCreateUserFromAuthProviderInput,
     ) -> FindOrCreateUserFromAuthProviderResult:
+        """The provider's user, created if new; ForbiddenException if inactive, and
+        ConflictException if another account already uses the email."""
         try:
             return await self._find_user_from_auth_provider(
                 find_or_create_user_from_auth_provider_input
@@ -27,6 +31,7 @@ class UserService:
             )
 
     async def find_user_by_identity(self, user_identity: UUID) -> FindUserByIdentityResult:
+        """The user with this identity, active or not; NotFoundException if there is none."""
         user_query = select(UserOrm).where(UserOrm.identity == user_identity)
         user_query_result = await self._db_session.execute(user_query)
         user_record = user_query_result.scalar_one_or_none()
