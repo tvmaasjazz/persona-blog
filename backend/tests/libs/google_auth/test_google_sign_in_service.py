@@ -40,7 +40,7 @@ async def test_sign_in_with_google_new_identity_creates_user_and_session(
         id=user_record.id,
         identity=user_record.identity,
         role=RoleType.READER,
-        permissions=frozenset(),
+        permissions=frozenset({PermissionType.PERSONA_READ, PermissionType.BLOG_POST_READ}),
     )
     assert google_sign_in_result.is_new_user is True
     assert user_record.last_login_at is not None
@@ -68,8 +68,11 @@ async def test_sign_in_with_google_known_creator_stores_role_and_permissions_in_
         role=RoleType.CREATOR,
         permissions=frozenset(
             {
+                PermissionType.PERSONA_READ,
                 PermissionType.PERSONA_WRITE,
+                PermissionType.BLOG_POST_READ,
                 PermissionType.BLOG_POST_WRITE,
+                PermissionType.GENERATE_TEXT_RUN_READ,
                 PermissionType.GENERATE_TEXT_RUN_WRITE,
             }
         ),

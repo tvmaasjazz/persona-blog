@@ -8,9 +8,12 @@ from fastapi.routing import APIRoute, RouteContext, iter_route_contexts
 from apps.api.app_factory import create_app
 from libs.permissions.types import PermissionType
 
-READ_ONLY_METHODS = {"GET", "HEAD"}
-OPEN_WRITE_ROUTES = {
+OPEN_ROUTES = {
+    ("GET", "/health"),
+    ("GET", "/auth/google/login"),
+    ("GET", "/auth/google/callback"),
     ("POST", "/auth/logout"),
+    ("GET", "/users/me"),
     ("POST", "/dev/llm/complete"),
 }
 
@@ -36,25 +39,36 @@ def _find_required_permissions(route_context: RouteContext) -> frozenset[Permiss
     return frozenset(required_permissions)
 
 
-def test_create_app_every_write_route_requires_a_permission_or_is_open(
+def test_create_app_every_route_requires_a_permission_or_is_open(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "DEVELOPMENT")
     fastapi_app = create_app()
 
-    unguarded_write_routes = set()
+    unguarded_routes = set()
+    open_routes_found = set()
     for route_context in _find_api_route_contexts(fastapi_app):
-        for method in route_context.methods - READ_ONLY_METHODS:
-            is_open_route = (method, route_context.path) in OPEN_WRITE_ROUTES
-            if not is_open_route and not _find_required_permissions(route_context):
-                unguarded_write_routes.add((method, route_context.path))
+        for method in route_context.methods:
+            route_key = (method, route_context.path)
+            if route_key in OPEN_ROUTES:
+                open_routes_found.add(route_key)
+            elif not _find_required_permissions(route_context):
+                unguarded_routes.add(route_key)
 
-    assert unguarded_write_routes == set()
+    assert unguarded_routes == set()
+    assert open_routes_found == OPEN_ROUTES
 
 
 @pytest.mark.parametrize(
     ("method", "path", "expected_permission"),
     [
+        pytest.param("GET", "/personas", PermissionType.PERSONA_READ, id="find_user_persona_list"),
+        pytest.param(
+            "GET",
+            "/personas/{persona_identity}",
+            PermissionType.PERSONA_READ,
+            id="find_persona",
+        ),
         pytest.param("POST", "/personas", PermissionType.PERSONA_WRITE, id="create_persona"),
         pytest.param(
             "PUT", "/personas/{persona_identity}", PermissionType.PERSONA_WRITE, id="update_persona"
@@ -64,6 +78,15 @@ def test_create_app_every_write_route_requires_a_permission_or_is_open(
             "/personas/{persona_identity}",
             PermissionType.PERSONA_WRITE,
             id="delete_persona",
+        ),
+        pytest.param(
+            "GET", "/blog-posts", PermissionType.BLOG_POST_READ, id="find_user_blog_post_list"
+        ),
+        pytest.param(
+            "GET",
+            "/blog-posts/{blog_post_identity}",
+            PermissionType.BLOG_POST_READ,
+            id="find_blog_post",
         ),
         pytest.param("POST", "/blog-posts", PermissionType.BLOG_POST_WRITE, id="create_blog_post"),
         pytest.param(
@@ -91,6 +114,12 @@ def test_create_app_every_write_route_requires_a_permission_or_is_open(
             id="generate_blog_post",
         ),
         pytest.param(
+            "GET",
+            "/generate-text/runs/{run_identity}",
+            PermissionType.GENERATE_TEXT_RUN_READ,
+            id="find_generate_text_run",
+        ),
+        pytest.param(
             "POST",
             "/generate-text/runs/{run_identity}/resume",
             PermissionType.GENERATE_TEXT_RUN_WRITE,
@@ -98,7 +127,7 @@ def test_create_app_every_write_route_requires_a_permission_or_is_open(
         ),
     ],
 )
-def test_create_app_write_route_requires_exactly_its_permission(
+def test_create_app_route_requires_exactly_its_permission(
     method: str, path: str, expected_permission: PermissionType
 ) -> None:
     fastapi_app = create_app()

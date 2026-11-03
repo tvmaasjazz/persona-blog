@@ -61,7 +61,7 @@ async def test_get_google_callback_first_time_identity_creates_user_and_session(
         id=user_record.id,
         identity=user_record.identity,
         role=RoleType.READER,
-        permissions=frozenset(),
+        permissions=frozenset({PermissionType.PERSONA_READ, PermissionType.BLOG_POST_READ}),
     )
 
 
@@ -89,8 +89,11 @@ async def test_get_google_callback_known_creator_stores_role_and_permissions_in_
         role=RoleType.CREATOR,
         permissions=frozenset(
             {
+                PermissionType.PERSONA_READ,
                 PermissionType.PERSONA_WRITE,
+                PermissionType.BLOG_POST_READ,
                 PermissionType.BLOG_POST_WRITE,
+                PermissionType.GENERATE_TEXT_RUN_READ,
                 PermissionType.GENERATE_TEXT_RUN_WRITE,
             }
         ),

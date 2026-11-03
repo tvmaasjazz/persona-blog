@@ -18,11 +18,18 @@ async def test_find_signed_in_user_returns_user_response(
         "display_name": signed_in_user.display_name,
         "avatar_url": signed_in_user.avatar_url,
         "role": "CREATOR",
-        "permissions": ["BLOG_POST_WRITE", "GENERATE_TEXT_RUN_WRITE", "PERSONA_WRITE"],
+        "permissions": [
+            "BLOG_POST_READ",
+            "BLOG_POST_WRITE",
+            "GENERATE_TEXT_RUN_READ",
+            "GENERATE_TEXT_RUN_WRITE",
+            "PERSONA_READ",
+            "PERSONA_WRITE",
+        ],
     }
 
 
-async def test_find_signed_in_user_reader_returns_role_and_no_permissions(
+async def test_find_signed_in_user_reader_returns_role_and_read_permissions(
     api_client: AsyncClient, signed_in_reader: UserOrm
 ) -> None:
     find_signed_in_user_response = await api_client.get("/users/me")
@@ -34,7 +41,7 @@ async def test_find_signed_in_user_reader_returns_role_and_no_permissions(
         "display_name": signed_in_reader.display_name,
         "avatar_url": signed_in_reader.avatar_url,
         "role": "READER",
-        "permissions": [],
+        "permissions": ["BLOG_POST_READ", "PERSONA_READ"],
     }
 
 

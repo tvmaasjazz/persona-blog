@@ -851,3 +851,18 @@ async def test_resume_generate_text_reader_returns_403_and_leaves_run_unchanged(
     await db_session.refresh(generate_text_run_record)
     assert resume_generate_text_response.status_code == 403
     assert generate_text_run_record.status == GenerateTextRunStatusType.AWAITING_REVIEW
+
+
+async def test_find_generate_text_run_reader_returns_403(
+    api_client: AsyncClient, signed_in_reader: UserOrm, db_session: AsyncSession
+) -> None:
+    generate_text_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=signed_in_reader.id
+    )
+    await db_session.commit()
+
+    find_generate_text_run_response = await api_client.get(
+        f"/generate-text/runs/{generate_text_run_record.identity}"
+    )
+
+    assert find_generate_text_run_response.status_code == 403

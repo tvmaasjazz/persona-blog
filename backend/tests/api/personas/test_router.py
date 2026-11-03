@@ -673,3 +673,11 @@ async def test_delete_persona_reader_returns_403_and_keeps_row(
     await db_session.refresh(persona_record)
     assert delete_persona_response.status_code == 403
     assert persona_record.deleted_at is None
+
+
+@pytest.mark.usefixtures("signed_in_reader")
+async def test_find_user_persona_list_reader_returns_200(api_client: AsyncClient) -> None:
+    find_user_persona_list_response = await api_client.get("/personas")
+
+    assert find_user_persona_list_response.status_code == 200
+    assert find_user_persona_list_response.json() == {"personas": []}
