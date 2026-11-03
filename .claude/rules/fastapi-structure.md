@@ -556,7 +556,12 @@ Routes are ordered `GET` list, `GET` one, `POST`, `PUT`, `DELETE`:
 blog_post_router = APIRouter(prefix="/blog-posts", tags=["blog-posts"])
 
 
-@blog_post_router.get("")
+@blog_post_router.get(
+    "",
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_READ)),
+    ],
+)
 async def find_user_blog_post_list(
     auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> BlogPostListResponseDto:
@@ -564,11 +569,16 @@ async def find_user_blog_post_list(
     return BlogPostListResponseDto.from_result(find_user_blog_post_list_result)
 
 
-@blog_post_router.get("/{blog_post_identity}")
+@blog_post_router.get(
+    "/{blog_post_identity}",
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_READ)),
+    ],
+)
 async def find_blog_post(
-    blog_post_identity: UUID, blog_post_service: BlogPostServiceDep
+    blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> BlogPostResponseDto:
-    find_blog_post_result = await blog_post_service.find_blog_post(blog_post_identity)
+    find_blog_post_result = await blog_post_service.find_blog_post(blog_post_identity, auth_user)
     return BlogPostResponseDto.from_result(find_blog_post_result)
 
 
