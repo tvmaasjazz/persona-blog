@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.core.services import BackgroundJobService
@@ -1086,3 +1086,95 @@ async def test_delete_blog_post_signed_out_returns_401(api_client: AsyncClient) 
     delete_blog_post_response = await api_client.delete(f"/blog-posts/{uuid4()}")
 
     assert delete_blog_post_response.status_code == 401
+
+
+async def test_create_blog_post_reader_returns_403_and_writes_no_row(
+    api_client: AsyncClient, signed_in_reader: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(db_session, created_by_id=signed_in_reader.id)
+    await db_session.commit()
+
+    create_blog_post_response = await api_client.post(
+        "/blog-posts",
+        json={
+            "persona_identity": str(persona_record.identity),
+            "title": "Why Slow Mornings Make Better Writers",
+            "body": VALID_BLOG_POST_BODY,
+        },
+    )
+
+    blog_post_count_query = select(func.count(BlogPostOrm.id)).where(
+        BlogPostOrm.created_by_id == signed_in_reader.id
+    )
+    blog_post_count = await db_session.scalar(blog_post_count_query)
+    assert create_blog_post_response.status_code == 403
+    assert blog_post_count == 0
+
+
+async def test_create_blog_post_from_generate_text_run_reader_returns_403_and_writes_no_row(
+    api_client: AsyncClient, signed_in_reader: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(db_session, created_by_id=signed_in_reader.id)
+    generate_text_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=signed_in_reader.id,
+        persona_id=persona_record.id,
+        status=GenerateTextRunStatusType.COMPLETED,
+    )
+    await db_session.commit()
+
+    create_blog_post_response = await api_client.post(
+        "/blog-posts/from-generate-text-run",
+        json={"generate_text_run_identity": str(generate_text_run_record.identity)},
+    )
+
+    blog_post_count_query = select(func.count(BlogPostOrm.id)).where(
+        BlogPostOrm.created_by_id == signed_in_reader.id
+    )
+    blog_post_count = await db_session.scalar(blog_post_count_query)
+    assert create_blog_post_response.status_code == 403
+    assert blog_post_count == 0
+
+
+async def test_update_blog_post_reader_returns_403_and_leaves_row_unchanged(
+    api_client: AsyncClient, signed_in_reader: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(db_session, created_by_id=signed_in_reader.id)
+    content_item_record = await insert_content_item_row(
+        db_session, created_by_id=signed_in_reader.id, persona_id=persona_record.id
+    )
+    blog_post_record = await insert_blog_post_row(
+        db_session,
+        created_by_id=signed_in_reader.id,
+        content_item_id=content_item_record.id,
+        title="Old Title",
+    )
+    await db_session.commit()
+
+    update_blog_post_response = await api_client.put(
+        f"/blog-posts/{blog_post_record.identity}",
+        json={"title": "New Title", "body": VALID_BLOG_POST_BODY},
+    )
+
+    await db_session.refresh(blog_post_record)
+    assert update_blog_post_response.status_code == 403
+    assert blog_post_record.title == "Old Title"
+
+
+async def test_delete_blog_post_reader_returns_403_and_keeps_row(
+    api_client: AsyncClient, signed_in_reader: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(db_session, created_by_id=signed_in_reader.id)
+    content_item_record = await insert_content_item_row(
+        db_session, created_by_id=signed_in_reader.id, persona_id=persona_record.id
+    )
+    blog_post_record = await insert_blog_post_row(
+        db_session, created_by_id=signed_in_reader.id, content_item_id=content_item_record.id
+    )
+    await db_session.commit()
+
+    delete_blog_post_response = await api_client.delete(f"/blog-posts/{blog_post_record.identity}")
+
+    await db_session.refresh(blog_post_record)
+    assert delete_blog_post_response.status_code == 403
+    assert blog_post_record.deleted_at is None

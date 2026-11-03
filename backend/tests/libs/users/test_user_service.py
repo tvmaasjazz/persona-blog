@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.auth.types import AuthProviderType
 from libs.core.exceptions import ConflictException, ForbiddenException, NotFoundException
-from libs.database.orm import UserAuthProviderOrm, UserOrm
+from libs.database.orm import RoleOrm, UserAuthProviderOrm, UserOrm
+from libs.permissions.types import RoleType
 from libs.users.results import FindOrCreateUserFromAuthProviderResult, FindUserByIdentityResult
 from libs.users.services import UserService
 from tests.factories.users import (
@@ -50,6 +51,7 @@ async def test_find_or_create_user_from_auth_provider_creates_user_and_provider_
     assert find_or_create_user_from_auth_provider_result == FindOrCreateUserFromAuthProviderResult(
         id=user_record.id,
         identity=user_record.identity,
+        role=RoleType.READER,
         user_auth_provider_id=user_auth_provider_record.id,
         is_new_user=True,
     )
@@ -65,6 +67,29 @@ async def test_find_or_create_user_from_auth_provider_creates_user_and_provider_
     assert user_auth_provider_record.email_at_provider == "ada@example.com"
     assert user_auth_provider_record.created_by_id == user_record.id
     assert user_auth_provider_record.updated_by_id == user_record.id
+
+
+async def test_find_or_create_user_from_auth_provider_new_user_is_stored_as_reader(
+    db_session: AsyncSession,
+) -> None:
+    user_service = UserService(db_session=db_session)
+    find_or_create_user_from_auth_provider_input = (
+        build_find_or_create_user_from_auth_provider_input()
+    )
+
+    find_or_create_user_from_auth_provider_result = (
+        await user_service.find_or_create_user_from_auth_provider(
+            find_or_create_user_from_auth_provider_input
+        )
+    )
+
+    role_query = (
+        select(RoleOrm.code)
+        .join(UserOrm, UserOrm.role_id == RoleOrm.id)
+        .where(UserOrm.id == find_or_create_user_from_auth_provider_result.id)
+    )
+    stored_role = await db_session.scalar(role_query)
+    assert stored_role == RoleType.READER
 
 
 async def test_find_or_create_user_from_auth_provider_existing_provider_returns_existing_user(
@@ -95,10 +120,32 @@ async def test_find_or_create_user_from_auth_provider_existing_provider_returns_
     assert find_or_create_user_from_auth_provider_result == FindOrCreateUserFromAuthProviderResult(
         id=user_record.id,
         identity=user_record.identity,
+        role=RoleType.CREATOR,
         user_auth_provider_id=user_auth_provider_record.id,
         is_new_user=False,
     )
     assert user_auth_provider_count == 1
+
+
+async def test_find_or_create_user_from_auth_provider_existing_provider_returns_stored_role(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session, role=RoleType.ADMIN)
+    await insert_user_auth_provider_row(
+        db_session, user_id=user_record.id, provider_subject="google-subject-5"
+    )
+    user_service = UserService(db_session=db_session)
+    find_or_create_user_from_auth_provider_input = (
+        build_find_or_create_user_from_auth_provider_input(provider_subject="google-subject-5")
+    )
+
+    find_or_create_user_from_auth_provider_result = (
+        await user_service.find_or_create_user_from_auth_provider(
+            find_or_create_user_from_auth_provider_input
+        )
+    )
+
+    assert find_or_create_user_from_auth_provider_result.role == RoleType.ADMIN
 
 
 async def test_find_or_create_user_from_auth_provider_inactive_user_raises_forbidden_exception(

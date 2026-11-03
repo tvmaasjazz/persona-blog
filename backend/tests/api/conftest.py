@@ -13,6 +13,8 @@ from apps.api.core.dependencies import get_llm_service
 from libs.auth.services import AuthSessionService
 from libs.core.services import BackgroundJobService
 from libs.database.orm import UserOrm
+from libs.permissions.types import RoleType
+from tests.factories.auth import build_auth_user
 from tests.factories.users import insert_user_row
 from tests.stubs.llm import LlmServiceStub
 
@@ -48,11 +50,29 @@ async def signed_in_user(
     auth_session_service = AuthSessionService(
         redis_client=redis_client, auth_settings=app_settings.auth
     )
-    session_id = await auth_session_service.create_session(
-        user_id=user_record.id, user_identity=user_record.identity
-    )
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    session_id = await auth_session_service.create_session(auth_user)
     api_client.cookies.set("sid", session_id)
     return user_record
+
+
+@pytest.fixture
+async def signed_in_reader(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    redis_client: Redis,
+    app_settings: AppSettings,
+) -> UserOrm:
+    reader_record = await insert_user_row(db_session, role=RoleType.READER)
+    auth_session_service = AuthSessionService(
+        redis_client=redis_client, auth_settings=app_settings.auth
+    )
+    reader_auth_user = build_auth_user(
+        user_id=reader_record.id, user_identity=reader_record.identity, role=RoleType.READER
+    )
+    session_id = await auth_session_service.create_session(reader_auth_user)
+    api_client.cookies.set("sid", session_id)
+    return reader_record
 
 
 @pytest.fixture
@@ -66,9 +86,10 @@ async def other_user_client(
     auth_session_service = AuthSessionService(
         redis_client=redis_client, auth_settings=app_settings.auth
     )
-    other_session_id = await auth_session_service.create_session(
+    other_auth_user = build_auth_user(
         user_id=other_user_record.id, user_identity=other_user_record.identity
     )
+    other_session_id = await auth_session_service.create_session(other_auth_user)
     other_api_transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(
         transport=other_api_transport, base_url="https://test", cookies={"sid": other_session_id}

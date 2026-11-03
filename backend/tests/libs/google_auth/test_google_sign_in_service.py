@@ -9,8 +9,11 @@ from libs.auth.settings import AuthSettings
 from libs.core.exceptions import UnauthorizedException
 from libs.database.orm import UserAuthProviderOrm, UserOrm
 from libs.google_auth.services import GoogleSignInService
+from libs.permissions.services import PermissionService
+from libs.permissions.types import PermissionType, RoleType
 from libs.users.services import UserActivityService, UserService
 from libs.users.settings import UserSettings
+from tests.factories.users import insert_user_auth_provider_row, insert_user_row
 from tests.stubs.google_auth import GoogleOAuthServiceStub
 
 
@@ -34,11 +37,43 @@ async def test_sign_in_with_google_new_identity_creates_user_and_session(
     stored_session = await redis_client.get(f"session:{google_sign_in_result.session_id}")
     assert stored_session is not None
     assert AuthUser.model_validate_json(stored_session) == AuthUser(
-        id=user_record.id, identity=user_record.identity
+        id=user_record.id,
+        identity=user_record.identity,
+        role=RoleType.READER,
+        permissions=frozenset(),
     )
     assert google_sign_in_result.is_new_user is True
     assert user_record.last_login_at is not None
     assert user_auth_provider_record.last_used_at is not None
+
+
+async def test_sign_in_with_google_known_creator_stores_role_and_permissions_in_session(
+    db_session: AsyncSession, redis_client: Redis
+) -> None:
+    user_record = await insert_user_row(db_session, email="ada@example.com", role=RoleType.CREATOR)
+    await insert_user_auth_provider_row(
+        db_session, user_id=user_record.id, provider_subject="google-subject-stub"
+    )
+    google_sign_in_service = _build_google_sign_in_service(db_session, redis_client)
+
+    google_sign_in_result = await google_sign_in_service.sign_in_with_google(
+        "auth-code-1", "state-1"
+    )
+
+    stored_session = await redis_client.get(f"session:{google_sign_in_result.session_id}")
+    assert stored_session is not None
+    assert AuthUser.model_validate_json(stored_session) == AuthUser(
+        id=user_record.id,
+        identity=user_record.identity,
+        role=RoleType.CREATOR,
+        permissions=frozenset(
+            {
+                PermissionType.PERSONA_WRITE,
+                PermissionType.BLOG_POST_WRITE,
+                PermissionType.GENERATE_TEXT_RUN_WRITE,
+            }
+        ),
+    )
 
 
 async def test_sign_in_with_google_known_identity_reuses_user(
@@ -92,4 +127,5 @@ def _build_google_sign_in_service(
         user_service=UserService(db_session=db_session),
         user_activity_service=user_activity_service,
         auth_session_service=auth_session_service,
+        permission_service=PermissionService(db_session=db_session),
     )

@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.core.services import BackgroundJobService
@@ -12,6 +12,7 @@ from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.generate_text.types import GenerateTextRunStatusType
 from tests.factories.generate_text import insert_generate_text_run_row
 from tests.factories.llm import build_llm_completion_result
+from tests.factories.personas import insert_persona_row
 from tests.stubs.llm import LlmServiceStub
 
 pytestmark = pytest.mark.usefixtures("llm_service_stub")
@@ -807,3 +808,46 @@ async def test_resume_generate_text_version_mismatch_returns_409(
     )
 
     assert resume_generate_text_response.status_code == 409
+
+
+async def test_generate_blog_post_reader_returns_403_and_creates_no_run(
+    api_client: AsyncClient, signed_in_reader: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(db_session, created_by_id=signed_in_reader.id)
+    await db_session.commit()
+
+    generate_blog_post_response = await api_client.post(
+        "/generate-text/blog-post",
+        json={
+            "prompt_text": "Write about sourdough starters.",
+            "persona_identity": str(persona_record.identity),
+            "options": {},
+        },
+    )
+
+    run_count_query = select(func.count(GenerateTextRunOrm.id)).where(
+        GenerateTextRunOrm.created_by_id == signed_in_reader.id
+    )
+    run_count = await db_session.scalar(run_count_query)
+    assert generate_blog_post_response.status_code == 403
+    assert run_count == 0
+
+
+async def test_resume_generate_text_reader_returns_403_and_leaves_run_unchanged(
+    api_client: AsyncClient, signed_in_reader: UserOrm, db_session: AsyncSession
+) -> None:
+    generate_text_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=signed_in_reader.id,
+        status=GenerateTextRunStatusType.AWAITING_REVIEW,
+    )
+    await db_session.commit()
+
+    resume_generate_text_response = await api_client.post(
+        f"/generate-text/runs/{generate_text_run_record.identity}/resume",
+        json={"is_approved": True, "feedback_text": None},
+    )
+
+    await db_session.refresh(generate_text_run_record)
+    assert resume_generate_text_response.status_code == 403
+    assert generate_text_run_record.status == GenerateTextRunStatusType.AWAITING_REVIEW
