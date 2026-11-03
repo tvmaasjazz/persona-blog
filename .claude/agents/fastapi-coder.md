@@ -30,7 +30,8 @@ to touch so your code matches what is there.
 
 The rules files say where each of these lives and how it is shaped.
 
-- **Domain library code** — services, including a `<Domain>ValidationService` for
+- **Domain library code**, including the roles and permissions lib, `libs/permissions/`
+  — services, including a `<Domain>ValidationService` for
   validation guards (`fastapi-structure.md` › Services › Validation guards), Input and
   Result models, domain settings,
   constants, enums (`types.py`), after-response tasks (`after_response_tasks.py`), prompts, exceptions,
@@ -42,7 +43,9 @@ The rules files say where each of these lives and how it is shaped.
 - **HTTP layer** — DTOs, including request field limits as `StringConstraints`
   aliases (`fastapi-structure.md` › DTOs › Inbound), dependency factories with their
   `Annotated` aliases,
-  `validate_<what>` guard dependencies, thin routers
+  `validate_<what>` guard dependencies, thin routers, and the
+  `Depends(require_permissions(...))` that comes first in each write route's
+  `dependencies` (`fastapi-structure.md` › The acting user)
 - **Background jobs** — a service whose work runs for minutes takes
   `BackgroundJobService` through `__init__`, wired from `app.state` in its dependency
   factory, and starts the work with `start()` (`fastapi-structure.md` › After-response
