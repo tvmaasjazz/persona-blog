@@ -14,7 +14,7 @@ before.
 
 What a user may do comes from their role's permissions. What a creator may spend comes
 from their credit balance. There are no payments yet, but both are the shapes payments
-will use.
+will use. Two PRs: roles and permissions first, then credits.
 
 **Roles:**
 
@@ -25,22 +25,30 @@ will use.
 - **Reader:** signs in only to read: other people's posts and comments, and later
   following a persona's blog for email notifications. Never posts. Every new user
   starts as a reader.
+- **System:** the system user's role, with no permissions. The system user never
+  signs in; a job may write as it.
 
 **Permissions:**
 
 - Permissions live in tables: a role table, a permission table and a join between them,
-  and each user references one role. Code checks permissions, never roles: a route
-  depends on `require_permission(...)`, and a service asks whether the user has one.
-- A user can also be granted a permission their role lacks, in a per-user table, so
-  two users with the same role can differ without a new role. A user's permissions are
-  their role's plus their own grants.
+  and each user has exactly one role. No per-user grants: a user's permissions are
+  their role's. Code checks permissions, never roles: a route lists the permissions it
+  needs with `Depends(require_permissions(...))`, and a test fails any write route
+  that names none and isn't on its short list of open routes.
 - The admin role holds every permission as explicit rows, not a wildcard, so each
   migration that adds a permission grants it to the admin.
-- A user's permissions are cached in their sign-in session, so the auth guard reads no
-  table per request. Changing a user's role or permissions deletes their sessions, and
-  they sign in again with the new set. A user has a session per browser or device, and
-  sessions are in Redis by session id today, so this adds a per-user set of session
-  ids to find them all.
+- Existing users are backfilled as creators. The first admin is set with an SQL update
+  in each environment, not a migration, so the admin's email stays out of the repo.
+- A user's role and permissions are cached in their sign-in session, so the auth guard
+  reads no table per request. A stored session that doesn't match the current shape is
+  treated as expired, so a change to the session's shape costs one sign-in and no
+  deploy step.
+- No endpoints or pages change a role yet: granting credits (the credits PR) makes the
+  user a creator, and anything else is SQL. Changing a role in code deletes the user's
+  sessions, and they sign in again with the new set. A user has a session per browser
+  or device, and sessions are in Redis by session id today, so the credits PR adds a
+  per-user set of session ids to find them all. After an SQL change, the user signs out
+  and in.
 
 **Credits:**
 
@@ -76,8 +84,8 @@ will use.
 
 **Admin panel and the user's balance:**
 
-- An admin page: users with their role and balance, change a user's role, grant
-  permissions, grant credits with a note, and see a user's ledger.
+- An admin page: users with their role and balance, grant credits with a note, which
+  makes the user a creator, and see a user's ledger.
 - The user response carries the user's role, permissions, balance and whether it's
   low, and the profile shows the remaining balance.
 
@@ -233,7 +241,14 @@ short and the heartbeat steady makes it rare.
 
 ## Phase 3 — Features
 
-### 1. Avatars
+### 1. Invite links
+
+The admin creates an invite carrying a role (creator), a credit amount and an expiry,
+and sends its link. The link holds a one-time code, stored hashed. The code is carried
+through Google sign-in in the OAuth state, and signing in with it uses it up: the user
+becomes a creator and gets the credits as a `GRANT` on the ledger.
+
+### 2. Avatars
 
 A persona's avatar is either an uploaded image or one generated with fal, and either
 way it's stored in S3. The persona form uploads or generates the image, then sends the
@@ -243,7 +258,7 @@ A generated avatar is charged to the creator's balance, like a run.
 **To decide:** the S3 host, the fal model and the prompt it's given from the persona's
 fields, and the upload's size and type limits. The fal API key comes when this starts.
 
-### 2. Persona from voice or text
+### 3. Persona from voice or text
 
 The user speaks or types what they have in mind for a persona. An endpoint sends that to
 a simple LLM call, which returns a filled persona form without saving anything. The
@@ -255,22 +270,22 @@ usual. Create only for now.
 - Speech to text in the browser, or audio sent to a transcription model
 - How it works for updating an existing persona
 
-### 3. Blog posts and writing examples from voice or text
+### 4. Blog posts and writing examples from voice or text
 
 The same input for describing a blog post to generate, and for a writing example.
 
-### 4. Humanization
+### 5. Humanization
 
 Rework the humanize part of the graph from Tyler's samples and notes on humanizing,
 possibly as several calls rather than one prompt. Try adding or removing steps in the
 generation, different models and different prompts while at it.
 
-### 5. Homepage feed and search
+### 6. Homepage feed and search
 
 A homepage with a feed of public posts and a search. Until then the app starts on My
 personas.
 
-### 6. Payments
+### 7. Payments
 
 A creator tops up their balance (a first payment of $5, say), by hand or with
 auto-refill, and becoming a creator means adding payment details and that first top-up.

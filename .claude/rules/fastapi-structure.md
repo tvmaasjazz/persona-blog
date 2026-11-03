@@ -423,11 +423,31 @@ update keeps `<Entity>Dto` with an `Update<Entity>Input`:
 ### The acting user
 
 The auth guard, `AuthUserDep` in `core/dependencies.py`, resolves the session to an
-`AuthUser` in request scope, carrying the signed-in user's `id` and `identity`. A
+`AuthUser` in request scope, carrying the signed-in user's `id`, `identity`, `role`
+and `permissions`, all stored in the session at sign-in. A
 route that needs the acting user takes `AuthUserDep` and passes the `AuthUser` to the
 service. Any service method that writes takes it as its last parameter and fills the
 audit columns from `auth_user.id`. Services never read the current user from
 anywhere else.
+
+A route that needs a permission lists it first in its `dependencies`, before any
+validation guard, so a caller without it is refused before anything is read:
+
+```python
+@persona_router.post(
+    "",
+    status_code=201,
+    dependencies=[
+        Depends(require_permissions(PermissionType.PERSONA_WRITE)),
+        Depends(validate_new_persona_name),
+    ],
+)
+```
+
+`require_permissions(...)` in `core/dependencies.py` raises `ForbiddenException` unless
+the user holds every permission named. Code checks permissions, never roles. Every
+route that isn't a `GET` names a permission, unless it's open to any caller by design,
+such as logout; a test walks the app's routes and fails on one that does neither.
 
 **Never subclass an `Input` to make a `Dto`.** Declare the `Dto` independently.
 Every `Dto` has a `to_input()`; every domain `ResponseDto` has a `from_result()`.
