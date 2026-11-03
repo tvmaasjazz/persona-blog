@@ -984,6 +984,9 @@ class ForbiddenException(Exception): ...
 class UnprocessableException(Exception): ...
 
 
+class PaymentRequiredException(Exception): ...
+
+
 class RateLimitedException(Exception): ...
 
 
@@ -1034,6 +1037,7 @@ STATUS_CODE_BY_EXCEPTION: dict[type[Exception], int] = {
     NotFoundException: 404,
     ConflictException: 409,
     UnauthorizedException: 401,
+    PaymentRequiredException: 402,
     ForbiddenException: 403,
     UnprocessableException: 422,
     RateLimitedException: 429,
