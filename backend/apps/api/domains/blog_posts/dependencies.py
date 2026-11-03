@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import Depends, Request
 
+from apps.api.core.config import AppSettings
 from apps.api.core.dependencies import AuthUserDep, DbSessionDep
 from apps.api.domains.blog_posts.dtos import (
     BlogPostDto,
@@ -54,7 +55,10 @@ GenerateTextRunServiceDep = Annotated[
 def get_generate_text_step_service(request: Request) -> GenerateTextStepService:
     """Builds the generate text step service on the app's session factory, not a request session."""
     db_session_factory = request.app.state.db_session_factory
-    return GenerateTextStepService(db_session_factory=db_session_factory)
+    app_settings: AppSettings = request.app.state.settings
+    return GenerateTextStepService(
+        db_session_factory=db_session_factory, credit_settings=app_settings.credits
+    )
 
 
 GenerateTextStepServiceDep = Annotated[

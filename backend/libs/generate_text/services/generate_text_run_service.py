@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
+from libs.credits.services import CreditLedgerService
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.database.orm.persona import PersonaOrm
@@ -213,7 +214,8 @@ class GenerateTextRunService:
     async def fail_run(
         self, run_id: int, error_code: str | None = None, error_message: str | None = None
     ) -> None:
-        """Marks the run FAILED, recording an error only when no step owns it."""
+        """Marks the run FAILED, recording an error only when no step owns it, and refunds
+        the charges since its last review."""
         async with self._db_session_factory() as db_session, db_session.begin():
             # Read the status first: a WHERE on it couldn't tell an unknown run from a failed one
             status_query = select(GenerateTextRunOrm.status).where(GenerateTextRunOrm.id == run_id)
@@ -246,6 +248,10 @@ class GenerateTextRunService:
                 )
             )
             await db_session.execute(run_failure_update)
+
+            # Refund the steps whose work the failure lost, in the same transaction
+            credit_ledger_service = CreditLedgerService(db_session=db_session)
+            await credit_ledger_service.refund_failed_generate_text_run_segment(run_id)
 
     async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
         """Finds a run by identity without checking who owns it; persona_identity is None once

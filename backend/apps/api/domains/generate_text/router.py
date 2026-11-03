@@ -6,6 +6,8 @@ from apps.api.core.dependencies import AuthUserDep, require_permissions
 from apps.api.domains.generate_text.dependencies import (
     GenerateTextPersonaDep,
     GenerateTextServiceDep,
+    validate_active_run_limit,
+    validate_credit_balance_covers_run,
 )
 from apps.api.domains.generate_text.dtos import (
     GenerateBlogPostDto,
@@ -22,6 +24,8 @@ generate_text_router = APIRouter(prefix="/generate-text", tags=["generate-text"]
     status_code=202,
     dependencies=[
         Depends(require_permissions(PermissionType.GENERATE_TEXT_RUN_WRITE)),
+        Depends(validate_credit_balance_covers_run),
+        Depends(validate_active_run_limit),
     ],
 )
 async def generate_blog_post(
@@ -58,6 +62,8 @@ async def find_generate_text_run(
     status_code=202,
     dependencies=[
         Depends(require_permissions(PermissionType.GENERATE_TEXT_RUN_WRITE)),
+        Depends(validate_credit_balance_covers_run),
+        Depends(validate_active_run_limit),
     ],
 )
 async def resume_generate_text(

@@ -1,9 +1,11 @@
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.core.exceptions import ConflictException, ForbiddenException, NotFoundException
+from libs.credits.utils import CreditUtils
 from libs.database.orm import RoleOrm, UserAuthProviderOrm, UserOrm
 from libs.permissions.types import RoleType
 from libs.users.inputs import FindOrCreateUserFromAuthProviderInput
@@ -13,8 +15,11 @@ from libs.users.results import FindOrCreateUserFromAuthProviderResult, FindUserB
 class UserService:
     """Finds users and creates them on first sign-in through an auth provider."""
 
-    def __init__(self, db_session: AsyncSession) -> None:
+    def __init__(
+        self, db_session: AsyncSession, *, low_credit_balance_threshold_usd: Decimal
+    ) -> None:
         self._db_session = db_session
+        self._low_credit_balance_threshold_usd = low_credit_balance_threshold_usd
 
     async def find_or_create_user_from_auth_provider(
         self,
@@ -39,7 +44,15 @@ class UserService:
 
         if user_record is None:
             raise NotFoundException("User not found")
-        return FindUserByIdentityResult.model_validate(user_record, from_attributes=True)
+        is_credit_balance_low = CreditUtils.is_balance_low(
+            user_record.credit_balance_usd, self._low_credit_balance_threshold_usd
+        )
+        find_user_by_identity_result = FindUserByIdentityResult.model_validate(
+            user_record, from_attributes=True
+        )
+        return find_user_by_identity_result.model_copy(
+            update={"is_credit_balance_low": is_credit_balance_low}
+        )
 
     async def _find_user_from_auth_provider(
         self,

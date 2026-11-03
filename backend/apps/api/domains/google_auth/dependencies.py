@@ -52,7 +52,10 @@ def get_google_sign_in_service(
     )
     return GoogleSignInService(
         google_oauth_service=google_oauth_service,
-        user_service=UserService(db_session=db_session),
+        user_service=UserService(
+            db_session=db_session,
+            low_credit_balance_threshold_usd=app_settings.credits.low_balance_threshold_usd,
+        ),
         user_activity_service=user_activity_service,
         auth_session_service=auth_session_service,
         permission_service=PermissionService(db_session=db_session),
