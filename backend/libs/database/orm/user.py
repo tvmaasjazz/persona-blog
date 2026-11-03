@@ -1,6 +1,7 @@
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import BigInteger, ForeignKey, Index, false, text, true
+from sqlalchemy import BigInteger, ForeignKey, Index, Numeric, false, text, true
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,6 +31,7 @@ class UserOrm(BaseOrm):
     is_system_user: Mapped[bool] = mapped_column(server_default=false())
     last_login_at: Mapped[datetime | None]
     last_activity_at: Mapped[datetime | None]
+    credit_balance_usd: Mapped[Decimal] = mapped_column(Numeric(16, 10), server_default=text("0"))
     role_id: Mapped[int] = mapped_column(BigInteger, ForeignKey(RoleOrm.id))
 
     # A person signing up has no creator, so pb_user relaxes BaseOrm's audit columns.
