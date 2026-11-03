@@ -191,7 +191,7 @@ frontend/src/
 ├── features/        one folder per area: api hooks, components, form schemas
 ├── routes/          one file per page, composing features
 └── components/      shared UI: shadcn/ui, the form layer, layout
-plans/plan.md        the build plan, step by step
+plans/plan.md        the plan from here on; plans/archive/ holds earlier ones
 ```
 
 ## Built with Claude Code
