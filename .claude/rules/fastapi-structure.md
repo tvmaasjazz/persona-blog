@@ -53,6 +53,8 @@ backend/
 │   │       ├── __init__.py    # re-exports both
 │   │       ├── auth_session_service.py
 │   │       └── oauth_state_service.py
+│   ├── credits/
+│   │   └── services/          # CreditLedgerService, CreditValidationService
 │   ├── permissions/
 │   │   ├── services.py        # PermissionService: which permissions a role holds
 │   │   └── types.py           # RoleType, PermissionType
@@ -70,7 +72,7 @@ backend/
 │       ├── after_response_tasks.py # after-response task functions, if any
 │       └── constants.py
 ├── migrations/                # raw SQL; see database.md
-├── scripts/                   # db/check_schema_drift.py, e2e/ API walkthroughs
+├── scripts/                   # db/check_schema_drift.py, grant_credits.py, e2e/ API walkthroughs
 ├── alembic.ini
 └── pyproject.toml
 ```

@@ -18,7 +18,7 @@ will use. Two PRs: roles and permissions first, then credits.
 
 **Roles:**
 
-- **Admin:** every permission, and runs aren't charged. Tyler, and anyone added later.
+- **Admin:** every permission, and charged like anyone. Tyler, and anyone added later.
 - **Creator:** creates personas and blog posts, and generates, paid from their balance.
   For now the admin makes someone a creator and grants them credits; later a user
   becomes one by adding payment details and a first top-up.
@@ -310,8 +310,8 @@ A creator tops up their balance (a first payment of $5, say), by hand or with
 auto-refill, and becoming a creator means adding payment details and that first top-up.
 Auto-refill is a user setting: a threshold and an amount. A user without it gets the
 low balance warning.
-A payment is a `GRANT` on the ledger. Charges get a markup in the charge function, and
-the run estimate may become a hold settled at the end.
+A payment is a `PURCHASE` on the ledger, a new entry type, kept apart from free
+`GRANT`s. Charges get a markup in the charge function; see Later › Credit holds.
 
 **To decide:** the payment provider, and whether to use a merchant of record, which
 handles sales tax and VAT on digital sales.
