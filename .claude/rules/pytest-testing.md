@@ -66,7 +66,7 @@ backend/tests/
 │   ├── users/
 │   │   ├── conftest.py
 │   │   └── test_router.py
-│   ├── test_app_factory.py  # every write route names a permission
+│   ├── test_app_factory.py  # every route names a permission
 │   └── test_lifespan.py
 └── migrations/
     ├── conftest.py
@@ -103,11 +103,11 @@ backend/tests/
 | `libs/<d>/inputs.py`, `results.py`   | `tests/libs/<d>/test_inputs.py`, `test_results.py` | Only models with a validator or declared constraint: accepted and rejected values (§1) |
 | `libs/<d>/states.py`                 | `tests/libs/<d>/test_states.py`        | Only a method that does more than group stored fields; otherwise the graph and service tests cover it |
 | Class with an enum dispatch map      | That class's test file                 | Every enum member has a handler (§1) |
-| `apps/api/domains/<d>/router.py`     | `tests/api/<d>/test_router.py`         | For each route: happy path, 422 per declared constraint, each exception the service raises, 401 if protected, 403 if it names a permission, persisted state for writes (§6) |
+| `apps/api/domains/<d>/router.py`     | `tests/api/<d>/test_router.py`         | For each route: happy path, 422 per declared constraint, each exception the service raises, 401 if protected, 403 if a reader lacks its permission, persisted state for writes (§6) |
 | `apps/api/domains/<d>/dtos.py`, `apps/api/core/dtos.py` | None, unless a mapper has logic | Route tests cover plain field copying |
 | `apps/api/domains/<d>/dependencies.py` | None                                 | Route tests run the real factories |
 | `apps/api/core/dependencies.py`      | `tests/api/core/test_dependencies.py`  | Session commits and rolls back, `require_permissions` passing and refusing (§7) |
-| `apps/api/app_factory.py`            | `tests/api/test_app_factory.py`        | Every route that isn't read-only names a permission or is on the open-route allowlist, and each write route names exactly its permission (§7, `fastapi-structure.md` › The acting user) |
+| `apps/api/app_factory.py`            | `tests/api/test_app_factory.py`        | Every route names a permission or is on the open-route allowlist, and each names exactly its permission (§7, `fastapi-structure.md` › The acting user) |
 | `apps/api/core/config.py`            | `tests/api/core/test_config.py`        | TOML beats default, env beats TOML, missing secret fails (§8) |
 | `apps/api/core/exception_handlers.py` | `tests/api/core/test_exception_handlers.py` | Each standard exception maps to its status; a lib exception gets its parent's; unhandled errors return 500 without internals (§7) |
 | `libs/core/exceptions.py`, `libs/<d>/exceptions.py` | None                   | The app factory tests and the service tests that raise them cover these |
@@ -649,7 +649,8 @@ def weather_service_stub(fastapi_app: FastAPI) -> WeatherServiceStub:
 (`AuthUserDep`). A session holds an `AuthUser` with a role and its permissions, built
 with `build_auth_user` (`tests/factories/auth.py`), which gives a role its seeded
 permissions unless the test passes others. `signed_in_user` is a creator, so it holds
-every write route's permission; `signed_in_reader` is a reader, which holds none.
+every route's permission; `signed_in_reader` is a reader, which holds only the persona
+and blog post reads.
 
 ```python
 # tests/api/conftest.py
@@ -685,7 +686,7 @@ async def signed_in_user(
 | Response hides internals      | Whole-body equality already covers it: an extra field like `google_subject_id` fails |
 | Protected route, signed out   | One test per protected route using plain `api_client`; assert 401 |
 | Protected route, signed in    | `@pytest.mark.usefixtures("signed_in_user")`, or request it to use the user's values |
-| Signed in without the route's permission | One test per route that names a permission, with `signed_in_reader`; assert 403, then select to prove nothing was written or changed |
+| Signed in without the route's permission | One test per route whose permission a reader lacks, with `signed_in_reader`; assert 403, and for a write, select to prove nothing was written or changed. A read every role holds needs none: `test_dependencies.py` covers refusal |
 | Invalid or expired session    | Covered once by `find_session`'s tests in `tests/libs/auth/test_auth_session_service.py` (missing, expired, old shape), not per route |
 | Another user's rows           | Create them through a second signed-in client, the way a real second user would. Never insert them with a factory in a route test |
 | Not found → 404               | Use an id that was never inserted |
@@ -767,8 +768,8 @@ async def test_build_digest_signed_out_returns_401(api_client: AsyncClient) -> N
     assert build_digest_response.status_code == 401
 ```
 
-A route that names a permission gets a 403 test with `signed_in_reader`, which then
-selects to prove nothing was written:
+A route whose permission a reader lacks gets a 403 test with `signed_in_reader`; a
+write's test then selects to prove nothing was written:
 
 ```python
 # tests/api/personas/test_router.py
@@ -803,7 +804,7 @@ test's `fastapi_app` inside the test body.
 | `test_dependencies.py`  | `get_db_session` commits             | A throwaway route with `DbSessionDep` inserts a row; select through `db_session` and assert it's present |
 | `test_dependencies.py`  | `get_db_session` rolls back on error | The route inserts, then raises. Wrap the request in `pytest.raises`, then assert the row is absent |
 | `test_dependencies.py`  | `require_permissions`                | A throwaway route requiring permissions: a session holding them all reaches the route; one missing a permission gets 403 and the route body never runs; signed out gets 401 |
-| `test_app_factory.py`   | Every write route names a permission | Walk the app's routes (`fastapi-structure.md` › The acting user): each route that isn't read-only names a permission or is on the open-route allowlist, and each write route names exactly its permission |
+| `test_app_factory.py`   | Every route names a permission       | Walk the app's routes (`fastapi-structure.md` › The acting user): each route names a permission or is on the open-route allowlist, and each names exactly its permission |
 
 ```python
 # tests/api/core/test_exception_handlers.py

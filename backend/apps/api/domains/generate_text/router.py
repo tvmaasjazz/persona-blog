@@ -37,7 +37,12 @@ async def generate_blog_post(
     return GenerateTextRunResponseDto.from_result(generate_text_result)
 
 
-@generate_text_router.get("/runs/{run_identity}")
+@generate_text_router.get(
+    "/runs/{run_identity}",
+    dependencies=[
+        Depends(require_permissions(PermissionType.GENERATE_TEXT_RUN_READ)),
+    ],
+)
 async def find_generate_text_run(
     run_identity: UUID, auth_user: AuthUserDep, generate_text_service: GenerateTextServiceDep
 ) -> GenerateTextRunResponseDto:

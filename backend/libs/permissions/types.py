@@ -13,6 +13,9 @@ class RoleType(StrEnum):
 class PermissionType(StrEnum):
     """An action a role may be allowed to take."""
 
+    PERSONA_READ = "PERSONA_READ"
     PERSONA_WRITE = "PERSONA_WRITE"
+    BLOG_POST_READ = "BLOG_POST_READ"
     BLOG_POST_WRITE = "BLOG_POST_WRITE"
+    GENERATE_TEXT_RUN_READ = "GENERATE_TEXT_RUN_READ"
     GENERATE_TEXT_RUN_WRITE = "GENERATE_TEXT_RUN_WRITE"

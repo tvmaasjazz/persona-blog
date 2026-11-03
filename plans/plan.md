@@ -33,8 +33,11 @@ will use. Two PRs: roles and permissions first, then credits.
 - Permissions live in tables: a role table, a permission table and a join between them,
   and each user has exactly one role. No per-user grants: a user's permissions are
   their role's. Code checks permissions, never roles: a route lists the permissions it
-  needs with `Depends(require_permissions(...))`, and a test fails any write route
-  that names none and isn't on its short list of open routes.
+  needs with `Depends(require_permissions(...))`, reads included, and a test fails any
+  route that names none and isn't on its short list of open routes.
+- Permissions: `PERSONA_READ`, `PERSONA_WRITE`, `BLOG_POST_READ`, `BLOG_POST_WRITE`,
+  `GENERATE_TEXT_RUN_READ` and `GENERATE_TEXT_RUN_WRITE`. Admin and creator hold them
+  all; a reader holds the persona and blog post reads; System holds none.
 - The admin role holds every permission as explicit rows, not a wildcard, so each
   migration that adds a permission grants it to the admin.
 - Existing users are backfilled as creators. The first admin is set with an SQL update

@@ -442,7 +442,7 @@ service. Any service method that writes takes it as its last parameter and fills
 audit columns from `auth_user.id`. Services never read the current user from
 anywhere else.
 
-A route that needs a permission lists it first in its `dependencies`, before any
+A route lists the permission it needs first in its `dependencies`, before any
 validation guard, so a caller without it is refused before anything is read:
 
 ```python
@@ -458,9 +458,12 @@ validation guard, so a caller without it is refused before anything is read:
 
 `require_permissions(...)` in `core/dependencies.py` raises `ForbiddenException` unless
 the user holds every permission named. Code checks permissions, never roles. Every
-route that isn't a `GET` names a permission, unless it's open to any caller by design,
-such as logout. `tests/api/test_app_factory.py` walks the app's routes and fails on one
-that does neither; a route open by design goes on its allowlist there. It walks them
+route names a permission, reads included, unless it's open by design: health, Google
+sign-in, logout, the development-only LLM route, and `GET /users/me`, which any
+signed-in user may call for their own profile. A read permission sits in front of the
+service's own access check, such as ownership or a public flag, and doesn't replace it.
+`tests/api/test_app_factory.py` walks the app's routes and fails on one that does
+neither; a route open by design goes on its allowlist there. It walks them
 with `fastapi.routing.iter_route_contexts`, since `app.routes` no longer lists an
 included router's routes, and a walk over it would pass without checking anything.
 

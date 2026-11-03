@@ -19,7 +19,12 @@ from libs.permissions.types import PermissionType
 persona_router = APIRouter(prefix="/personas", tags=["personas"])
 
 
-@persona_router.get("")
+@persona_router.get(
+    "",
+    dependencies=[
+        Depends(require_permissions(PermissionType.PERSONA_READ)),
+    ],
+)
 async def find_user_persona_list(
     auth_user: AuthUserDep, persona_service: PersonaServiceDep
 ) -> PersonaListResponseDto:
@@ -28,7 +33,12 @@ async def find_user_persona_list(
     return PersonaListResponseDto.from_result(find_user_persona_list_result)
 
 
-@persona_router.get("/{persona_identity}")
+@persona_router.get(
+    "/{persona_identity}",
+    dependencies=[
+        Depends(require_permissions(PermissionType.PERSONA_READ)),
+    ],
+)
 async def find_persona(
     persona_identity: UUID, auth_user: AuthUserDep, persona_service: PersonaServiceDep
 ) -> PersonaResponseDto:

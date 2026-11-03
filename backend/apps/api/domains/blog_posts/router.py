@@ -25,7 +25,12 @@ from libs.permissions.types import PermissionType
 blog_post_router = APIRouter(prefix="/blog-posts", tags=["blog-posts"])
 
 
-@blog_post_router.get("")
+@blog_post_router.get(
+    "",
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_READ)),
+    ],
+)
 async def find_user_blog_post_list(
     query_dto: Annotated[BlogPostFetchAllQueryDto, Query()],
     auth_user: AuthUserDep,
@@ -38,7 +43,12 @@ async def find_user_blog_post_list(
     return BlogPostListResponseDto.from_result(find_user_blog_post_list_result)
 
 
-@blog_post_router.get("/{blog_post_identity}")
+@blog_post_router.get(
+    "/{blog_post_identity}",
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_READ)),
+    ],
+)
 async def find_blog_post(
     blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> BlogPostResponseDto:

@@ -44,7 +44,7 @@ The rules files say where each of these lives and how it is shaped.
   aliases (`fastapi-structure.md` › DTOs › Inbound), dependency factories with their
   `Annotated` aliases,
   `validate_<what>` guard dependencies, thin routers, and the
-  `Depends(require_permissions(...))` that comes first in each write route's
+  `Depends(require_permissions(...))` that comes first in each route's
   `dependencies` (`fastapi-structure.md` › The acting user)
 - **Background jobs** — a service whose work runs for minutes takes
   `BackgroundJobService` through `__init__`, wired from `app.state` in its dependency

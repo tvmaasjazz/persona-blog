@@ -103,8 +103,9 @@ comparison into a partial one, catching the exception, or adding `skip` / `xfail
   When the code disagrees with the intended behaviour, report a bug.
 - Never add a dependency or import a package the project doesn't already use.
 - A route test's signed-in fixture must hold the route's permission: `signed_in_user`
-  is a creator, `signed_in_reader` holds none. A route that names a permission also
-  gets a 403 test with `signed_in_reader` (`pytest-testing.md` › §6 Route tests).
+  is a creator, `signed_in_reader` holds only the persona and blog post reads. A route
+  whose permission a reader lacks also gets a 403 test with `signed_in_reader`
+  (`pytest-testing.md` › §6 Route tests).
 - If the rules don't cover a situation, make the most conservative call, and report
   it as a judgement call with proposed rule wording. Don't quietly invent a
   convention.
