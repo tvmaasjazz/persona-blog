@@ -66,7 +66,7 @@ class UserService:
 
         if user_row is None:
             raise ForbiddenException("User account is not available")
-        user_record, role = user_row.tuple()
+        user_record, role = user_row
         if not user_record.is_active:
             raise ForbiddenException("User account is inactive")
         return FindOrCreateUserFromAuthProviderResult(
