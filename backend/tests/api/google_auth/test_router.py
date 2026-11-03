@@ -7,6 +7,7 @@ from libs.auth.results import AuthUser
 from libs.auth.types import AuthProviderType
 from libs.core.exceptions import UnauthorizedException
 from libs.database.orm import UserAuthProviderOrm, UserOrm
+from libs.permissions.types import PermissionType, RoleType
 from tests.factories.users import insert_user_auth_provider_row, insert_user_row
 from tests.stubs.google_auth import GoogleOAuthServiceStub
 
@@ -57,7 +58,45 @@ async def test_get_google_callback_first_time_identity_creates_user_and_session(
     stored_session = await redis_client.get(f"session:{session_id}")
     assert stored_session is not None
     assert AuthUser.model_validate_json(stored_session) == AuthUser(
-        id=user_record.id, identity=user_record.identity
+        id=user_record.id,
+        identity=user_record.identity,
+        role=RoleType.READER,
+        permissions=frozenset({PermissionType.PERSONA_READ, PermissionType.BLOG_POST_READ}),
+    )
+
+
+async def test_get_google_callback_known_creator_stores_role_and_permissions_in_session(
+    api_client: AsyncClient, db_session: AsyncSession, redis_client: Redis
+) -> None:
+    user_record = await insert_user_row(db_session, email="ada@example.com", role=RoleType.CREATOR)
+    await insert_user_auth_provider_row(
+        db_session, user_id=user_record.id, provider_subject="google-subject-stub"
+    )
+
+    get_google_callback_response = await api_client.get(
+        "/auth/google/callback",
+        params={"code": "auth-code-1", "state": "state-1"},
+        follow_redirects=False,
+    )
+
+    session_id = get_google_callback_response.cookies.get("sid")
+    assert session_id is not None
+    stored_session = await redis_client.get(f"session:{session_id}")
+    assert stored_session is not None
+    assert AuthUser.model_validate_json(stored_session) == AuthUser(
+        id=user_record.id,
+        identity=user_record.identity,
+        role=RoleType.CREATOR,
+        permissions=frozenset(
+            {
+                PermissionType.PERSONA_READ,
+                PermissionType.PERSONA_WRITE,
+                PermissionType.BLOG_POST_READ,
+                PermissionType.BLOG_POST_WRITE,
+                PermissionType.GENERATE_TEXT_RUN_READ,
+                PermissionType.GENERATE_TEXT_RUN_WRITE,
+            }
+        ),
     )
 
 

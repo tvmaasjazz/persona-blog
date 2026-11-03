@@ -1,0 +1,1 @@
+DELETE FROM pb_role WHERE code IN ('ADMIN', 'CREATOR', 'READER', 'SYSTEM');

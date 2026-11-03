@@ -12,6 +12,8 @@ class GenerateTextState(BaseModel):
     # Primitives only: the state is persisted in checkpoints
     auth_user_id: int
     auth_user_identity: UUID
+    auth_user_role: str
+    auth_user_permissions: list[str]
     generate_text_run_id: int
     generate_text_run_identity: UUID
     graph_version: str
@@ -38,8 +40,15 @@ class GenerateTextState(BaseModel):
         return identity if type(identity) is UUID else UUID(str(identity))
 
     def build_auth_user(self) -> AuthUser:
-        """Groups the stored user id and identity back into an AuthUser."""
-        return AuthUser(id=self.auth_user_id, identity=self.auth_user_identity)
+        """Groups the stored user id, identity, role and permissions back into an AuthUser."""
+        return AuthUser.model_validate(
+            {
+                "id": self.auth_user_id,
+                "identity": self.auth_user_identity,
+                "role": self.auth_user_role,
+                "permissions": self.auth_user_permissions,
+            }
+        )
 
     def build_persona(self) -> GenerateTextPersonaInput:
         """Groups the stored persona fields back into a persona input."""

@@ -150,6 +150,8 @@ def build_generate_text_state(
     *,
     auth_user_id: int = 1,
     auth_user_identity: UUID | None = None,
+    auth_user_role: str = "CREATOR",
+    auth_user_permissions: list[str] | None = None,
     generate_text_run_id: int = 1,
     generate_text_run_identity: UUID | None = None,
     graph_version: str = "test-version",
@@ -172,6 +174,12 @@ def build_generate_text_state(
     return GenerateTextState(
         auth_user_id=auth_user_id,
         auth_user_identity=auth_user_identity or uuid4(),
+        auth_user_role=auth_user_role,
+        auth_user_permissions=(
+            auth_user_permissions
+            if auth_user_permissions is not None
+            else ["BLOG_POST_WRITE", "GENERATE_TEXT_RUN_WRITE", "PERSONA_WRITE"]
+        ),
         generate_text_run_id=generate_text_run_id,
         generate_text_run_identity=generate_text_run_identity or uuid4(),
         graph_version=graph_version,

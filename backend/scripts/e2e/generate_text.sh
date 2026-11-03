@@ -85,9 +85,25 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from apps.api.core.config import AppSettings
+from libs.auth.results import AuthUser
 from libs.auth.services import AuthSessionService
-from libs.database.orm import UserOrm
+from libs.database.orm import RoleOrm, UserOrm
 from libs.database.session import create_db_session_factory
+from libs.permissions.services import PermissionService
+
+
+async def build_auth_user(db_session_factory, user_record) -> AuthUser:
+    async with db_session_factory() as db_session:
+        role_query = select(RoleOrm.code).where(RoleOrm.id == user_record.role_id)
+        role = await db_session.scalar(role_query)
+        permission_service = PermissionService(db_session=db_session)
+        find_role_permission_list_result = await permission_service.find_role_permission_list(role)
+    return AuthUser(
+        id=user_record.id,
+        identity=user_record.identity,
+        role=role,
+        permissions=frozenset(find_role_permission_list_result.permissions),
+    )
 
 
 async def main() -> None:
@@ -105,7 +121,8 @@ async def main() -> None:
     auth_session_service = AuthSessionService(
         redis_client=redis_client, auth_settings=app_settings.auth
     )
-    session_id = await auth_session_service.create_session(user_record.id, user_record.identity)
+    auth_user = await build_auth_user(db_session_factory, user_record)
+    session_id = await auth_session_service.create_session(auth_user)
     print(session_id)
     await redis_client.aclose()
     await db_engine.dispose()

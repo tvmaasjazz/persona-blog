@@ -1,10 +1,12 @@
 from datetime import datetime
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.auth.types import AuthProviderType
-from libs.database.orm import UserAuthProviderOrm, UserOrm
+from libs.database.orm import RoleOrm, UserAuthProviderOrm, UserOrm
+from libs.permissions.types import RoleType
 from libs.users.inputs import FindOrCreateUserFromAuthProviderInput
 
 
@@ -17,7 +19,10 @@ async def insert_user_row(
     last_activity_at: datetime | None = None,
     deleted_at: datetime | None = None,
     is_active: bool = True,
+    role: RoleType = RoleType.CREATOR,
 ) -> UserOrm:
+    role_query = select(RoleOrm.id).where(RoleOrm.code == role)
+    role_id = await db_session.scalar(role_query)
     user_record = UserOrm(
         email=email or _build_unique_email(),
         display_name=display_name,
@@ -25,6 +30,7 @@ async def insert_user_row(
         last_activity_at=last_activity_at,
         deleted_at=deleted_at,
         is_active=is_active,
+        role_id=role_id,
     )
     db_session.add(user_record)
     await db_session.flush()

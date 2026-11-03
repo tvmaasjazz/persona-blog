@@ -2,10 +2,13 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from libs.permissions.types import RoleType
+
 
 class FindOrCreateUserFromAuthProviderResult(BaseModel):
     id: int
     identity: UUID
+    role: RoleType
     user_auth_provider_id: int
     is_new_user: bool
 

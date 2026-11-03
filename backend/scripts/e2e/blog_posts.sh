@@ -124,11 +124,28 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from apps.api.core.config import AppSettings
+from libs.auth.results import AuthUser
 from libs.auth.services import AuthSessionService
-from libs.database.orm import UserOrm
+from libs.database.orm import RoleOrm, UserOrm
 from libs.database.session import create_db_session_factory
+from libs.permissions.services import PermissionService
+from libs.permissions.types import RoleType
 
 SECOND_USER_EMAIL = "verify-second-user@persona-blog.invalid"
+
+
+async def build_auth_user(db_session_factory, user_record) -> AuthUser:
+    async with db_session_factory() as db_session:
+        role_query = select(RoleOrm.code).where(RoleOrm.id == user_record.role_id)
+        role = await db_session.scalar(role_query)
+        permission_service = PermissionService(db_session=db_session)
+        find_role_permission_list_result = await permission_service.find_role_permission_list(role)
+    return AuthUser(
+        id=user_record.id,
+        identity=user_record.identity,
+        role=role,
+        permissions=frozenset(find_role_permission_list_result.permissions),
+    )
 
 
 async def main() -> None:
@@ -148,7 +165,12 @@ async def main() -> None:
         second_user_query = select(UserOrm).where(UserOrm.email == SECOND_USER_EMAIL)
         second_user_record = await db_session.scalar(second_user_query)
         if second_user_record is None:
-            second_user_record = UserOrm(email=SECOND_USER_EMAIL, display_name="Verify Second User")
+            # A creator, so the checks reach ownership rather than stopping at permissions
+            creator_role_query = select(RoleOrm.id).where(RoleOrm.code == RoleType.CREATOR)
+            creator_role_id = await db_session.scalar(creator_role_query)
+            second_user_record = UserOrm(
+                email=SECOND_USER_EMAIL, display_name="Verify Second User", role_id=creator_role_id
+            )
             db_session.add(second_user_record)
             await db_session.flush()
 
@@ -157,7 +179,8 @@ async def main() -> None:
         redis_client=redis_client, auth_settings=app_settings.auth
     )
     for user_record in (first_user_record, second_user_record):
-        session_id = await auth_session_service.create_session(user_record.id, user_record.identity)
+        auth_user = await build_auth_user(db_session_factory, user_record)
+        session_id = await auth_session_service.create_session(auth_user)
         print(session_id)
     await redis_client.aclose()
     await db_engine.dispose()

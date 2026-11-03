@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from libs.database.base import BaseOrm
+from libs.database.orm.role import RoleOrm
 
 
 class UserOrm(BaseOrm):
@@ -29,6 +30,7 @@ class UserOrm(BaseOrm):
     is_system_user: Mapped[bool] = mapped_column(server_default=false())
     last_login_at: Mapped[datetime | None]
     last_activity_at: Mapped[datetime | None]
+    role_id: Mapped[int] = mapped_column(BigInteger, ForeignKey(RoleOrm.id))
 
     # A person signing up has no creator, so pb_user relaxes BaseOrm's audit columns.
     created_by_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("pb_user.id"))

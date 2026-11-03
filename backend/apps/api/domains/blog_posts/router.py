@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from apps.api.core.dependencies import AuthUserDep
+from apps.api.core.dependencies import AuthUserDep, require_permissions
 from apps.api.core.dtos import EmptyResponseDto, IdentityResponseDto
 from apps.api.domains.blog_posts.dependencies import (
     BlogPostServiceDep,
@@ -20,11 +20,17 @@ from apps.api.domains.blog_posts.dtos import (
     CreateBlogPostDto,
     CreateBlogPostFromGenerateTextRunDto,
 )
+from libs.permissions.types import PermissionType
 
 blog_post_router = APIRouter(prefix="/blog-posts", tags=["blog-posts"])
 
 
-@blog_post_router.get("")
+@blog_post_router.get(
+    "",
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_READ)),
+    ],
+)
 async def find_user_blog_post_list(
     query_dto: Annotated[BlogPostFetchAllQueryDto, Query()],
     auth_user: AuthUserDep,
@@ -37,7 +43,12 @@ async def find_user_blog_post_list(
     return BlogPostListResponseDto.from_result(find_user_blog_post_list_result)
 
 
-@blog_post_router.get("/{blog_post_identity}")
+@blog_post_router.get(
+    "/{blog_post_identity}",
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_READ)),
+    ],
+)
 async def find_blog_post(
     blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> BlogPostResponseDto:
@@ -50,6 +61,7 @@ async def find_blog_post(
     "",
     status_code=201,
     dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_WRITE)),
         Depends(validate_new_blog_post_visibility),
     ],
 )
@@ -65,6 +77,7 @@ async def create_blog_post(
     "/from-generate-text-run",
     status_code=201,
     dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_WRITE)),
         Depends(validate_new_blog_post_from_run_availability),
         Depends(validate_new_blog_post_from_run_visibility),
     ],
@@ -84,6 +97,7 @@ async def create_blog_post_from_generate_text_run(
 @blog_post_router.put(
     "/{blog_post_identity}",
     dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_WRITE)),
         Depends(validate_updated_blog_post_visibility),
     ],
 )
@@ -98,7 +112,12 @@ async def update_blog_post(
     return EmptyResponseDto()
 
 
-@blog_post_router.delete("/{blog_post_identity}")
+@blog_post_router.delete(
+    "/{blog_post_identity}",
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_WRITE)),
+    ],
+)
 async def delete_blog_post(
     blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> EmptyResponseDto:

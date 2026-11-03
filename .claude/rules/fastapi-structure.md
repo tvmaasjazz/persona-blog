@@ -14,7 +14,7 @@ backend/
 │   └── api/
 │       ├── core/
 │       │   ├── config.py      # root AppSettings
-│       │   ├── dependencies.py# global deps: db session, current user
+│       │   ├── dependencies.py# global deps: db session, AuthUserDep, require_permissions
 │       │   ├── dtos.py        # IdentityResponseDto, EmptyResponseDto
 │       │   ├── event_loop_monitor.py # development-only event loop lag monitor
 │       │   ├── exception_handlers.py # standard exception → status code map
@@ -46,12 +46,16 @@ backend/
 │   │   └── orm/               # every table, one module per entity
 │   │       ├── __init__.py    # imports all modules below
 │   │       ├── user.py        # UserOrm
+│   │       ├── role.py        # RoleOrm, with permission.py and role_permission.py
 │   │       └── persona.py     # PersonaOrm
 │   ├── auth/
 │   │   └── services/          # a lib with more than one service
 │   │       ├── __init__.py    # re-exports both
 │   │       ├── auth_session_service.py
 │   │       └── oauth_state_service.py
+│   ├── permissions/
+│   │   ├── services.py        # PermissionService: which permissions a role holds
+│   │   └── types.py           # RoleType, PermissionType
 │   └── users/
 │       ├── services.py        # UserService
 │       ├── utils/             # UserUtils: static builders and mappers, if any
@@ -133,9 +137,10 @@ and a service may run the same check.
 When checking an incoming payload needs a database read or compares more than one
 field (DTOs › Inbound), the route gets a validation guard: a dependency in the domain's
 `dependencies.py`, named `validate_<what>` and attached with
-`dependencies=[Depends(...)]`. The guard calls a method on the lib's
-`<Domain>ValidationService`, named `validate_<condition>()`, which returns nothing and
-raises a lib exception when the payload is invalid.
+`dependencies=[Depends(...)]`, after the route's permission (The acting user). The
+guard calls a method on the lib's `<Domain>ValidationService`, named
+`validate_<condition>()`, which returns nothing and raises a lib exception when the
+payload is invalid.
 
 ```python
 # apps/api/domains/personas/dependencies.py
@@ -149,7 +154,14 @@ async def validate_new_persona_name(
 
 ```python
 # apps/api/domains/personas/router.py
-@persona_router.post("", status_code=201, dependencies=[Depends(validate_new_persona_name)])
+@persona_router.post(
+    "",
+    status_code=201,
+    dependencies=[
+        Depends(require_permissions(PermissionType.PERSONA_WRITE)),
+        Depends(validate_new_persona_name),
+    ],
+)
 ```
 
 The validation service holds only the methods a guard calls. Business services never
@@ -423,11 +435,37 @@ update keeps `<Entity>Dto` with an `Update<Entity>Input`:
 ### The acting user
 
 The auth guard, `AuthUserDep` in `core/dependencies.py`, resolves the session to an
-`AuthUser` in request scope, carrying the signed-in user's `id` and `identity`. A
+`AuthUser` in request scope, carrying the signed-in user's `id`, `identity`, `role`
+and `permissions`, all stored in the session at sign-in. A
 route that needs the acting user takes `AuthUserDep` and passes the `AuthUser` to the
 service. Any service method that writes takes it as its last parameter and fills the
 audit columns from `auth_user.id`. Services never read the current user from
 anywhere else.
+
+A route lists the permission it needs first in its `dependencies`, before any
+validation guard, so a caller without it is refused before anything is read:
+
+```python
+@persona_router.post(
+    "",
+    status_code=201,
+    dependencies=[
+        Depends(require_permissions(PermissionType.PERSONA_WRITE)),
+        Depends(validate_new_persona_name),
+    ],
+)
+```
+
+`require_permissions(...)` in `core/dependencies.py` raises `ForbiddenException` unless
+the user holds every permission named. Code checks permissions, never roles. Every
+route names a permission, reads included, unless it's open by design: health, Google
+sign-in, logout, the development-only LLM route, and `GET /users/me`, which any
+signed-in user may call for their own profile. A read permission sits in front of the
+service's own access check, such as ownership or a public flag, and doesn't replace it.
+`tests/api/test_app_factory.py` walks the app's routes and fails on one that does
+neither; a route open by design goes on its allowlist there. It walks them
+with `fastapi.routing.iter_route_contexts`, since `app.routes` no longer lists an
+included router's routes, and a walk over it would pass without checking anything.
 
 **Never subclass an `Input` to make a `Dto`.** Declare the `Dto` independently.
 Every `Dto` has a `to_input()`; every domain `ResponseDto` has a `from_result()`.
@@ -509,6 +547,8 @@ UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 ```
 
 Routers are one line of delegation, type hints only, no `= Depends(...)` defaults.
+A route's permission and validation guards go in the decorator's `dependencies` (The
+acting user).
 Routes are ordered `GET` list, `GET` one, `POST`, `PUT`, `DELETE`:
 
 ```python
@@ -516,7 +556,12 @@ Routes are ordered `GET` list, `GET` one, `POST`, `PUT`, `DELETE`:
 blog_post_router = APIRouter(prefix="/blog-posts", tags=["blog-posts"])
 
 
-@blog_post_router.get("")
+@blog_post_router.get(
+    "",
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_READ)),
+    ],
+)
 async def find_user_blog_post_list(
     auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> BlogPostListResponseDto:
@@ -524,15 +569,26 @@ async def find_user_blog_post_list(
     return BlogPostListResponseDto.from_result(find_user_blog_post_list_result)
 
 
-@blog_post_router.get("/{blog_post_identity}")
+@blog_post_router.get(
+    "/{blog_post_identity}",
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_READ)),
+    ],
+)
 async def find_blog_post(
-    blog_post_identity: UUID, blog_post_service: BlogPostServiceDep
+    blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> BlogPostResponseDto:
-    find_blog_post_result = await blog_post_service.find_blog_post(blog_post_identity)
+    find_blog_post_result = await blog_post_service.find_blog_post(blog_post_identity, auth_user)
     return BlogPostResponseDto.from_result(find_blog_post_result)
 
 
-@blog_post_router.post("", status_code=201)
+@blog_post_router.post(
+    "",
+    status_code=201,
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_WRITE)),
+    ],
+)
 async def create_blog_post(
     dto: CreateBlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> IdentityResponseDto:
@@ -542,7 +598,12 @@ async def create_blog_post(
     return IdentityResponseDto(identity=create_blog_post_result.identity)
 
 
-@blog_post_router.put("/{blog_post_identity}")
+@blog_post_router.put(
+    "/{blog_post_identity}",
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_WRITE)),
+    ],
+)
 async def update_blog_post(
     blog_post_identity: UUID,
     dto: BlogPostDto,
@@ -553,7 +614,12 @@ async def update_blog_post(
     return EmptyResponseDto()
 
 
-@blog_post_router.delete("/{blog_post_identity}")
+@blog_post_router.delete(
+    "/{blog_post_identity}",
+    dependencies=[
+        Depends(require_permissions(PermissionType.BLOG_POST_WRITE)),
+    ],
+)
 async def delete_blog_post(
     blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> EmptyResponseDto:

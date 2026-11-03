@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.database.orm import PersonaOrm, UserOrm
@@ -626,3 +626,58 @@ async def test_delete_persona_signed_out_returns_401(api_client: AsyncClient) ->
     delete_persona_response = await api_client.delete(f"/personas/{uuid4()}")
 
     assert delete_persona_response.status_code == 401
+
+
+async def test_create_persona_reader_returns_403_and_writes_no_row(
+    api_client: AsyncClient, signed_in_reader: UserOrm, db_session: AsyncSession
+) -> None:
+    create_persona_response = await api_client.post(
+        "/personas", json={"name": "Ada the Essayist", "bio": "Writes essays."}
+    )
+
+    persona_count_query = select(func.count(PersonaOrm.id)).where(
+        PersonaOrm.created_by_id == signed_in_reader.id
+    )
+    persona_count = await db_session.scalar(persona_count_query)
+    assert create_persona_response.status_code == 403
+    assert persona_count == 0
+
+
+async def test_update_persona_reader_returns_403_and_leaves_row_unchanged(
+    api_client: AsyncClient, signed_in_reader: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_reader.id, name="Old Name", bio="Old bio."
+    )
+    await db_session.commit()
+
+    update_persona_response = await api_client.put(
+        f"/personas/{persona_record.identity}",
+        json={"name": "New Name", "bio": "New bio."},
+    )
+
+    await db_session.refresh(persona_record)
+    assert update_persona_response.status_code == 403
+    assert persona_record.name == "Old Name"
+    assert persona_record.bio == "Old bio."
+
+
+async def test_delete_persona_reader_returns_403_and_keeps_row(
+    api_client: AsyncClient, signed_in_reader: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(db_session, created_by_id=signed_in_reader.id)
+    await db_session.commit()
+
+    delete_persona_response = await api_client.delete(f"/personas/{persona_record.identity}")
+
+    await db_session.refresh(persona_record)
+    assert delete_persona_response.status_code == 403
+    assert persona_record.deleted_at is None
+
+
+@pytest.mark.usefixtures("signed_in_reader")
+async def test_find_user_persona_list_reader_returns_200(api_client: AsyncClient) -> None:
+    find_user_persona_list_response = await api_client.get("/personas")
+
+    assert find_user_persona_list_response.status_code == 200
+    assert find_user_persona_list_response.json() == {"personas": []}

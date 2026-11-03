@@ -1,8 +1,8 @@
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from apps.api.core.dependencies import AuthUserDep
+from apps.api.core.dependencies import AuthUserDep, require_permissions
 from apps.api.domains.generate_text.dependencies import (
     GenerateTextPersonaDep,
     GenerateTextServiceDep,
@@ -12,11 +12,18 @@ from apps.api.domains.generate_text.dtos import (
     GenerateTextRunResponseDto,
     ResumeGenerateTextDto,
 )
+from libs.permissions.types import PermissionType
 
 generate_text_router = APIRouter(prefix="/generate-text", tags=["generate-text"])
 
 
-@generate_text_router.post("/blog-post", status_code=202)
+@generate_text_router.post(
+    "/blog-post",
+    status_code=202,
+    dependencies=[
+        Depends(require_permissions(PermissionType.GENERATE_TEXT_RUN_WRITE)),
+    ],
+)
 async def generate_blog_post(
     dto: GenerateBlogPostDto,
     find_user_persona_result: GenerateTextPersonaDep,
@@ -30,7 +37,12 @@ async def generate_blog_post(
     return GenerateTextRunResponseDto.from_result(generate_text_result)
 
 
-@generate_text_router.get("/runs/{run_identity}")
+@generate_text_router.get(
+    "/runs/{run_identity}",
+    dependencies=[
+        Depends(require_permissions(PermissionType.GENERATE_TEXT_RUN_READ)),
+    ],
+)
 async def find_generate_text_run(
     run_identity: UUID, auth_user: AuthUserDep, generate_text_service: GenerateTextServiceDep
 ) -> GenerateTextRunResponseDto:
@@ -41,7 +53,13 @@ async def find_generate_text_run(
     return GenerateTextRunResponseDto.from_result(find_generate_text_run_result)
 
 
-@generate_text_router.post("/runs/{run_identity}/resume", status_code=202)
+@generate_text_router.post(
+    "/runs/{run_identity}/resume",
+    status_code=202,
+    dependencies=[
+        Depends(require_permissions(PermissionType.GENERATE_TEXT_RUN_WRITE)),
+    ],
+)
 async def resume_generate_text(
     run_identity: UUID,
     resume_generate_text_dto: ResumeGenerateTextDto,
