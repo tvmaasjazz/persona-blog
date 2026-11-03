@@ -1,7 +1,9 @@
+from libs.auth.results import AuthUser
 from libs.auth.services import AuthSessionService
 from libs.auth.types import AuthProviderType
 from libs.google_auth.results import GoogleSignInResult
 from libs.google_auth.services.google_oauth_service import GoogleOAuthService
+from libs.permissions.services import PermissionService
 from libs.users.inputs import FindOrCreateUserFromAuthProviderInput
 from libs.users.services import UserActivityService, UserService
 
@@ -15,11 +17,13 @@ class GoogleSignInService:
         user_service: UserService,
         user_activity_service: UserActivityService,
         auth_session_service: AuthSessionService,
+        permission_service: PermissionService,
     ) -> None:
         self._google_oauth_service = google_oauth_service
         self._user_service = user_service
         self._user_activity_service = user_activity_service
         self._auth_session_service = auth_session_service
+        self._permission_service = permission_service
 
     async def sign_in_with_google(self, code: str, oauth_state: str) -> GoogleSignInResult:
         """Creates the user's account on first sign-in and returns a new session id."""
@@ -45,10 +49,16 @@ class GoogleSignInService:
                 find_or_create_user_from_auth_provider_result.user_auth_provider_id
             ),
         )
-        session_id = await self._auth_session_service.create_session(
-            user_id=find_or_create_user_from_auth_provider_result.id,
-            user_identity=find_or_create_user_from_auth_provider_result.identity,
+        find_role_permission_list_result = await self._permission_service.find_role_permission_list(
+            find_or_create_user_from_auth_provider_result.role
         )
+        auth_user = AuthUser(
+            id=find_or_create_user_from_auth_provider_result.id,
+            identity=find_or_create_user_from_auth_provider_result.identity,
+            role=find_or_create_user_from_auth_provider_result.role,
+            permissions=frozenset(find_role_permission_list_result.permissions),
+        )
+        session_id = await self._auth_session_service.create_session(auth_user)
         return GoogleSignInResult(
             session_id=session_id,
             is_new_user=find_or_create_user_from_auth_provider_result.is_new_user,

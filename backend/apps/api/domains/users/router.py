@@ -14,4 +14,4 @@ async def find_signed_in_user(
 ) -> UserResponseDto:
     """Returns the signed-in user's own profile, or 404 when the account no longer exists."""
     find_user_by_identity_result = await user_service.find_user_by_identity(auth_user.identity)
-    return UserResponseDto.from_result(find_user_by_identity_result)
+    return UserResponseDto.from_result(find_user_by_identity_result, auth_user)

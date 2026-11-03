@@ -7,6 +7,7 @@ from apps.api.core.dependencies import DbSessionDep
 from apps.api.domains.auth.dependencies import AuthSessionServiceDep
 from libs.auth.services import OAuthStateService
 from libs.google_auth.services import GoogleOAuthService, GoogleSignInService
+from libs.permissions.services import PermissionService
 from libs.users.services import UserActivityService, UserService
 
 
@@ -54,6 +55,7 @@ def get_google_sign_in_service(
         user_service=UserService(db_session=db_session),
         user_activity_service=user_activity_service,
         auth_session_service=auth_session_service,
+        permission_service=PermissionService(db_session=db_session),
     )
 
 

@@ -4,7 +4,8 @@ from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.core.exceptions import ConflictException, ForbiddenException, NotFoundException
-from libs.database.orm import UserAuthProviderOrm, UserOrm
+from libs.database.orm import RoleOrm, UserAuthProviderOrm, UserOrm
+from libs.permissions.types import RoleType
 from libs.users.inputs import FindOrCreateUserFromAuthProviderInput
 from libs.users.results import FindOrCreateUserFromAuthProviderResult, FindUserByIdentityResult
 
@@ -55,17 +56,23 @@ class UserService:
         if user_auth_provider_record is None:
             raise NotFoundException("Auth provider not found")
 
-        user_query = select(UserOrm).where(UserOrm.id == user_auth_provider_record.user_id)
+        user_query = (
+            select(UserOrm, RoleOrm.code)
+            .join(RoleOrm, RoleOrm.id == UserOrm.role_id)
+            .where(UserOrm.id == user_auth_provider_record.user_id)
+        )
         user_query_result = await self._db_session.execute(user_query)
-        user_record = user_query_result.scalar_one_or_none()
+        user_row = user_query_result.one_or_none()
 
-        if user_record is None:
+        if user_row is None:
             raise ForbiddenException("User account is not available")
+        user_record, role = user_row.tuple()
         if not user_record.is_active:
             raise ForbiddenException("User account is inactive")
         return FindOrCreateUserFromAuthProviderResult(
             id=user_record.id,
             identity=user_record.identity,
+            role=role,
             user_auth_provider_id=user_auth_provider_record.id,
             is_new_user=False,
         )
@@ -90,6 +97,7 @@ class UserService:
                 is_email_verified=find_or_create_user_from_auth_provider_input.is_email_verified,
                 display_name=find_or_create_user_from_auth_provider_input.display_name,
                 avatar_url=find_or_create_user_from_auth_provider_input.avatar_url,
+                role_id=select(RoleOrm.id).where(RoleOrm.code == RoleType.READER).scalar_subquery(),
             )
             .returning(UserOrm.id, UserOrm.identity)
         )
@@ -114,6 +122,7 @@ class UserService:
         return FindOrCreateUserFromAuthProviderResult(
             id=user_row.id,
             identity=user_row.identity,
+            role=RoleType.READER,
             user_auth_provider_id=user_auth_provider_id,
             is_new_user=True,
         )

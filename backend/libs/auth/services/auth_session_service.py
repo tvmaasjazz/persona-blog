@@ -1,6 +1,6 @@
 import secrets
-from uuid import UUID
 
+from pydantic import ValidationError
 from redis.asyncio import Redis
 
 from libs.auth.constants import SESSION_KEY_PREFIX
@@ -16,10 +16,9 @@ class AuthSessionService:
         self._redis_client = redis_client
         self._auth_settings = auth_settings
 
-    async def create_session(self, user_id: int, user_identity: UUID) -> str:
-        """Writes the session to Redis with the configured TTL and returns its new id."""
+    async def create_session(self, auth_user: AuthUser) -> str:
+        """Writes the user to Redis as a session with the configured TTL and returns its new id."""
         session_id = secrets.token_urlsafe(32)
-        auth_user = AuthUser(id=user_id, identity=user_identity)
         await self._redis_client.set(
             f"{SESSION_KEY_PREFIX}{session_id}",
             auth_user.model_dump_json(),
@@ -28,11 +27,15 @@ class AuthSessionService:
         return session_id
 
     async def find_session(self, session_id: str) -> AuthUser:
-        """The user the session belongs to; UnauthorizedException if it is missing or expired."""
+        """The user the session belongs to; UnauthorizedException if it is missing, expired,
+        or stored in a shape that no longer validates, such as before roles existed."""
         stored_session = await self._redis_client.get(f"{SESSION_KEY_PREFIX}{session_id}")
         if stored_session is None:
             raise UnauthorizedException("Session is missing or expired")
-        return AuthUser.model_validate_json(stored_session)
+        try:
+            return AuthUser.model_validate_json(stored_session)
+        except ValidationError as validation_error:
+            raise UnauthorizedException("Session is missing or expired") from validation_error
 
     async def delete_session(self, session_id: str) -> None:
         """Removes the session from Redis; an unknown id is not an error."""

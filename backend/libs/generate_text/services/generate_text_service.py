@@ -96,6 +96,8 @@ class GenerateTextService:
         initial_state = GenerateTextState(
             auth_user_id=auth_user.id,
             auth_user_identity=auth_user.identity,
+            auth_user_role=auth_user.role.value,
+            auth_user_permissions=sorted(permission.value for permission in auth_user.permissions),
             generate_text_run_id=create_run_result.id,
             generate_text_run_identity=create_run_result.identity,
             graph_version=graph_builder.graph_version,

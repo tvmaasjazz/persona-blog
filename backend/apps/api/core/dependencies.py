@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Annotated
 
 from fastapi import BackgroundTasks, Depends, Request
@@ -9,9 +9,10 @@ from apps.api.core.config import AppSettings
 from libs.auth.constants import SESSION_COOKIE_NAME
 from libs.auth.results import AuthUser
 from libs.auth.services import AuthSessionService
-from libs.core.exceptions import UnauthorizedException
+from libs.core.exceptions import ForbiddenException, UnauthorizedException
 from libs.llm.services import LlmCallService, LlmService, OpenAiLlmService
 from libs.llm.types import LlmProviderType
+from libs.permissions.types import PermissionType
 from libs.users.after_response_tasks import record_user_activity
 
 
@@ -51,6 +52,19 @@ async def get_auth_user(request: Request, after_response_tasks: BackgroundTasks)
         user_id=auth_user.id,
     )
     return auth_user
+
+
+def require_permissions(*permission_types: PermissionType) -> Callable[[AuthUser], Awaitable[None]]:
+    """Builds a dependency that raises ForbiddenException unless the signed-in user holds
+    every permission named, and records them on `required_permissions`."""
+    required_permissions = frozenset(permission_types)
+
+    async def check_permissions(auth_user: AuthUserDep) -> None:
+        if not required_permissions <= auth_user.permissions:
+            raise ForbiddenException("You don't have permission to do this")
+
+    check_permissions.required_permissions = required_permissions  # type: ignore[attr-defined]
+    return check_permissions
 
 
 def build_llm_service(app_state: State) -> LlmService:
