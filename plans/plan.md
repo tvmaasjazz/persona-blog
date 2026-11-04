@@ -102,7 +102,7 @@ frontend comes in item 6.
 One PR. Admin-only endpoints for the admin panel's pages (item 6):
 
 - **Users:** every user with their role and balance. No search or pagination yet; the
-  list takes them on in item 5.
+  list takes on item 5's after it lands.
 - **Grant credits:** an amount and a note, written as a `GRANT` on the ledger. A reader
   becomes a creator, and their sessions are deleted so they sign in with the new role.
   This needs the per-user set of session ids (item 1 › Permissions).
@@ -119,17 +119,18 @@ One PR. Admin-only endpoints for the admin panel's pages (item 6):
 
 ### 3. Invite links (backend)
 
-One PR. The admin creates an invite carrying a credit amount, a note and an expiry, and
-gets back its link. There's no email in the app: the admin copies the link and sends it
-by email or text.
+One PR. The admin creates an invite carrying a name, a credit amount, a note and an
+expiry, and gets back its link. There's no email in the app: the admin copies the link
+and sends it by email or text. The name is required and says who it's for, since the
+invite isn't tied to an email, so the list shows who each link went to.
 
 - The link holds a one-time code. Only its hash is stored, so the link is shown once,
   when it's created.
 - The code is carried through Google sign-in in the OAuth state. Signing in with it,
   with any Google account, uses it up: the user becomes a creator and gets the credits
   as a `GRANT` on the ledger, with the invite on the row.
-- The admin lists invites with their status (unused, used and by whom, expired) and can
-  revoke an unused one.
+- The admin lists invites with their name and status (unused, used and by which account,
+  expired) and can revoke an unused one.
 
 **To decide:**
 
@@ -144,14 +145,15 @@ One PR. Simple counts of how posts are read, and a score to order the homepage b
 - **Views:** the frontend records a view when a post opens. One view per viewer, per
   post, per day: by user when signed in, else by an anonymous id in a cookie.
 - **How far they read:** the frontend reports the furthest point read, in quarters (25,
-  50, 75, 100%), as the reader scrolls, stored on the view. A view that reaches 100%
-  counts as a read.
-- **The score:** recent engagement over age, as in Hacker News:
-  `(views + reads × 3 in the last 7 days + 1) / (hours since publishing + 2) ^ 1.5`. The
-  weights and the window are settings, so the order can be tuned without a deploy. It's
+  50, 75, 100%), as the reader scrolls, stored on the view.
+- **The score:** recent engagement over age, as in Hacker News. Each view in the last 7
+  days counts 1, plus 3 times the share of the post it read, so a half read adds 1.5 and
+  a full read 3. Partial reads count for what they read:
+  `(sum of (1 + 3 × read share) + 1) / (hours since publishing + 2) ^ 1.5`. The weights
+  and the window are settings, so the order can be tuned without a deploy. It's
   computed in the query; with many posts, a cached score per post, refreshed on a
   schedule.
-- Authors see their posts' view and read counts.
+- Authors see their posts' views and how far they were read.
 
 **To decide:**
 
@@ -162,7 +164,7 @@ One PR. Simple counts of how posts are read, and a score to order the homepage b
 ### 5. Pagination, search and the homepage feed (backend)
 
 One PR. One way of paging and searching every list in the app, used first by the
-homepage feed and the admin's user list, then by the rest.
+homepage feed. The admin's user list and the other lists take it on after.
 
 - **Pagination:** a page size and a cursor or offset, and the same response shape on
   every list.
@@ -173,6 +175,12 @@ homepage feed and the admin's user list, then by the rest.
   a search.
 - **A persona's page:** a public persona's public posts, so anyone can read a persona
   and what it's written. Today's lists show only the signed-in user's own.
+- **Reading signed out:** the feed, a persona, a persona's posts and a post are open
+  routes, with no permission, so a shared link works for anyone. Sign-in is optional on
+  them: a signed-in owner still sees their own private persona or post, and anyone else
+  gets a 404 for one, as `find_persona` and `find_blog_post` do today. They join the
+  open routes list in `test_app_factory.py`. Recording a view is open too. The owner's
+  own lists, writes and generation keep their permissions.
 - The frontend's table, search box and pager, built once in item 6 and used by every
   list.
 
@@ -181,8 +189,10 @@ homepage feed and the admin's user list, then by the rest.
 - Cursor or offset pagination. A cursor keeps pages steady while new posts arrive, but
   can't jump to a page number
 - Search with Postgres full-text search, or a simple `ILIKE` to start
-- Whether the feed, posts and persona pages can be read signed out, which is better for
-  sharing and search engines, or need a reader account
+- Whether a public post of a private persona shows to others, or a post needs both
+  public
+- Whether the reads `PERSONA_READ` and `BLOG_POST_READ` still mean anything once these
+  routes are open, or are folded into the owner's lists
 
 ### 6. Frontend
 
