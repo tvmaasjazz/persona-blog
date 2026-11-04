@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.core.exceptions import NotFoundException
@@ -89,6 +90,32 @@ async def test_charge_generate_text_step_records_the_owner_on_the_charge_row(
     assert charge_record.note is None
 
 
+async def test_charge_generate_text_step_charged_step_raises_integrity_error(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("5.00"))
+    run_record = await insert_generate_text_run_row(db_session, created_by_id=user_record.id)
+    step_record = await insert_generate_text_step_row(
+        db_session,
+        run_id=run_record.id,
+        created_by_id=user_record.id,
+        charge_usd=Decimal("0.30"),
+    )
+    credit_ledger_service = CreditLedgerService(db_session=db_session)
+    await credit_ledger_service.charge_generate_text_step(step_record.id)
+
+    with pytest.raises(IntegrityError):
+        async with db_session.begin_nested():
+            await credit_ledger_service.charge_generate_text_step(step_record.id)
+
+    await db_session.refresh(user_record)
+    ledger_entries = await _find_ledger_entries(db_session, user_record.id)
+    assert ledger_entries == [
+        (Decimal("-0.30"), CreditLedgerEntryType.CHARGE, run_record.id, step_record.id)
+    ]
+    assert user_record.credit_balance_usd == Decimal("4.70")
+
+
 async def test_charge_generate_text_step_zero_charge_writes_nothing(
     db_session: AsyncSession,
 ) -> None:
@@ -172,6 +199,45 @@ async def test_refund_failed_generate_text_run_segment_no_review_step_refunds_ev
         (Decimal("-0.20"), CreditLedgerEntryType.CHARGE, run_record.id, second_step_record.id),
         (Decimal("0.10"), CreditLedgerEntryType.REFUND, run_record.id, first_step_record.id),
         (Decimal("0.20"), CreditLedgerEntryType.REFUND, run_record.id, second_step_record.id),
+    ]
+    assert user_record.credit_balance_usd == Decimal("5.00")
+    assert run_record.charge_usd == Decimal("0")
+
+
+async def test_refund_failed_generate_text_run_segment_called_twice_refunds_once(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("4.90"))
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=user_record.id, charge_usd=Decimal("0.10")
+    )
+    step_record = await insert_generate_text_step_row(
+        db_session,
+        run_id=run_record.id,
+        created_by_id=user_record.id,
+        step_number=1,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+        charge_usd=Decimal("0.10"),
+    )
+    await insert_credit_ledger_row(
+        db_session,
+        user_id=user_record.id,
+        amount_usd=Decimal("-0.10"),
+        entry_type=CreditLedgerEntryType.CHARGE,
+        generate_text_run_id=run_record.id,
+        generate_text_step_id=step_record.id,
+    )
+    credit_ledger_service = CreditLedgerService(db_session=db_session)
+
+    await credit_ledger_service.refund_failed_generate_text_run_segment(run_record.id)
+    await credit_ledger_service.refund_failed_generate_text_run_segment(run_record.id)
+
+    await db_session.refresh(user_record)
+    await db_session.refresh(run_record)
+    ledger_entries = await _find_ledger_entries(db_session, user_record.id)
+    assert ledger_entries == [
+        (Decimal("-0.10"), CreditLedgerEntryType.CHARGE, run_record.id, step_record.id),
+        (Decimal("0.10"), CreditLedgerEntryType.REFUND, run_record.id, step_record.id),
     ]
     assert user_record.credit_balance_usd == Decimal("5.00")
     assert run_record.charge_usd == Decimal("0")

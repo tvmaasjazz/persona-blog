@@ -1,7 +1,8 @@
 from decimal import Decimal
 
-from sqlalchemy import func, insert, or_, select, update
+from sqlalchemy import exists, func, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
@@ -65,7 +66,8 @@ class CreditLedgerService:
 
     async def refund_failed_generate_text_run_segment(self, run_id: int) -> None:
         """Refunds the charges of the run's steps after its last review step, since a
-        failed run resumes from that review; writes nothing when there are none."""
+        failed run resumes from that review; a charge already refunded is skipped, so a
+        second call writes nothing."""
         # Find the last review step, past which the work is lost
         boundary_query = select(func.coalesce(func.max(GenerateTextStepOrm.step_number), 0)).where(
             GenerateTextStepOrm.run_id == run_id,
@@ -77,7 +79,12 @@ class CreditLedgerService:
         boundary_query_result = await self._db_session.execute(boundary_query)
         boundary_step_number = boundary_query_result.scalar_one()
 
-        # Find the charges of the steps after it
+        # Find the unrefunded charges of the steps after it
+        refund_ledger = aliased(CreditLedgerOrm)
+        refund_exists = exists().where(
+            refund_ledger.generate_text_step_id == CreditLedgerOrm.generate_text_step_id,
+            refund_ledger.entry_type == CreditLedgerEntryType.REFUND,
+        )
         charge_query = (
             select(
                 CreditLedgerOrm.user_id,
@@ -92,6 +99,7 @@ class CreditLedgerService:
                 CreditLedgerOrm.generate_text_run_id == run_id,
                 CreditLedgerOrm.entry_type == CreditLedgerEntryType.CHARGE,
                 GenerateTextStepOrm.step_number > boundary_step_number,
+                ~refund_exists,
             )
         )
         charge_query_result = await self._db_session.execute(charge_query)

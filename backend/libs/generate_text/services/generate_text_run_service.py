@@ -217,8 +217,14 @@ class GenerateTextRunService:
         """Marks the run FAILED, recording an error only when no step owns it, and refunds
         the charges since its last review."""
         async with self._db_session_factory() as db_session, db_session.begin():
-            # Read the status first: a WHERE on it couldn't tell an unknown run from a failed one
-            status_query = select(GenerateTextRunOrm.status).where(GenerateTextRunOrm.id == run_id)
+            # Read the status first: a WHERE on it couldn't tell an unknown run from a failed one.
+            # The row lock holds a second fail_run here until this one commits, so it reads
+            # FAILED and returns rather than refunding again
+            status_query = (
+                select(GenerateTextRunOrm.status)
+                .where(GenerateTextRunOrm.id == run_id)
+                .with_for_update()
+            )
             status_query_result = await db_session.execute(status_query)
             run_status = status_query_result.scalar_one_or_none()
             if run_status is None:

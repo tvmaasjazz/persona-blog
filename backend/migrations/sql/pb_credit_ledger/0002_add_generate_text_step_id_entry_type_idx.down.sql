@@ -1,0 +1,1 @@
+DROP INDEX pb_credit_ledger_generate_text_step_id_entry_type_idx;

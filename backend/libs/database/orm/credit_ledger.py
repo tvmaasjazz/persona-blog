@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Enum, ForeignKey, Index, Numeric, desc
+from sqlalchemy import BigInteger, Enum, ForeignKey, Index, Numeric, desc, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from libs.credits.types import CreditLedgerEntryType
@@ -15,6 +15,13 @@ class CreditLedgerOrm(BaseOrm):
     __table_args__ = (
         Index("pb_credit_ledger_user_id_created_at_idx", "user_id", desc("created_at")),
         Index("pb_credit_ledger_generate_text_run_id_idx", "generate_text_run_id"),
+        Index(
+            "pb_credit_ledger_generate_text_step_id_entry_type_idx",
+            "generate_text_step_id",
+            "entry_type",
+            unique=True,
+            postgresql_where=text("entry_type IN ('CHARGE', 'REFUND') AND deleted_at IS NULL"),
+        ),
     )
 
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey(UserOrm.id))
