@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
-from libs.credits.services import CreditLedgerService
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.database.orm.persona import PersonaOrm
@@ -18,6 +17,7 @@ from libs.generate_text.results import (
     FindGenerateTextRunByIdentityResult,
     FindLlmCallRollupResult,
 )
+from libs.generate_text.services.generate_text_credit_service import GenerateTextCreditService
 from libs.generate_text.types import GenerateTextRunStatusType
 
 
@@ -256,8 +256,8 @@ class GenerateTextRunService:
             await db_session.execute(run_failure_update)
 
             # Refund the steps whose work the failure lost, in the same transaction
-            credit_ledger_service = CreditLedgerService(db_session=db_session)
-            await credit_ledger_service.refund_failed_generate_text_run_segment(run_id)
+            generate_text_credit_service = GenerateTextCreditService(db_session=db_session)
+            await generate_text_credit_service.refund_failed_run_segment(run_id)
 
     async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
         """Finds a run by identity without checking who owns it; persona_identity is None once

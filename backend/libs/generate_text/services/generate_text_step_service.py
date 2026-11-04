@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
-from libs.credits.services import CreditLedgerService
 from libs.credits.settings import CreditSettings
 from libs.credits.utils import CreditUtils
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
@@ -18,6 +17,7 @@ from libs.generate_text.results import (
     FindLatestGenerateTextStepResult,
     FindLlmCallRollupResult,
 )
+from libs.generate_text.services.generate_text_credit_service import GenerateTextCreditService
 from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionType
 
 
@@ -113,8 +113,8 @@ class GenerateTextStepService:
 
             # Charge the user for the step in the same transaction, so a charge never
             # exists without its step's completion
-            credit_ledger_service = CreditLedgerService(db_session=db_session)
-            await credit_ledger_service.charge_generate_text_step(step_id)
+            generate_text_credit_service = GenerateTextCreditService(db_session=db_session)
+            await generate_text_credit_service.charge_step(step_id)
 
     async def fail_step(
         self, step_id: int, error_code: str, error_message: str, duration_ms: int

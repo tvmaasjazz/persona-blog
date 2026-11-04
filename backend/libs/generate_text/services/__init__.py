@@ -1,3 +1,4 @@
+from libs.generate_text.services.generate_text_credit_service import GenerateTextCreditService
 from libs.generate_text.services.generate_text_instrumentation_service import (
     GenerateTextInstrumentationService,
 )
@@ -19,6 +20,7 @@ from libs.generate_text.services.generate_text_validation_service import (
 )
 
 __all__ = [
+    "GenerateTextCreditService",
     "GenerateTextInstrumentationService",
     "GenerateTextNodeService",
     "GenerateTextRunHandoffQueueService",

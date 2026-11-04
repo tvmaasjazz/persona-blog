@@ -1,19 +1,16 @@
 from decimal import Decimal
 
-from sqlalchemy import exists, func, insert, or_, select, update
+from sqlalchemy import exists, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
-from libs.credits.inputs import GrantCreditsInput
-from libs.credits.results import FindCreditBalanceResult
+from libs.credits.inputs import ChargeCreditsInput, GrantCreditsInput
+from libs.credits.results import FindCreditBalanceResult, RefundChargesResult
 from libs.credits.types import CreditLedgerEntryType
 from libs.database.orm.credit_ledger import CreditLedgerOrm
-from libs.database.orm.generate_text_run import GenerateTextRunOrm
-from libs.database.orm.generate_text_step import GenerateTextStepOrm
 from libs.database.orm.user import UserOrm
-from libs.generate_text.types import GenerateTextStepStatusType
 
 
 class CreditLedgerService:
@@ -23,89 +20,50 @@ class CreditLedgerService:
     def __init__(self, db_session: AsyncSession) -> None:
         self._db_session = db_session
 
-    async def charge_generate_text_step(self, step_id: int) -> None:
-        """Charges the step's owner its charge_usd and adds it to the run's charge;
-        writes nothing for a free step."""
-        # Read what the step charges and who it charges
-        step_query = select(
-            GenerateTextStepOrm.charge_usd,
-            GenerateTextStepOrm.run_id,
-            GenerateTextStepOrm.created_by_id,
-        ).where(GenerateTextStepOrm.id == step_id)
-        step_query_result = await self._db_session.execute(step_query)
-        step_row = step_query_result.one_or_none()
-        if step_row is None:
-            raise NotFoundException(f"Generate text step {step_id} not found")
-        charge_usd, run_id, user_id = step_row
-        if charge_usd == 0:
-            return
+    async def charge_credits(self, charge_credits_input: ChargeCreditsInput) -> None:
+        """Records a charge for a generate text step and lowers the user's balance by it;
+        NotFoundException if the user doesn't exist."""
+        # Subtract it from the balance first, so an unknown user fails before a ledger row is
+        # written
+        user_id = charge_credits_input.user_id
+        await self._add_to_credit_balance(user_id, -charge_credits_input.amount_usd)
 
         # Record the charge
         charge_insert = insert(CreditLedgerOrm).values(
             user_id=user_id,
-            amount_usd=-charge_usd,
+            amount_usd=-charge_credits_input.amount_usd,
             entry_type=CreditLedgerEntryType.CHARGE,
-            generate_text_run_id=run_id,
-            generate_text_step_id=step_id,
+            generate_text_run_id=charge_credits_input.generate_text_run_id,
+            generate_text_step_id=charge_credits_input.generate_text_step_id,
             note=None,
             created_by_id=user_id,
             updated_by_id=user_id,
         )
         await self._db_session.execute(charge_insert)
 
-        # Subtract it from the user's balance
-        await self._add_to_credit_balance(user_id, -charge_usd)
-
-        # Add it to the run's charge
-        run_charge_update = (
-            update(GenerateTextRunOrm)
-            .where(GenerateTextRunOrm.id == run_id)
-            .values(charge_usd=GenerateTextRunOrm.charge_usd + charge_usd)
-        )
-        await self._db_session.execute(run_charge_update)
-
-    async def refund_failed_generate_text_run_segment(self, run_id: int) -> None:
-        """Refunds the charges of the run's steps after its last review step, since a
-        failed run resumes from that review; a charge already refunded is skipped, so a
-        second call writes nothing."""
-        # Find the last review step, past which the work is lost
-        boundary_query = select(func.coalesce(func.max(GenerateTextStepOrm.step_number), 0)).where(
-            GenerateTextStepOrm.run_id == run_id,
-            or_(
-                GenerateTextStepOrm.status == GenerateTextStepStatusType.AWAITING_REVIEW,
-                GenerateTextStepOrm.decided_at.is_not(None),
-            ),
-        )
-        boundary_query_result = await self._db_session.execute(boundary_query)
-        boundary_step_number = boundary_query_result.scalar_one()
-
-        # Find the unrefunded charges of the steps after it
+    async def refund_charges(self, generate_text_step_ids: list[int]) -> RefundChargesResult:
+        """Refunds the steps' charges and returns the total; a charge already refunded is
+        skipped, so a second call refunds nothing."""
+        # Find the steps' unrefunded charges
         refund_ledger = aliased(CreditLedgerOrm)
         refund_exists = exists().where(
             refund_ledger.generate_text_step_id == CreditLedgerOrm.generate_text_step_id,
             refund_ledger.entry_type == CreditLedgerEntryType.REFUND,
         )
-        charge_query = (
-            select(
-                CreditLedgerOrm.user_id,
-                CreditLedgerOrm.generate_text_step_id,
-                CreditLedgerOrm.amount_usd,
-            )
-            .join(
-                GenerateTextStepOrm,
-                GenerateTextStepOrm.id == CreditLedgerOrm.generate_text_step_id,
-            )
-            .where(
-                CreditLedgerOrm.generate_text_run_id == run_id,
-                CreditLedgerOrm.entry_type == CreditLedgerEntryType.CHARGE,
-                GenerateTextStepOrm.step_number > boundary_step_number,
-                ~refund_exists,
-            )
+        charge_query = select(
+            CreditLedgerOrm.user_id,
+            CreditLedgerOrm.generate_text_run_id,
+            CreditLedgerOrm.generate_text_step_id,
+            CreditLedgerOrm.amount_usd,
+        ).where(
+            CreditLedgerOrm.generate_text_step_id.in_(generate_text_step_ids),
+            CreditLedgerOrm.entry_type == CreditLedgerEntryType.CHARGE,
+            ~refund_exists,
         )
         charge_query_result = await self._db_session.execute(charge_query)
         charge_rows = charge_query_result.all()
         if not charge_rows:
-            return
+            return RefundChargesResult(refund_usd=Decimal(0))
 
         # Record one refund per charge
         refund_insert = insert(CreditLedgerOrm).values(
@@ -120,28 +78,21 @@ class CreditLedgerService:
                     "created_by_id": user_id,
                     "updated_by_id": user_id,
                 }
-                for user_id, step_id, amount_usd in charge_rows
+                for user_id, run_id, step_id, amount_usd in charge_rows
             ]
         )
         await self._db_session.execute(refund_insert)
 
         # Add the refunds back to each user's balance
         refund_usd_by_user_id: dict[int, Decimal] = {}
-        for user_id, _, amount_usd in charge_rows:
+        for user_id, _, _, amount_usd in charge_rows:
             refund_usd_by_user_id[user_id] = refund_usd_by_user_id.get(user_id, Decimal(0)) - (
                 amount_usd
             )
         for user_id, refund_usd in refund_usd_by_user_id.items():
             await self._add_to_credit_balance(user_id, refund_usd)
 
-        # Take them off the run's charge
-        total_refund_usd = sum(refund_usd_by_user_id.values(), Decimal(0))
-        run_charge_update = (
-            update(GenerateTextRunOrm)
-            .where(GenerateTextRunOrm.id == run_id)
-            .values(charge_usd=GenerateTextRunOrm.charge_usd - total_refund_usd)
-        )
-        await self._db_session.execute(run_charge_update)
+        return RefundChargesResult(refund_usd=sum(refund_usd_by_user_id.values(), Decimal(0)))
 
     async def grant_credits(
         self, grant_credits_input: GrantCreditsInput, auth_user: AuthUser
