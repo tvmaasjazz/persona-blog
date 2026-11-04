@@ -104,7 +104,8 @@ backend/tests/
 | `libs/<d>/states.py`                 | `tests/libs/<d>/test_states.py`        | Only a method that does more than group stored fields; otherwise the graph and service tests cover it |
 | Class with an enum dispatch map      | That class's test file                 | Every enum member has a handler (§1) |
 | `apps/api/domains/<d>/router.py`     | `tests/api/<d>/test_router.py`         | For each route: happy path, 422 per declared constraint, each exception the service raises, 401 if protected, 403 if a reader lacks its permission, persisted state for writes (§6) |
-| `apps/api/domains/<d>/dtos.py`, `apps/api/core/dtos.py` | None, unless a mapper has logic | Route tests cover plain field copying |
+| `apps/api/domains/<d>/dtos.py`       | None, unless a mapper has logic        | Route tests cover plain field copying |
+| `apps/api/core/dtos.py`              | `tests/api/core/test_dtos.py`          | Each field type with a serializer: what it writes in JSON, that it parses back to the same value, and that it is unchanged outside JSON |
 | `apps/api/domains/<d>/dependencies.py` | None                                 | Route tests run the real factories |
 | `apps/api/core/dependencies.py`      | `tests/api/core/test_dependencies.py`  | Session commits and rolls back, `require_permissions` passing and refusing (§7) |
 | `apps/api/app_factory.py`            | `tests/api/test_app_factory.py`        | Every route names a permission or is on the open-route allowlist, and each names exactly its permission (§7, `fastapi-structure.md` › The acting user) |
@@ -118,7 +119,8 @@ backend/tests/
 | Middleware                           | `tests/api/test_<module>.py`           | Observable effect on a real route (§9) |
 | `libs/database/orm/*.py`             | None                                   | Service database tests cover them; CI's drift check catches mismatches with migrations |
 | `migrations/`                        | `tests/migrations/test_revisions.py`   | One file covers every revision (§10) |
-| `settings.py`, `constants.py`        | None                                   | — |
+| `settings.py`                        | None, unless it has a model validator  | The validator's accepted and rejected cases |
+| `constants.py`                       | None                                   | — |
 
 ## Conventions for every test
 
@@ -649,8 +651,9 @@ def weather_service_stub(fastapi_app: FastAPI) -> WeatherServiceStub:
 (`AuthUserDep`). A session holds an `AuthUser` with a role and its permissions, built
 with `build_auth_user` (`tests/factories/auth.py`), which gives a role its seeded
 permissions unless the test passes others. `signed_in_user` is a creator, so it holds
-every route's permission; `signed_in_reader` is a reader, which holds only the persona
-and blog post reads.
+every route's permission, and starts with $5.00 of credit, enough to start a run;
+`signed_in_reader` is a reader, which holds only the persona and blog post reads, and
+starts at $0.
 
 ```python
 # tests/api/conftest.py
@@ -661,7 +664,7 @@ async def signed_in_user(
     redis_client: Redis,
     app_settings: AppSettings,
 ) -> UserOrm:
-    user_record = await insert_user_row(db_session)
+    user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("5.00"))
     auth_session_service = AuthSessionService(
         redis_client=redis_client, auth_settings=app_settings.auth
     )

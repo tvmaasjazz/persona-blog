@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
+from libs.credits.settings import CreditSettings
+from libs.credits.utils import CreditUtils
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.database.utils import DatabaseClockUtils
@@ -15,14 +17,20 @@ from libs.generate_text.results import (
     FindLatestGenerateTextStepResult,
     FindLlmCallRollupResult,
 )
+from libs.generate_text.services.generate_text_credit_service import GenerateTextCreditService
 from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionType
 
 
 class GenerateTextStepService:
     """Writes pb_generate_text_step, each write in its own session and transaction."""
 
-    def __init__(self, db_session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self,
+        db_session_factory: async_sessionmaker[AsyncSession],
+        credit_settings: CreditSettings,
+    ) -> None:
         self._db_session_factory = db_session_factory
+        self._credit_settings = credit_settings
 
     async def create_step(
         self, create_generate_text_step_input: CreateGenerateTextStepInput, auth_user: AuthUser
@@ -73,10 +81,14 @@ class GenerateTextStepService:
         return CreateGenerateTextStepResult(id=step_id, identity=step_identity)
 
     async def complete_step(self, step_id: int, output: str, duration_ms: int) -> None:
-        """Marks the step SUCCEEDED with its cost totals; empty text stores no output."""
+        """Marks the step SUCCEEDED with its cost totals and charges its owner for them;
+        empty text stores no output."""
         async with self._db_session_factory() as db_session, db_session.begin():
-            # Sum what the step's LLM calls cost
+            # Sum what the step's LLM calls cost, and price it for the user
             llm_call_rollup = await self._find_llm_call_rollup(db_session, step_id)
+            charge_usd = CreditUtils.compute_charge_usd(
+                llm_call_rollup.cost_usd, self._credit_settings.markup_multiplier
+            )
 
             # Mark the step succeeded; no text stores nothing, so the latest-output query skips it
             step_completion_update = (
@@ -92,11 +104,17 @@ class GenerateTextStepService:
                     input_tokens=llm_call_rollup.input_tokens,
                     output_tokens=llm_call_rollup.output_tokens,
                     cost_usd=llm_call_rollup.cost_usd,
+                    charge_usd=charge_usd,
                 )
             )
             step_completion_update_result = await db_session.execute(step_completion_update)
             if step_completion_update_result.rowcount == 0:
                 raise NotFoundException(f"Generate text step {step_id} not found")
+
+            # Charge the user for the step in the same transaction, so a charge never
+            # exists without its step's completion
+            generate_text_credit_service = GenerateTextCreditService(db_session=db_session)
+            await generate_text_credit_service.charge_step(step_id)
 
     async def fail_step(
         self, step_id: int, error_code: str, error_message: str, duration_ms: int

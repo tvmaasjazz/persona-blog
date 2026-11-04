@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -20,6 +21,7 @@ async def insert_user_row(
     deleted_at: datetime | None = None,
     is_active: bool = True,
     role: RoleType = RoleType.CREATOR,
+    credit_balance_usd: Decimal = Decimal(0),
 ) -> UserOrm:
     role_query = select(RoleOrm.id).where(RoleOrm.code == role)
     role_id = await db_session.scalar(role_query)
@@ -31,6 +33,7 @@ async def insert_user_row(
         deleted_at=deleted_at,
         is_active=is_active,
         role_id=role_id,
+        credit_balance_usd=credit_balance_usd,
     )
     db_session.add(user_record)
     await db_session.flush()

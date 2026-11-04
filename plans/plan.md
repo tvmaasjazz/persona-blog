@@ -18,7 +18,7 @@ will use. Two PRs: roles and permissions first, then credits.
 
 **Roles:**
 
-- **Admin:** every permission, and runs aren't charged. Tyler, and anyone added later.
+- **Admin:** every permission, and charged like anyone. Tyler, and anyone added later.
 - **Creator:** creates personas and blog posts, and generates, paid from their balance.
   For now the admin makes someone a creator and grants them credits; later a user
   becomes one by adding payment details and a first top-up.
@@ -56,28 +56,39 @@ will use. Two PRs: roles and permissions first, then credits.
 **Credits:**
 
 - Balances are in USD, in the code, the database and the API.
-- Each LLM call keeps its cost to us, `cost_usd`. Beside it, a run and its steps get
+- Each LLM call keeps its cost to us, `cost_usd`. Beside it, a step and its run get
   `charge_usd`, what the user pays, from one function. For now the function returns the
   cost unchanged; later it applies a markup.
 - `pb_credit_ledger` records every change to a balance: the user, a signed USD amount,
-  the kind (`GRANT`, `CHARGE`, `REFUND`, `ADJUSTMENT`), the run it charges, a note, and
-  who made it. It's the source of truth, and a balance cached on the user is updated in
-  the same transaction as each row.
-- A run is charged once, when it ends: a completed or cancelled run is charged its
-  `charge_usd`, a failed one isn't, since the failure is ours. Admin runs record their
-  cost and charge but write no ledger row.
-- **Before a run starts or resumes,** an estimate of what its remaining steps will
-  charge must fit in the balance: each step's typical charge, summed, times a safety
-  factor (2.5, say) for reruns after review. A step's typical charge is a setting per
-  step, set before deploy from runs on the models chosen then. Nothing is held; one
-  active run per user keeps two runs from spending the same balance. Holding the
-  estimate and settling at the end can come with payments.
+  the kind (`GRANT` for free credits, `CHARGE`, `REFUND`, `ADJUSTMENT`, and `PURCHASE`
+  with payments), the run and step it concerns, a note, and who made it. It's the source
+  of truth, and a balance cached on the user is updated in the same transaction as each
+  row. Grants and purchases stay apart, so revenue and giveaways can be counted
+  separately.
+- **Charged per step.** Each step that succeeds is charged its `charge_usd` in the same
+  transaction that marks it done, in `complete_step()`. A step redone after a crash or a
+  deploy is charged once, since only a succeeded step is charged. `libs/llm` knows
+  nothing about credits.
+- **A failed run refunds what the user hasn't seen.** A run moves in segments, each
+  started by an endpoint call (start or resume) and ended by a pause for review,
+  completion or failure. When a run fails, the charges for the steps after its latest
+  review step are refunded, in the same transaction as `fail_run()`, which every failure
+  path goes through. The boundary comes from the step rows, so a run picked up after a
+  crash finds the same one.
+- **Admins are charged like anyone.** There's no exempt permission; the admin grants
+  themself credits.
+- **Before a run starts or resumes,** the balance must be at least a minimum (a setting,
+  $0.10), and the user must have fewer than the maximum active runs (`PENDING` or
+  `RUNNING`; a setting, 2). Nothing is held, so a run that's already going can take the
+  balance below zero, by at most about the active-run limit's worth of runs; a negative
+  balance blocks the next run until it's topped up. No locking: two requests at the
+  same instant could pass the active-run check together, which is harmless for now.
 - Every model in a tier must have a price, checked when the settings load, so the app
   won't start with a model it would charge nothing for.
 - Persona creation isn't limited; rate limiting (Phase 2) stops spam. Voice to form
   isn't charged: it's a feature of the site, and its cost is ours. Avatar generation
   is charged, added with avatars (Phase 3).
-- **Not enough balance:** the run is refused with a 402 Payment Required, from a new
+- **Below the minimum balance:** the run is refused with a 402 Payment Required, from a new
   standard `PaymentRequiredException` (402 isn't covered by any category yet), and the
   frontend shows that the balance is too low and must be topped up.
 - **Low balance warning:** below a threshold (a setting, $0.50 to start) the user
@@ -88,7 +99,8 @@ will use. Two PRs: roles and permissions first, then credits.
 **Admin panel and the user's balance:**
 
 - An admin page: users with their role and balance, grant credits with a note, which
-  makes the user a creator, and see a user's ledger.
+  makes the user a creator, and see a user's ledger. Until it exists,
+  `backend/scripts/grant_credits.py` grants credits and makes a reader a creator.
 - The user response carries the user's role, permissions, balance and whether it's
   low, and the profile shows the remaining balance.
 
@@ -114,7 +126,6 @@ lease, handoff and drain work in the archive covers runs a redeploy stops.
   the frontend's origin, and Google sign-in's redirect URIs for the production domain
 - [ ] During a running generation, hit `/health` repeatedly; it should answer in
   milliseconds
-- [ ] Set each step's typical charge from runs on the models chosen for launch
 - [ ] Check STRONG's `gpt-5.6-sol` price in `model_pricing` ($4 / $20) against OpenAI's
   page: sources list it at $5 / $30, with $4 / $20 as a promotion
 
@@ -227,6 +238,11 @@ the worker is alive, whatever the job:
   per-operation timeouts do (STRONG's 120s, FAST's, Redis and database timeouts), with an
   optional maximum total runtime per job as a backstop.
 
+**The active-run limit:** credits check a user's active runs before a start or resume,
+without a lock, so two requests at once can both pass. Consider a lock here (on the
+user's row, or in the queue) so the limit holds exactly. Idempotency keys (Phase 2)
+already stop a double send from one user.
+
 **Between steps, the job checks two things**, where `_stream_graph` checks for shutdown
 today. The graph itself knows nothing about shutdown; this check decides whether a
 worker carries on to the next step:
@@ -294,8 +310,8 @@ A creator tops up their balance (a first payment of $5, say), by hand or with
 auto-refill, and becoming a creator means adding payment details and that first top-up.
 Auto-refill is a user setting: a threshold and an amount. A user without it gets the
 low balance warning.
-A payment is a `GRANT` on the ledger. Charges get a markup in the charge function, and
-the run estimate may become a hold settled at the end.
+A payment is a `PURCHASE` on the ledger, a new entry type, kept apart from free
+`GRANT`s. Charges get a markup in the charge function; see Later › Credit holds.
 
 **To decide:** the payment provider, and whether to use a merchant of record, which
 handles sales tax and VAT on digital sales.
@@ -306,6 +322,9 @@ handles sales tax and VAT on digital sales.
 - **Models per request.** The user picks the model for each step instead of the
   fixed tier, charged at that model's price. Needs an Anthropic client beside the
   OpenAI one
+- **Credit holds.** With a per-run cost prediction, hold a run's predicted charge when
+  it starts and settle it when each segment ends, showing an available balance, so a run
+  can't take a balance below zero
 - **Model prices in the database.** Prices with the date they take effect, editable
   from the admin panel, and a nightly job that compares them with a published source
   (OpenAI and Anthropic's APIs don't give prices; OpenRouter's model list does) and

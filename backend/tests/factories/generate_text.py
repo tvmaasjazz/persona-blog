@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -81,6 +82,7 @@ async def insert_generate_text_run_row(
     pickup_count: int = 0,
     deleted_at: datetime | None = None,
     deleted_by_id: int | None = None,
+    charge_usd: Decimal = Decimal(0),
 ) -> GenerateTextRunOrm:
     run_record = GenerateTextRunOrm(
         text_type=text_type,
@@ -101,6 +103,7 @@ async def insert_generate_text_run_row(
         pickup_count=pickup_count,
         deleted_at=deleted_at,
         deleted_by_id=deleted_by_id,
+        charge_usd=charge_usd,
         created_by_id=created_by_id,
         updated_by_id=created_by_id,
     )
@@ -129,6 +132,8 @@ async def insert_generate_text_step_row(
     status: GenerateTextStepStatusType = GenerateTextStepStatusType.RUNNING,
     input: dict[str, Any] | None = None,
     output_text: str | None = None,
+    charge_usd: Decimal = Decimal(0),
+    decided_at: datetime | None = None,
 ) -> GenerateTextStepOrm:
     step_record = GenerateTextStepOrm(
         run_id=run_id,
@@ -138,6 +143,8 @@ async def insert_generate_text_step_row(
         status=status,
         input=input,
         output={STEP_OUTPUT_TEXT_KEY: output_text} if output_text is not None else None,
+        charge_usd=charge_usd,
+        decided_at=decided_at,
         created_by_id=created_by_id,
         updated_by_id=created_by_id,
     )

@@ -32,7 +32,11 @@ from libs.llm.types import (
     LlmType,
 )
 from tests.factories.auth import build_auth_user
-from tests.factories.llm import build_llm_completion_input, build_llm_provider_completion_result
+from tests.factories.llm import (
+    build_llm_completion_input,
+    build_llm_model_pricing_by_model_name,
+    build_llm_provider_completion_result,
+)
 from tests.factories.users import insert_user_row
 from tests.stubs.llm import LlmProviderServiceStub
 
@@ -57,11 +61,12 @@ def _build_llm_settings(
             request_timeout_seconds=30,
         ),
         model_pricing={
+            **LlmSettings().model_pricing,
             model_name: LlmModelPricingSettings(
                 input_usd_per_million_tokens=input_usd_per_million_tokens,
                 cached_input_usd_per_million_tokens=cached_input_usd_per_million_tokens,
                 output_usd_per_million_tokens=output_usd_per_million_tokens,
-            )
+            ),
         },
     )
 
@@ -160,46 +165,6 @@ async def test_complete_computes_cost_from_pricing_map_billing_cached_tokens_at_
     llm_call_record = await db_session.scalar(llm_call_query)
     assert llm_call_record is not None
     assert llm_call_record.cost_usd == Decimal("0.005700")
-
-
-async def test_complete_unpriced_model_records_null_cost_and_logs_warning(
-    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
-) -> None:
-    auth_user = await _insert_auth_user(db_session)
-    llm_provider_service_stub = LlmProviderServiceStub()
-    llm_call_service = LlmCallService(db_session_factory=db_session_factory)
-    llm_settings = LlmSettings(
-        fast=FastLlmTierSettings(
-            provider=LlmProviderType.OPENAI,
-            model_name="unpriced-model",
-            max_output_tokens=2048,
-            request_timeout_seconds=30,
-        ),
-        model_pricing={},
-    )
-    llm_service = LlmService(
-        llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
-        llm_call_service=llm_call_service,
-        llm_settings=llm_settings,
-    )
-    llm_completion_input = build_llm_completion_input(purpose="unpriced-purpose")
-
-    with structlog.testing.capture_logs() as captured_log_events:
-        complete_result = await llm_service.complete(llm_completion_input, auth_user)
-
-    llm_pricing_missing_events = [
-        log_event
-        for log_event in captured_log_events
-        if log_event["event"] == "llm_pricing_missing"
-    ]
-    assert len(llm_pricing_missing_events) == 1
-    assert llm_pricing_missing_events[0]["model_name"] == "unpriced-model"
-    llm_call_query = select(LlmCallOrm).where(
-        LlmCallOrm.identity == complete_result.llm_call_identity
-    )
-    llm_call_record = await db_session.scalar(llm_call_query)
-    assert llm_call_record is not None
-    assert llm_call_record.cost_usd is None
 
 
 async def test_complete_provider_error_leaves_failed_row_with_provider_message_and_reraises(
@@ -383,7 +348,7 @@ async def test_complete_tier_provider_not_registered_raises_not_implemented_erro
             max_output_tokens=2048,
             request_timeout_seconds=30,
         ),
-        model_pricing={},
+        model_pricing=build_llm_model_pricing_by_model_name(extra_model_names=["claude-stub"]),
     )
     llm_service = LlmService(
         llm_provider_services={},
@@ -410,7 +375,7 @@ async def test_complete_passes_tier_reasoning_effort_to_provider(
             request_timeout_seconds=30,
             reasoning_effort=LlmReasoningEffortType.HIGH,
         ),
-        model_pricing={},
+        model_pricing=build_llm_model_pricing_by_model_name(extra_model_names=["test-model"]),
     )
     llm_service = LlmService(
         llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},
@@ -451,7 +416,7 @@ async def test_complete_structured_tier_without_reasoning_effort_passes_none(
             max_output_tokens=1024,
             request_timeout_seconds=90,
         ),
-        model_pricing={},
+        model_pricing=build_llm_model_pricing_by_model_name(extra_model_names=["test-model"]),
     )
     llm_service = LlmService(
         llm_provider_services={LlmProviderType.OPENAI: llm_provider_service_stub},

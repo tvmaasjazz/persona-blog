@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -21,3 +22,5 @@ class FindUserByIdentityResult(BaseModel):
     display_name: str | None
     avatar_url: str | None
     is_active: bool
+    credit_balance_usd: Decimal
+    is_credit_balance_low: bool

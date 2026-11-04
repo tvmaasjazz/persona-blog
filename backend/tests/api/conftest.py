@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from decimal import Decimal
 
 import pytest
 from fastapi import FastAPI
@@ -46,7 +47,7 @@ async def signed_in_user(
     redis_client: Redis,
     app_settings: AppSettings,
 ) -> UserOrm:
-    user_record = await insert_user_row(db_session)
+    user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("5.00"))
     auth_session_service = AuthSessionService(
         redis_client=redis_client, auth_settings=app_settings.auth
     )
@@ -82,7 +83,7 @@ async def other_user_client(
     redis_client: Redis,
     app_settings: AppSettings,
 ) -> AsyncIterator[AsyncClient]:
-    other_user_record = await insert_user_row(db_session)
+    other_user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("5.00"))
     auth_session_service = AuthSessionService(
         redis_client=redis_client, auth_settings=app_settings.auth
     )

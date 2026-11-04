@@ -1,13 +1,9 @@
 from decimal import Decimal
 
-import structlog
-
 from libs.llm.constants import LLM_EXCEPTION_BY_REASON, LLM_STATUS_BY_REASON
 from libs.llm.exceptions import LlmException
 from libs.llm.settings import LlmSettings
 from libs.llm.types import LlmCallReasonType, LlmCallStatusType
-
-logger = structlog.get_logger(__name__)
 
 
 class LlmUtils:
@@ -38,13 +34,10 @@ class LlmUtils:
         input_tokens: int,
         output_tokens: int,
         cached_input_tokens: int,
-    ) -> Decimal | None:
-        """The call's cost in USD, or None for an unpriced model, since 0 would read as free."""
-        model_pricing = llm_settings.model_pricing.get(model_name)
-        if model_pricing is None:
-            logger.warning("llm_pricing_missing", model_name=model_name)
-            return None
-
+    ) -> Decimal:
+        """The call's cost in USD; LlmSettings refuses to load without a price for every tier's
+        model."""
+        model_pricing = llm_settings.model_pricing[model_name]
         billed_input_tokens = input_tokens - cached_input_tokens
         million_tokens = Decimal(1_000_000)
         return (

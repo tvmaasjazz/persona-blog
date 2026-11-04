@@ -36,6 +36,7 @@ from libs.generate_text.settings import GenerateTextSettings
 from libs.generate_text.types import GenerateTextRunStatusType
 from libs.personas.results import FindUserPersonaResult
 from tests.factories.auth import build_auth_user
+from tests.factories.credits import build_credit_settings
 from tests.factories.generate_text import build_generate_text_input, insert_generate_text_run_row
 from tests.factories.llm import build_llm_completion_result
 from tests.factories.personas import insert_persona_row
@@ -84,7 +85,9 @@ def _build_real_graph_builder_registry(
     generate_text_settings: GenerateTextSettings,
 ) -> GenerateTextGraphBuilderRegistry:
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(
+        db_session_factory=db_session_factory, credit_settings=build_credit_settings()
+    )
     instrumentation_service = GenerateTextInstrumentationService(
         run_service=run_service, step_service=step_service
     )
@@ -116,7 +119,9 @@ def _build_generate_text_service(
     return GenerateTextService(
         graph_builder_registry=graph_builder_registry,
         run_service=run_service,
-        step_service=GenerateTextStepService(db_session_factory=db_session_factory),
+        step_service=GenerateTextStepService(
+            db_session_factory=db_session_factory, credit_settings=build_credit_settings()
+        ),
         lease_service=lease_service,
         checkpointer=checkpointer,
         background_job_service=background_job_service,

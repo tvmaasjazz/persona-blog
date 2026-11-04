@@ -1,6 +1,7 @@
 from decimal import Decimal
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from libs.llm.types import LlmProviderType, LlmReasoningEffortType
 
@@ -83,3 +84,22 @@ class LlmSettings(BaseModel):
     max_retries: int = 2
     retry_base_delay_seconds: float = 1.0
     retry_max_delay_seconds: float = 20.0
+
+    @model_validator(mode="after")
+    def validate_every_tier_has_pricing(self) -> Self:
+        """Rejects settings where a tier's model has no model_pricing entry."""
+        tier_settings_by_name = {
+            "fast": self.fast,
+            "strong": self.strong,
+            "thinking": self.thinking,
+        }
+        unpriced_tier_names = [
+            f"{tier_name} ({tier_settings.model_name})"
+            for tier_name, tier_settings in tier_settings_by_name.items()
+            if tier_settings.model_name not in self.model_pricing
+        ]
+        if unpriced_tier_names:
+            raise ValueError(
+                f"No model_pricing entry for the model of tier: {', '.join(unpriced_tier_names)}"
+            )
+        return self

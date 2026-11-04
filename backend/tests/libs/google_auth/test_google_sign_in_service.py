@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 from redis.asyncio import Redis
 from sqlalchemy import func, select
@@ -127,7 +129,9 @@ def _build_google_sign_in_service(
     )
     return GoogleSignInService(
         google_oauth_service=google_oauth_service_stub or GoogleOAuthServiceStub(),
-        user_service=UserService(db_session=db_session),
+        user_service=UserService(
+            db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+        ),
         user_activity_service=user_activity_service,
         auth_session_service=auth_session_service,
         permission_service=PermissionService(db_session=db_session),

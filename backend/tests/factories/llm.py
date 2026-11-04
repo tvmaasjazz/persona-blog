@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.llm.inputs import LlmCompletionInput, LlmProviderCompletionInput
 from libs.llm.results import LlmCompletionResult, LlmProviderCompletionResult
+from libs.llm.settings import LlmModelPricingSettings, LlmSettings
 from libs.llm.types import (
     LlmCallReasonType,
     LlmCallStatusType,
@@ -121,3 +122,19 @@ async def insert_llm_call_row(
     db_session.add(llm_call_record)
     await db_session.flush()
     return llm_call_record
+
+
+def build_llm_model_pricing_by_model_name(
+    *, extra_model_names: list[str] | None = None
+) -> dict[str, LlmModelPricingSettings]:
+    """The default pricing map plus a priced entry for each extra model name, since every
+    tier's model must be priced."""
+    extra_model_pricing_by_model_name = {
+        extra_model_name: LlmModelPricingSettings(
+            input_usd_per_million_tokens=Decimal("2.00"),
+            cached_input_usd_per_million_tokens=Decimal("0.50"),
+            output_usd_per_million_tokens=Decimal("8.00"),
+        )
+        for extra_model_name in extra_model_names or []
+    }
+    return {**LlmSettings().model_pricing, **extra_model_pricing_by_model_name}

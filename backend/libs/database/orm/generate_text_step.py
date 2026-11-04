@@ -36,6 +36,7 @@ class GenerateTextStepOrm(BaseOrm):
     input_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     output_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(16, 10), server_default=text("0"))
+    charge_usd: Mapped[Decimal] = mapped_column(Numeric(16, 10), server_default=text("0"))
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     human_decision: Mapped[HumanDecisionType | None] = mapped_column(
         Enum(HumanDecisionType, name="pb_human_decision_type")

@@ -14,6 +14,9 @@ class GenerateTextRunNotPausedException(GenerateTextException, ConflictException
 class GenerateTextRunVersionMismatchException(GenerateTextException, ConflictException): ...
 
 
+class GenerateTextActiveRunLimitException(GenerateTextException, ConflictException): ...
+
+
 class GenerateTextOptionsInvalidException(GenerateTextException, UnprocessableException): ...
 
 

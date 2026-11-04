@@ -1,3 +1,4 @@
+from libs.generate_text.services.generate_text_credit_service import GenerateTextCreditService
 from libs.generate_text.services.generate_text_instrumentation_service import (
     GenerateTextInstrumentationService,
 )
@@ -14,8 +15,12 @@ from libs.generate_text.services.generate_text_run_pickup_service import (
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
 from libs.generate_text.services.generate_text_service import GenerateTextService
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
+from libs.generate_text.services.generate_text_validation_service import (
+    GenerateTextValidationService,
+)
 
 __all__ = [
+    "GenerateTextCreditService",
     "GenerateTextInstrumentationService",
     "GenerateTextNodeService",
     "GenerateTextRunHandoffQueueService",
@@ -24,4 +29,5 @@ __all__ = [
     "GenerateTextRunService",
     "GenerateTextService",
     "GenerateTextStepService",
+    "GenerateTextValidationService",
 ]

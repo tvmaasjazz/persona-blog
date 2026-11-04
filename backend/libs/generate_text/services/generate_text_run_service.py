@@ -17,6 +17,7 @@ from libs.generate_text.results import (
     FindGenerateTextRunByIdentityResult,
     FindLlmCallRollupResult,
 )
+from libs.generate_text.services.generate_text_credit_service import GenerateTextCreditService
 from libs.generate_text.types import GenerateTextRunStatusType
 
 
@@ -213,10 +214,17 @@ class GenerateTextRunService:
     async def fail_run(
         self, run_id: int, error_code: str | None = None, error_message: str | None = None
     ) -> None:
-        """Marks the run FAILED, recording an error only when no step owns it."""
+        """Marks the run FAILED, recording an error only when no step owns it, and refunds
+        the charges since its last review."""
         async with self._db_session_factory() as db_session, db_session.begin():
-            # Read the status first: a WHERE on it couldn't tell an unknown run from a failed one
-            status_query = select(GenerateTextRunOrm.status).where(GenerateTextRunOrm.id == run_id)
+            # Read the status first: a WHERE on it couldn't tell an unknown run from a failed one.
+            # The row lock holds a second fail_run here until this one commits, so it reads
+            # FAILED and returns rather than refunding again
+            status_query = (
+                select(GenerateTextRunOrm.status)
+                .where(GenerateTextRunOrm.id == run_id)
+                .with_for_update()
+            )
             status_query_result = await db_session.execute(status_query)
             run_status = status_query_result.scalar_one_or_none()
             if run_status is None:
@@ -246,6 +254,10 @@ class GenerateTextRunService:
                 )
             )
             await db_session.execute(run_failure_update)
+
+            # Refund the steps whose work the failure lost, in the same transaction
+            generate_text_credit_service = GenerateTextCreditService(db_session=db_session)
+            await generate_text_credit_service.refund_failed_run_segment(run_id)
 
     async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
         """Finds a run by identity without checking who owns it; persona_identity is None once

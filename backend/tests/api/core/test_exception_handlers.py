@@ -6,6 +6,7 @@ from libs.core.exceptions import (
     ConflictException,
     ForbiddenException,
     NotFoundException,
+    PaymentRequiredException,
     RateLimitedException,
     ServiceUnavailableException,
     UnauthorizedException,
@@ -19,6 +20,9 @@ from libs.core.exceptions import (
         pytest.param(NotFoundException("Blog post 7 not found"), 404, id="not_found"),
         pytest.param(ConflictException("Email already taken"), 409, id="conflict"),
         pytest.param(UnauthorizedException("Not signed in"), 401, id="unauthorized"),
+        pytest.param(
+            PaymentRequiredException("Credit balance too low"), 402, id="payment_required"
+        ),
         pytest.param(ForbiddenException("Not allowed"), 403, id="forbidden"),
         pytest.param(UnprocessableException("Invalid input"), 422, id="unprocessable"),
         pytest.param(RateLimitedException("Generation limit reached"), 429, id="rate_limited"),

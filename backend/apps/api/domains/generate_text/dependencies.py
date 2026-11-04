@@ -4,9 +4,15 @@ from fastapi import Depends, Request
 from starlette.datastructures import State
 
 from apps.api.core.config import AppSettings
-from apps.api.core.dependencies import AuthUserDep, LlmServiceDep, build_llm_service
+from apps.api.core.dependencies import (
+    AppSettingsDep,
+    AuthUserDep,
+    LlmServiceDep,
+    build_llm_service,
+)
 from apps.api.domains.generate_text.dtos import GenerateBlogPostDto
 from libs.core.exceptions import ServiceUnavailableException
+from libs.credits.services import CreditValidationService
 from libs.generate_text.graphs.generate_text_graph_builder_registry import (
     GenerateTextGraphBuilderRegistry,
 )
@@ -19,6 +25,7 @@ from libs.generate_text.services import (
     GenerateTextRunService,
     GenerateTextService,
     GenerateTextStepService,
+    GenerateTextValidationService,
 )
 from libs.llm.services import LlmService
 from libs.personas.results import FindUserPersonaResult
@@ -35,7 +42,9 @@ def build_generate_text_service(app_state: State, llm_service: LlmService) -> Ge
     app_settings: AppSettings = app_state.settings
     db_session_factory = app_state.db_session_factory
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    generate_text_step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    generate_text_step_service = GenerateTextStepService(
+        db_session_factory=db_session_factory, credit_settings=app_settings.credits
+    )
     generate_text_run_handoff_queue_service = GenerateTextRunHandoffQueueService(
         redis_client=app_state.redis_client
     )
@@ -113,3 +122,33 @@ async def get_generate_text_persona(
 
 
 GenerateTextPersonaDep = Annotated[FindUserPersonaResult, Depends(get_generate_text_persona)]
+
+
+async def validate_credit_balance_covers_run(
+    request: Request,
+    auth_user: AuthUserDep,
+    app_settings: AppSettingsDep,
+) -> None:
+    """Rejects starting or resuming a run when the balance is below the run minimum, read
+    on its own short session, closed before the route starts the run's job."""
+    db_session_factory = request.app.state.db_session_factory
+    async with db_session_factory() as db_session:
+        credit_validation_service = CreditValidationService(db_session=db_session)
+        await credit_validation_service.validate_balance_covers_run(
+            auth_user, app_settings.credits.minimum_run_balance_usd
+        )
+
+
+async def validate_active_run_limit(
+    request: Request,
+    auth_user: AuthUserDep,
+    app_settings: AppSettingsDep,
+) -> None:
+    """Rejects starting or resuming a run when the user already has the maximum active, read
+    on its own short session, closed before the route starts the run's job."""
+    db_session_factory = request.app.state.db_session_factory
+    async with db_session_factory() as db_session:
+        generate_text_validation_service = GenerateTextValidationService(db_session=db_session)
+        await generate_text_validation_service.validate_active_run_count_below_limit(
+            auth_user, app_settings.generate_text.max_active_runs_per_user
+        )

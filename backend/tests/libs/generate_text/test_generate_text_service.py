@@ -48,6 +48,7 @@ from libs.generate_text.types import (
 )
 from libs.personas.results import FindUserPersonaResult
 from tests.factories.auth import build_auth_user
+from tests.factories.credits import build_credit_settings
 from tests.factories.generate_text import (
     build_generate_text_input,
     build_resume_generate_text_input,
@@ -103,7 +104,9 @@ def _build_generate_text_service(
     """Replaces only the step service the service holds, not the graph nodes' one."""
     generate_text_settings = generate_text_settings or GenerateTextSettings()
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    real_step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    real_step_service = GenerateTextStepService(
+        db_session_factory=db_session_factory, credit_settings=build_credit_settings()
+    )
     instrumentation_service = GenerateTextInstrumentationService(
         run_service=run_service, step_service=real_step_service
     )
@@ -140,7 +143,9 @@ def _build_generate_text_service_with_stub_registry(
     generate_text_settings: GenerateTextSettings | None = None,
 ) -> tuple[GenerateTextService, GenerateTextGraphBuilderRegistryStub]:
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(
+        db_session_factory=db_session_factory, credit_settings=build_credit_settings()
+    )
     graph_builder_registry_stub = GenerateTextGraphBuilderRegistryStub()
     generate_text_settings = generate_text_settings or GenerateTextSettings()
     lease_service = GenerateTextRunLeaseService(

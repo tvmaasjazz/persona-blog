@@ -56,6 +56,7 @@ class GenerateTextRunOrm(BaseOrm):
     input_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     output_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(16, 10), server_default=text("0"))
+    charge_usd: Mapped[Decimal] = mapped_column(Numeric(16, 10), server_default=text("0"))
     started_at: Mapped[datetime | None]
     finished_at: Mapped[datetime | None]
     content_item_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey(ContentItemOrm.id))
