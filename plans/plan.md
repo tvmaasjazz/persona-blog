@@ -14,7 +14,8 @@ before.
 
 What a user may do comes from their role's permissions. What a creator may spend comes
 from their credit balance. There are no payments yet, but both are the shapes payments
-will use. Two PRs: roles and permissions first, then credits.
+will use. The backend is done: roles and permissions in #36, credits in #37. The
+frontend comes in item 6.
 
 **Roles:**
 
@@ -46,12 +47,12 @@ will use. Two PRs: roles and permissions first, then credits.
   reads no table per request. A stored session that doesn't match the current shape is
   treated as expired, so a change to the session's shape costs one sign-in and no
   deploy step.
-- No endpoints or pages change a role yet: granting credits (the credits PR) makes the
-  user a creator, and anything else is SQL. Changing a role in code deletes the user's
-  sessions, and they sign in again with the new set. A user has a session per browser
-  or device, and sessions are in Redis by session id today, so the credits PR adds a
-  per-user set of session ids to find them all. After an SQL change, the user signs out
-  and in.
+- Granting credits makes the user a creator: `backend/scripts/grant_credits.py` today,
+  the admin panel (item 2) next. Anything else is SQL. Changing a role in code deletes
+  the user's sessions, and they sign in again with the new set. A user has a session per
+  browser or device, and sessions are in Redis by session id today, so the admin panel
+  PR adds a per-user set of session ids to find them all. After an SQL change, the user
+  signs out and in.
 
 **Credits:**
 
@@ -96,15 +97,134 @@ will use. Two PRs: roles and permissions first, then credits.
   they're running out before a run is refused. Granted credits get the same warning
   now; with payments, it shows only to users without auto-refill.
 
-**Admin panel and the user's balance:**
+### 2. Admin panel (backend)
 
-- An admin page: users with their role and balance, grant credits with a note, which
-  makes the user a creator, and see a user's ledger. Until it exists,
-  `backend/scripts/grant_credits.py` grants credits and makes a reader a creator.
-- The user response carries the user's role, permissions, balance and whether it's
-  low, and the profile shows the remaining balance.
+One PR. Admin-only endpoints for the admin panel's pages (item 6):
 
-### 2. Deploy readiness
+- **Users:** every user with their role and balance. No search or pagination yet; the
+  list takes on item 5's after it lands.
+- **Grant credits:** an amount and a note, written as a `GRANT` on the ledger. A reader
+  becomes a creator, and their sessions are deleted so they sign in with the new role.
+  This needs the per-user set of session ids (item 1 › Permissions).
+  `backend/scripts/grant_credits.py` stays for granting without the panel.
+- **A user's ledger:** their ledger rows, newest first.
+
+**To decide:**
+
+- The new permissions, held by the admin only: one read and one write (`USER_READ` and
+  `USER_WRITE`, say), or one per action
+- The route prefix, `/admin/...` or under each resource
+- Whether the admin can also set a role directly, such as turning a creator back into a
+  reader
+
+### 3. Invite links (backend)
+
+One PR. The admin creates an invite carrying a name, a credit amount, a note and an
+expiry, and gets back its link. There's no email in the app: the admin copies the link
+and sends it by email or text. The name is required and says who it's for, since the
+invite isn't tied to an email, so the list shows who each link went to.
+
+- The link holds a one-time code. Only its hash is stored, so the link is shown once,
+  when it's created.
+- The code is carried through Google sign-in in the OAuth state. Signing in with it,
+  with any Google account, uses it up: the user becomes a creator and gets the credits
+  as a `GRANT` on the ledger, with the invite on the row.
+- The admin lists invites with their name and status (unused, used and by which account,
+  expired) and can revoke an unused one.
+
+**To decide:**
+
+- What an invite does for someone who already has an account: the same upgrade and
+  grant, or refused
+- The default expiry
+
+### 4. Post views and the feed's order (backend)
+
+One PR. Simple counts of how posts are read, and a score to order the homepage by.
+
+- **Views:** the frontend records a view when a post opens. One view per viewer, per
+  post, per day: by user when signed in, else by an anonymous id in a cookie.
+- **How far they read:** the frontend reports the furthest point read, in quarters (25,
+  50, 75, 100%), as the reader scrolls, stored on the view.
+- **The score:** recent engagement over age, as in Hacker News. Each view in the last 7
+  days counts 1, plus 3 times the share of the post it read, so a half read adds 1.5 and
+  a full read 3. Partial reads count for what they read:
+  `(sum of (1 + 3 × read share) + 1) / (hours since publishing + 2) ^ 1.5`. The weights
+  and the window are settings, so the order can be tuned without a deploy. It's
+  computed in the query; with many posts, a cached score per post, refreshed on a
+  schedule.
+- Authors see their posts' views and how far they were read.
+
+**To decide:**
+
+- A view row per viewer per day, or counts per post per day, which lose who viewed but
+  stay small
+- Whether a view by the post's own author counts
+
+### 5. Pagination, search and the homepage feed (backend)
+
+One PR. One way of paging and searching every list in the app, used first by the
+homepage feed. The admin's user list and the other lists take it on after.
+
+- **Pagination:** a page size and a cursor or offset, and the same response shape on
+  every list.
+- **Search:** one search box per list, matching the fields that list chooses (a post's
+  title and body, a user's email and name). Filters can be fixed by the page at first,
+  with no filter menu yet.
+- **The homepage feed:** every public post, ordered by the score (item 4), paged, with
+  a search.
+- **A persona's page:** a public persona's public posts, so anyone can read a persona
+  and what it's written. Today's lists show only the signed-in user's own.
+- **Reading signed out:** the feed, a persona, a persona's posts and a post are open
+  routes, with no permission, so a shared link works for anyone. Sign-in is optional on
+  them: a signed-in owner still sees their own private persona or post, and anyone else
+  gets a 404 for one, as `find_persona` and `find_blog_post` do today. They join the
+  open routes list in `test_app_factory.py`. Recording a view is open too. The owner's
+  own lists, writes and generation keep their permissions.
+- **The read permissions stay.** Every role that signs in keeps `PERSONA_READ` and
+  `BLOG_POST_READ`, but the open routes don't check them for now. They're kept for
+  later rules that may check them again, such as showing a signed-out reader only half
+  a post.
+- **A post shows to others only if its persona is public too.** Making a persona
+  private changes no post: its posts keep `is_public = true` but are treated as
+  private, so they leave the feed and a link to one returns a 404 to anyone but the
+  owner. Making the persona public again brings back exactly the posts that were public,
+  at once. Every query that shows posts to others checks both flags. A private persona
+  still can't make a post public, as today. The frontend warns when a persona with
+  public posts is made private: "Its 4 public posts will be hidden until the persona is
+  public again."
+- The frontend's table, search box and pager, built once in item 6 and used by every
+  list.
+
+**To decide:**
+
+- Cursor or offset pagination. A cursor keeps pages steady while new posts arrive, but
+  can't jump to a page number
+- Search with Postgres full-text search, or a simple `ILIKE` to start
+
+### 6. Frontend
+
+Everything the backend-only PRs added, before the deploy:
+
+- **Roles:** a reader sees no create, edit or generate actions, and a 403 shows a
+  message rather than an error.
+- **Credits:** the balance on the profile, the low balance banner, and the 402 message
+  when a run is refused.
+- **Admin panel:** users with their role and balance, granting credits with a note, a
+  user's ledger, and creating, listing and revoking invites, with the new link shown
+  once to copy.
+- **Invite sign-up:** the link's page signs the user in with Google, carrying the code,
+  and says what they got.
+- **Homepage:** the feed, replacing My personas as the start page, with search and
+  paging, and recording views and how far a post is read.
+- **A persona's page:** its public posts, reached from a post or the feed. Making a
+  persona with public posts private warns that they'll be hidden (item 5).
+- The table, search box and pager the lists share.
+
+Probably more than one PR, split by area: the shared pieces and roles and credits first,
+then the admin panel and invites, then the homepage and persona pages.
+
+### 7. Deploy readiness
 
 Assume any worker can restart mid-run and any request can land on any replica. The
 lease, handoff and drain work in the archive covers runs a redeploy stops.
@@ -133,11 +253,12 @@ lease, handoff and drain work in the archive covers runs a redeploy stops.
 
 - A subdomain of an existing domain first, or a dedicated domain from the start
 
-### 3. Initial deploy
+### 8. Initial deploy
 
 - [ ] Deploy the frontend, the backend, Postgres and Redis on Railway
 - [ ] Run the `backend/scripts/e2e/` scripts against the deployed API
-- [ ] Give Tyler's user the admin role
+- [ ] Give Tyler's user the admin role, and grant it credits
+- [ ] Send the first invite links
 
 ## Phase 2 — Security, idempotency and visibility
 
@@ -260,12 +381,17 @@ short and the heartbeat steady makes it rare.
 
 ## Phase 3 — Features
 
-### 1. Invite links
+### 1. Persona subscriptions
 
-The admin creates an invite carrying a role (creator), a credit amount and an expiry,
-and sends its link. The link holds a one-time code, stored hashed. The code is carried
-through Google sign-in in the OAuth state, and signing in with it uses it up: the user
-becomes a creator and gets the credits as a `GRANT` on the ledger.
+Any signed-in user, whatever their role, can subscribe to a persona and gets an email
+when it publishes a new post. Unsubscribing takes one click, from the email or the
+persona's page.
+
+**To decide:**
+
+- The email provider, shared with email sign-in (Phase 2) if that comes first
+- One email per post, or a digest
+- Whether the email holds the whole post or a summary and a link
 
 ### 2. Avatars
 
@@ -299,12 +425,7 @@ Rework the humanize part of the graph from Tyler's samples and notes on humanizi
 possibly as several calls rather than one prompt. Try adding or removing steps in the
 generation, different models and different prompts while at it.
 
-### 6. Homepage feed and search
-
-A homepage with a feed of public posts and a search. Until then the app starts on My
-personas.
-
-### 7. Payments
+### 6. Payments
 
 A creator tops up their balance (a first payment of $5, say), by hand or with
 auto-refill, and becoming a creator means adding payment details and that first top-up.
