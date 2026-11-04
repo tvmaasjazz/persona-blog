@@ -317,6 +317,13 @@ closed by the time it runs. That's also why it's a function rather than a servic
 A background job outlives the request's session too, so every service it calls takes
 the session factory and opens a short session per write, like `GenerateTextRunService`.
 
+When one of those short transactions must also hold another service's writes, such as
+`complete_step` charging the step's owner, the other service is built inside the
+transaction on its `db_session` and never commits:
+`GenerateTextCreditService(db_session=db_session)`. Everywhere else a service's
+collaborators arrive through `__init__`, and request-scoped services share the
+request's session through their dependency factories.
+
 A lib creates a session in only three places: an after-response task, the services a
 background job calls, and a record that must survive the caller's rollback (below).
 
