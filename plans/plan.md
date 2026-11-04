@@ -181,10 +181,10 @@ homepage feed. The admin's user list and the other lists take it on after.
   gets a 404 for one, as `find_persona` and `find_blog_post` do today. They join the
   open routes list in `test_app_factory.py`. Recording a view is open too. The owner's
   own lists, writes and generation keep their permissions.
-- **A signed-in reader still needs the read permissions.** `PERSONA_READ` and
-  `BLOG_POST_READ` stay: a signed-in caller without them is refused, and later rules
-  may treat signed-out readers differently from signed-in ones, such as showing half a
-  post.
+- **The read permissions stay.** Every role that signs in keeps `PERSONA_READ` and
+  `BLOG_POST_READ`, but the open routes don't check them for now. They're kept for
+  later rules that may check them again, such as showing a signed-out reader only half
+  a post.
 - **A post shows to others only if its persona is public too.** A private persona
   can't publish a public post today, but making a persona private leaves its posts
   public, so the open routes check both flags.
