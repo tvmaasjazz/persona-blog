@@ -3,23 +3,27 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
+from libs.credits.types import CreditLedgerEntryType
+from libs.database.orm.credit_ledger import CreditLedgerOrm
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.generate_text.results import (
     ClaimExpiredGenerateTextRunResult,
     FindGenerateTextRunByIdentityResult,
 )
 from libs.generate_text.services.generate_text_run_service import GenerateTextRunService
-from libs.generate_text.types import GenerateTextRunStatusType, TextType
+from libs.generate_text.types import GenerateTextRunStatusType, GenerateTextStepStatusType, TextType
 from tests.factories.auth import build_auth_user
+from tests.factories.credits import insert_credit_ledger_row
 from tests.factories.database import fetch_database_utc_now
 from tests.factories.generate_text import (
     build_create_generate_text_run_input,
     insert_generate_text_run_row,
+    insert_generate_text_step_row,
 )
 from tests.factories.llm import insert_llm_call_row
 from tests.factories.personas import insert_persona_row
@@ -285,6 +289,111 @@ async def test_fail_run_already_failed_keeps_first_failures_values(
     assert run_record.status == GenerateTextRunStatusType.FAILED
     assert run_record.error_code == "ValueError"
     assert run_record.error_message == "first failure"
+
+
+async def test_fail_run_refunds_charges_since_last_review_in_same_transaction(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("4.70"))
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=user_record.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        charge_usd=Decimal("0.30"),
+    )
+    outline_step_record = await insert_generate_text_step_row(
+        db_session,
+        run_id=run_record.id,
+        created_by_id=auth_user.id,
+        step_number=1,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+        charge_usd=Decimal("0.10"),
+        decided_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+    )
+    draft_step_record = await insert_generate_text_step_row(
+        db_session,
+        run_id=run_record.id,
+        created_by_id=auth_user.id,
+        step_number=2,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+        charge_usd=Decimal("0.20"),
+    )
+    await insert_credit_ledger_row(
+        db_session,
+        user_id=user_record.id,
+        amount_usd=Decimal("-0.10"),
+        entry_type=CreditLedgerEntryType.CHARGE,
+        generate_text_run_id=run_record.id,
+        generate_text_step_id=outline_step_record.id,
+    )
+    await insert_credit_ledger_row(
+        db_session,
+        user_id=user_record.id,
+        amount_usd=Decimal("-0.20"),
+        entry_type=CreditLedgerEntryType.CHARGE,
+        generate_text_run_id=run_record.id,
+        generate_text_step_id=draft_step_record.id,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.fail_run(run_record.id, "ValueError", "boom")
+
+    await db_session.refresh(user_record)
+    await db_session.refresh(run_record)
+    refund_query = select(CreditLedgerOrm.amount_usd, CreditLedgerOrm.generate_text_step_id).where(
+        CreditLedgerOrm.entry_type == CreditLedgerEntryType.REFUND,
+        CreditLedgerOrm.user_id == user_record.id,
+    )
+    refund_query_result = await db_session.execute(refund_query)
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert [tuple(refund_row) for refund_row in refund_query_result.all()] == [
+        (Decimal("0.20"), draft_step_record.id)
+    ]
+    assert user_record.credit_balance_usd == Decimal("4.90")
+    assert run_record.charge_usd == Decimal("0.10")
+
+
+async def test_fail_run_already_failed_refunds_only_once(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("4.80"))
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=user_record.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        charge_usd=Decimal("0.20"),
+    )
+    step_record = await insert_generate_text_step_row(
+        db_session,
+        run_id=run_record.id,
+        created_by_id=user_record.id,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+        charge_usd=Decimal("0.20"),
+    )
+    await insert_credit_ledger_row(
+        db_session,
+        user_id=user_record.id,
+        amount_usd=Decimal("-0.20"),
+        entry_type=CreditLedgerEntryType.CHARGE,
+        generate_text_run_id=run_record.id,
+        generate_text_step_id=step_record.id,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    await generate_text_run_service.fail_run(run_record.id, "ValueError", "first failure")
+
+    await generate_text_run_service.fail_run(run_record.id, "RuntimeError", "second failure")
+
+    await db_session.refresh(user_record)
+    refund_count_query = select(func.count(CreditLedgerOrm.id)).where(
+        CreditLedgerOrm.entry_type == CreditLedgerEntryType.REFUND,
+        CreditLedgerOrm.user_id == user_record.id,
+    )
+    refund_count = await db_session.scalar(refund_count_query)
+    assert refund_count == 1
+    assert user_record.credit_balance_usd == Decimal("5.00")
 
 
 async def test_find_run_by_identity_returns_result(

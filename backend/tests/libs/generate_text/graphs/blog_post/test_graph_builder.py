@@ -18,6 +18,7 @@ from libs.generate_text.states import GenerateTextState
 from libs.generate_text.types import GenerateTextNodeType
 from libs.llm.types import LlmType
 from tests.factories.auth import build_auth_user
+from tests.factories.credits import build_credit_settings
 from tests.factories.generate_text import (
     build_blog_post_options_input,
     build_create_generate_text_run_input,
@@ -42,7 +43,9 @@ def _build_graph_builder(
     max_rewrite_passes: int = 3,
 ) -> tuple[GenerateTextRunService, BlogPostGraphBuilder]:
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(
+        db_session_factory=db_session_factory, credit_settings=build_credit_settings()
+    )
     instrumentation_service = GenerateTextInstrumentationService(
         run_service=run_service, step_service=step_service
     )

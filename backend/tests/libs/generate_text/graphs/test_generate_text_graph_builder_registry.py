@@ -13,6 +13,7 @@ from libs.generate_text.services.generate_text_run_service import GenerateTextRu
 from libs.generate_text.services.generate_text_step_service import GenerateTextStepService
 from libs.generate_text.settings import GenerateTextSettings
 from libs.generate_text.types import TextType
+from tests.factories.credits import build_credit_settings
 from tests.stubs.llm import LlmServiceStub
 
 
@@ -20,7 +21,9 @@ def _build_registry(
     db_session_factory: async_sessionmaker[AsyncSession],
 ) -> GenerateTextGraphBuilderRegistry:
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(
+        db_session_factory=db_session_factory, credit_settings=build_credit_settings()
+    )
     instrumentation_service = GenerateTextInstrumentationService(
         run_service=run_service, step_service=step_service
     )

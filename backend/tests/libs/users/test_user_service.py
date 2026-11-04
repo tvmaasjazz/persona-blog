@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -21,7 +22,9 @@ from tests.factories.users import (
 async def test_find_or_create_user_from_auth_provider_creates_user_and_provider_row(
     db_session: AsyncSession,
 ) -> None:
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
     find_or_create_user_from_auth_provider_input = (
         build_find_or_create_user_from_auth_provider_input(
             provider_subject="google-subject-1",
@@ -72,7 +75,9 @@ async def test_find_or_create_user_from_auth_provider_creates_user_and_provider_
 async def test_find_or_create_user_from_auth_provider_new_user_is_stored_as_reader(
     db_session: AsyncSession,
 ) -> None:
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
     find_or_create_user_from_auth_provider_input = (
         build_find_or_create_user_from_auth_provider_input()
     )
@@ -102,7 +107,9 @@ async def test_find_or_create_user_from_auth_provider_existing_provider_returns_
         provider_subject="google-subject-2",
         email_at_provider="ada@example.com",
     )
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
     find_or_create_user_from_auth_provider_input = (
         build_find_or_create_user_from_auth_provider_input(provider_subject="google-subject-2")
     )
@@ -134,7 +141,9 @@ async def test_find_or_create_user_from_auth_provider_existing_provider_returns_
     await insert_user_auth_provider_row(
         db_session, user_id=user_record.id, provider_subject="google-subject-5"
     )
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
     find_or_create_user_from_auth_provider_input = (
         build_find_or_create_user_from_auth_provider_input(provider_subject="google-subject-5")
     )
@@ -155,7 +164,9 @@ async def test_find_or_create_user_from_auth_provider_inactive_user_raises_forbi
     await insert_user_auth_provider_row(
         db_session, user_id=user_record.id, provider_subject="google-subject-3"
     )
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
     find_or_create_user_from_auth_provider_input = (
         build_find_or_create_user_from_auth_provider_input(provider_subject="google-subject-3")
     )
@@ -174,7 +185,9 @@ async def test_find_or_create_user_from_auth_provider_soft_deleted_user_raises_f
     await insert_user_auth_provider_row(
         db_session, user_id=user_record.id, provider_subject="google-subject-4"
     )
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
     find_or_create_user_from_auth_provider_input = (
         build_find_or_create_user_from_auth_provider_input(provider_subject="google-subject-4")
     )
@@ -189,7 +202,9 @@ async def test_find_or_create_user_from_auth_provider_email_taken_raises_conflic
     db_session: AsyncSession,
 ) -> None:
     await insert_user_row(db_session, email="ada@example.com")
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
     find_or_create_user_from_auth_provider_input = (
         build_find_or_create_user_from_auth_provider_input(email="ada@example.com")
     )
@@ -204,7 +219,9 @@ async def test_find_or_create_user_from_auth_provider_email_case_diff_raises_con
     db_session: AsyncSession,
 ) -> None:
     await insert_user_row(db_session, email="ADA@example.com")
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
     find_or_create_user_from_auth_provider_input = (
         build_find_or_create_user_from_auth_provider_input(email="ada@example.com")
     )
@@ -220,7 +237,9 @@ async def test_find_or_create_user_from_auth_provider_email_only_on_deleted_user
 ) -> None:
     deleted_at = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
     await insert_user_row(db_session, email="ada@example.com", deleted_at=deleted_at)
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
     find_or_create_user_from_auth_provider_input = (
         build_find_or_create_user_from_auth_provider_input(email="ada@example.com")
     )
@@ -245,7 +264,9 @@ async def test_find_or_create_user_from_auth_provider_soft_deleted_provider_row_
         provider_subject="google-subject-5",
         deleted_at=deleted_at,
     )
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
     find_or_create_user_from_auth_provider_input = (
         build_find_or_create_user_from_auth_provider_input(provider_subject="google-subject-5")
     )
@@ -271,8 +292,11 @@ async def test_find_user_by_identity_returns_user(db_session: AsyncSession) -> N
         db_session,
         email="ada@example.com",
         display_name="Ada Lovelace",
+        credit_balance_usd=Decimal("2.5"),
     )
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
 
     find_user_by_identity_result = await user_service.find_user_by_identity(user_record.identity)
 
@@ -284,13 +308,52 @@ async def test_find_user_by_identity_returns_user(db_session: AsyncSession) -> N
         display_name="Ada Lovelace",
         avatar_url=user_record.avatar_url,
         is_active=user_record.is_active,
+        credit_balance_usd=Decimal("2.5"),
+        is_credit_balance_low=False,
     )
+
+
+@pytest.mark.parametrize(
+    ("credit_balance_usd", "expected_is_credit_balance_low"),
+    [
+        pytest.param(Decimal("0.4999999999"), True, id="just_below_threshold"),
+        pytest.param(Decimal("0"), True, id="zero"),
+        pytest.param(Decimal("0.50"), False, id="at_threshold"),
+        pytest.param(Decimal("3.00"), False, id="above_threshold"),
+    ],
+)
+async def test_find_user_by_identity_flags_balance_below_threshold_as_low(
+    db_session: AsyncSession, credit_balance_usd: Decimal, expected_is_credit_balance_low: bool
+) -> None:
+    user_record = await insert_user_row(db_session, credit_balance_usd=credit_balance_usd)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
+
+    find_user_by_identity_result = await user_service.find_user_by_identity(user_record.identity)
+
+    assert find_user_by_identity_result.is_credit_balance_low is expected_is_credit_balance_low
+
+
+async def test_find_user_by_identity_uses_the_threshold_it_was_built_with(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("0.75"))
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("1.00")
+    )
+
+    find_user_by_identity_result = await user_service.find_user_by_identity(user_record.identity)
+
+    assert find_user_by_identity_result.is_credit_balance_low is True
 
 
 async def test_find_user_by_identity_never_inserted_raises_not_found_exception(
     db_session: AsyncSession,
 ) -> None:
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
 
     with pytest.raises(NotFoundException):
         await user_service.find_user_by_identity(uuid4())
@@ -301,7 +364,9 @@ async def test_find_user_by_identity_soft_deleted_raises_not_found_exception(
 ) -> None:
     deleted_at = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
     user_record = await insert_user_row(db_session, deleted_at=deleted_at)
-    user_service = UserService(db_session=db_session)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
 
     with pytest.raises(NotFoundException):
         await user_service.find_user_by_identity(user_record.identity)

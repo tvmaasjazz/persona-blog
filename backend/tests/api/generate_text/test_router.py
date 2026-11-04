@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import ANY
 from uuid import UUID, uuid4
 
@@ -866,3 +867,103 @@ async def test_find_generate_text_run_reader_returns_403(
     )
 
     assert find_generate_text_run_response.status_code == 403
+
+
+async def test_generate_blog_post_balance_below_minimum_returns_402_and_creates_no_run(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(db_session, created_by_id=signed_in_user.id)
+    signed_in_user.credit_balance_usd = Decimal("0.0999999999")
+    await db_session.commit()
+
+    generate_blog_post_response = await api_client.post(
+        "/generate-text/blog-post",
+        json={
+            "prompt_text": "Write about sourdough starters.",
+            "persona_identity": str(persona_record.identity),
+            "options": {},
+        },
+    )
+
+    run_count_query = select(func.count(GenerateTextRunOrm.id)).where(
+        GenerateTextRunOrm.created_by_id == signed_in_user.id
+    )
+    run_count = await db_session.scalar(run_count_query)
+    assert generate_blog_post_response.status_code == 402
+    assert run_count == 0
+
+
+async def test_generate_blog_post_two_active_runs_returns_409_and_creates_no_run(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(db_session, created_by_id=signed_in_user.id)
+    await insert_generate_text_run_row(
+        db_session, created_by_id=signed_in_user.id, status=GenerateTextRunStatusType.PENDING
+    )
+    await insert_generate_text_run_row(
+        db_session, created_by_id=signed_in_user.id, status=GenerateTextRunStatusType.RUNNING
+    )
+    await db_session.commit()
+
+    generate_blog_post_response = await api_client.post(
+        "/generate-text/blog-post",
+        json={
+            "prompt_text": "Write about sourdough starters.",
+            "persona_identity": str(persona_record.identity),
+            "options": {},
+        },
+    )
+
+    run_count_query = select(func.count(GenerateTextRunOrm.id)).where(
+        GenerateTextRunOrm.created_by_id == signed_in_user.id
+    )
+    run_count = await db_session.scalar(run_count_query)
+    assert generate_blog_post_response.status_code == 409
+    assert run_count == 2
+
+
+async def test_resume_generate_text_balance_below_minimum_returns_402_and_leaves_run_paused(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    generate_text_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=signed_in_user.id,
+        status=GenerateTextRunStatusType.AWAITING_REVIEW,
+    )
+    signed_in_user.credit_balance_usd = Decimal("0.05")
+    await db_session.commit()
+
+    resume_generate_text_response = await api_client.post(
+        f"/generate-text/runs/{generate_text_run_record.identity}/resume",
+        json={"is_approved": True, "feedback_text": None},
+    )
+
+    await db_session.refresh(generate_text_run_record)
+    assert resume_generate_text_response.status_code == 402
+    assert generate_text_run_record.status == GenerateTextRunStatusType.AWAITING_REVIEW
+
+
+async def test_resume_generate_text_two_active_runs_returns_409_and_leaves_run_paused(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    generate_text_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=signed_in_user.id,
+        status=GenerateTextRunStatusType.AWAITING_REVIEW,
+    )
+    await insert_generate_text_run_row(
+        db_session, created_by_id=signed_in_user.id, status=GenerateTextRunStatusType.PENDING
+    )
+    await insert_generate_text_run_row(
+        db_session, created_by_id=signed_in_user.id, status=GenerateTextRunStatusType.RUNNING
+    )
+    await db_session.commit()
+
+    resume_generate_text_response = await api_client.post(
+        f"/generate-text/runs/{generate_text_run_record.identity}/resume",
+        json={"is_approved": True, "feedback_text": None},
+    )
+
+    await db_session.refresh(generate_text_run_record)
+    assert resume_generate_text_response.status_code == 409
+    assert generate_text_run_record.status == GenerateTextRunStatusType.AWAITING_REVIEW

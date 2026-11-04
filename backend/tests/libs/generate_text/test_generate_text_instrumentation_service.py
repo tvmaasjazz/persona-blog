@@ -21,6 +21,7 @@ from libs.generate_text.types import (
     GenerateTextStepStatusType,
 )
 from tests.factories.auth import build_auth_user
+from tests.factories.credits import build_credit_settings
 from tests.factories.generate_text import (
     build_create_generate_text_run_input,
     build_generate_text_state,
@@ -46,7 +47,9 @@ def _build_instrumentation_service(
     db_session_factory: async_sessionmaker[AsyncSession],
 ) -> tuple[GenerateTextRunService, GenerateTextInstrumentationService]:
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    step_service = GenerateTextStepService(db_session_factory=db_session_factory)
+    step_service = GenerateTextStepService(
+        db_session_factory=db_session_factory, credit_settings=build_credit_settings()
+    )
     instrumentation_service = GenerateTextInstrumentationService(
         run_service=run_service, step_service=step_service
     )

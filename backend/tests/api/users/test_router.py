@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +28,8 @@ async def test_find_signed_in_user_returns_user_response(
             "PERSONA_READ",
             "PERSONA_WRITE",
         ],
+        "credit_balance_usd": "5.0000000000",
+        "is_credit_balance_low": False,
     }
 
 
@@ -42,7 +46,35 @@ async def test_find_signed_in_user_reader_returns_role_and_read_permissions(
         "avatar_url": signed_in_reader.avatar_url,
         "role": "READER",
         "permissions": ["BLOG_POST_READ", "PERSONA_READ"],
+        "credit_balance_usd": "0E-10",
+        "is_credit_balance_low": True,
     }
+
+
+@pytest.mark.parametrize(
+    ("credit_balance_usd", "expected_credit_balance_usd", "expected_is_credit_balance_low"),
+    [
+        pytest.param(Decimal("0.49"), "0.4900000000", True, id="below_threshold"),
+        pytest.param(Decimal("0.50"), "0.5000000000", False, id="at_threshold"),
+    ],
+)
+async def test_find_signed_in_user_flags_balance_below_fifty_cents_as_low(
+    api_client: AsyncClient,
+    signed_in_user: UserOrm,
+    db_session: AsyncSession,
+    credit_balance_usd: Decimal,
+    expected_credit_balance_usd: str,
+    expected_is_credit_balance_low: bool,
+) -> None:
+    signed_in_user.credit_balance_usd = credit_balance_usd
+    await db_session.flush()
+
+    find_signed_in_user_response = await api_client.get("/users/me")
+
+    response_body = find_signed_in_user_response.json()
+    assert find_signed_in_user_response.status_code == 200
+    assert response_body["credit_balance_usd"] == expected_credit_balance_usd
+    assert response_body["is_credit_balance_low"] is expected_is_credit_balance_low
 
 
 async def test_find_signed_in_user_signed_out_returns_401(api_client: AsyncClient) -> None:

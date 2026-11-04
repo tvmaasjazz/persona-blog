@@ -28,6 +28,7 @@ from tests.factories.blog_posts import (
     insert_blog_post_row,
 )
 from tests.factories.content_items import insert_content_item_row
+from tests.factories.credits import build_credit_settings
 from tests.factories.database import fetch_database_utc_now
 from tests.factories.generate_text import (
     insert_generate_text_run_row,
@@ -45,7 +46,9 @@ def _build_blog_post_service(
         content_item_service=ContentItemService(db_session=db_session),
         persona_service=PersonaService(db_session=db_session),
         generate_text_run_service=GenerateTextRunService(db_session_factory=db_session_factory),
-        generate_text_step_service=GenerateTextStepService(db_session_factory=db_session_factory),
+        generate_text_step_service=GenerateTextStepService(
+            db_session_factory=db_session_factory, credit_settings=build_credit_settings()
+        ),
     )
 
 
