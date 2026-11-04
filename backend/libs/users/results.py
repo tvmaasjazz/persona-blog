@@ -23,4 +23,4 @@ class FindUserByIdentityResult(BaseModel):
     avatar_url: str | None
     is_active: bool
     credit_balance_usd: Decimal
-    is_credit_balance_low: bool = False
+    is_credit_balance_low: bool

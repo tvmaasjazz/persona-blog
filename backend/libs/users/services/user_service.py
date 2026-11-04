@@ -47,11 +47,17 @@ class UserService:
         is_credit_balance_low = CreditUtils.is_balance_low(
             user_record.credit_balance_usd, self._low_credit_balance_threshold_usd
         )
-        find_user_by_identity_result = FindUserByIdentityResult.model_validate(
-            user_record, from_attributes=True
-        )
-        return find_user_by_identity_result.model_copy(
-            update={"is_credit_balance_low": is_credit_balance_low}
+        # The constructor, since the low-balance flag comes from a setting, not the record
+        return FindUserByIdentityResult(
+            id=user_record.id,
+            identity=user_record.identity,
+            email=user_record.email,
+            is_email_verified=user_record.is_email_verified,
+            display_name=user_record.display_name,
+            avatar_url=user_record.avatar_url,
+            is_active=user_record.is_active,
+            credit_balance_usd=user_record.credit_balance_usd,
+            is_credit_balance_low=is_credit_balance_low,
         )
 
     async def _find_user_from_auth_provider(
