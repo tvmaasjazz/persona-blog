@@ -46,7 +46,7 @@ async def test_find_signed_in_user_reader_returns_role_and_read_permissions(
         "avatar_url": signed_in_reader.avatar_url,
         "role": "READER",
         "permissions": ["BLOG_POST_READ", "PERSONA_READ"],
-        "credit_balance_usd": "0E-10",
+        "credit_balance_usd": "0.0000000000",
         "is_credit_balance_low": True,
     }
 
@@ -54,6 +54,7 @@ async def test_find_signed_in_user_reader_returns_role_and_read_permissions(
 @pytest.mark.parametrize(
     ("credit_balance_usd", "expected_credit_balance_usd", "expected_is_credit_balance_low"),
     [
+        pytest.param(Decimal("0"), "0.0000000000", True, id="zero"),
         pytest.param(Decimal("0.49"), "0.4900000000", True, id="below_threshold"),
         pytest.param(Decimal("0.50"), "0.5000000000", False, id="at_threshold"),
     ],

@@ -1,8 +1,8 @@
-from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel
 
+from apps.api.core.dtos import UsdDecimal
 from libs.auth.results import AuthUser
 from libs.permissions.types import PermissionType, RoleType
 from libs.users.results import FindUserByIdentityResult
@@ -15,7 +15,7 @@ class UserResponseDto(BaseModel):
     avatar_url: str | None
     role: RoleType
     permissions: list[PermissionType]
-    credit_balance_usd: Decimal
+    credit_balance_usd: UsdDecimal
     is_credit_balance_low: bool
 
     @classmethod

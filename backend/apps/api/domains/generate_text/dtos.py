@@ -1,9 +1,9 @@
 from datetime import datetime
-from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel
 
+from apps.api.core.dtos import UsdDecimal
 from libs.generate_text.graphs.blog_post.inputs import BlogPostOptionsInput
 from libs.generate_text.inputs import (
     GenerateTextInput,
@@ -82,7 +82,7 @@ class GenerateTextRunResponseDto(BaseModel):
     llm_call_count: int
     input_tokens: int
     output_tokens: int
-    cost_usd: Decimal
+    cost_usd: UsdDecimal
     started_at: datetime | None
     finished_at: datetime | None
     poll_interval_ms: int
