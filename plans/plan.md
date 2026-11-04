@@ -185,9 +185,14 @@ homepage feed. The admin's user list and the other lists take it on after.
   `BLOG_POST_READ`, but the open routes don't check them for now. They're kept for
   later rules that may check them again, such as showing a signed-out reader only half
   a post.
-- **A post shows to others only if its persona is public too.** A private persona
-  can't publish a public post today, but making a persona private leaves its posts
-  public, so the open routes check both flags.
+- **A post shows to others only if its persona is public too.** Making a persona
+  private changes no post: its posts keep `is_public = true` but are treated as
+  private, so they leave the feed and a link to one returns a 404 to anyone but the
+  owner. Making the persona public again brings back exactly the posts that were public,
+  at once. Every query that shows posts to others checks both flags. A private persona
+  still can't make a post public, as today. The frontend warns when a persona with
+  public posts is made private: "Its 4 public posts will be hidden until the persona is
+  public again."
 - The frontend's table, search box and pager, built once in item 6 and used by every
   list.
 
@@ -196,8 +201,6 @@ homepage feed. The admin's user list and the other lists take it on after.
 - Cursor or offset pagination. A cursor keeps pages steady while new posts arrive, but
   can't jump to a page number
 - Search with Postgres full-text search, or a simple `ILIKE` to start
-- Whether making a persona private also makes its posts private, or only hides them
-  while it stays private
 
 ### 6. Frontend
 
@@ -214,7 +217,8 @@ Everything the backend-only PRs added, before the deploy:
   and says what they got.
 - **Homepage:** the feed, replacing My personas as the start page, with search and
   paging, and recording views and how far a post is read.
-- **A persona's page:** its public posts, reached from a post or the feed.
+- **A persona's page:** its public posts, reached from a post or the feed. Making a
+  persona with public posts private warns that they'll be hidden (item 5).
 - The table, search box and pager the lists share.
 
 Probably more than one PR, split by area: the shared pieces and roles and credits first,
