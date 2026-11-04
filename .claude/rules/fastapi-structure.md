@@ -166,6 +166,27 @@ async def validate_new_persona_name(
 )
 ```
 
+A guard reads on the request's session, except on a route that starts a background job.
+There it opens its own short session from `request.app.state.db_session_factory`, closed
+before the route runs, like a row a long-running route needs (below). The check is
+independent of the route's own work, and a request session held open while the job
+starts would leave its transaction idle, and in tests clash with the job's session.
+The guard builds the validation service itself on that session, so it takes no
+`<Domain>ValidationServiceDep`.
+
+```python
+# apps/api/domains/generate_text/dependencies.py
+async def validate_active_run_limit(
+    request: Request, auth_user: AuthUserDep, app_settings: AppSettingsDep
+) -> None:
+    db_session_factory = request.app.state.db_session_factory
+    async with db_session_factory() as db_session:
+        generate_text_validation_service = GenerateTextValidationService(db_session=db_session)
+        await generate_text_validation_service.validate_active_run_count_below_limit(
+            auth_user, app_settings.generate_text.max_active_runs_per_user
+        )
+```
+
 The validation service holds only the methods a guard calls. Business services never
 validate payloads this way, and access control, such as whether the caller may change
 a row, stays in the business service that loads the row.
@@ -642,8 +663,9 @@ application code uses the database.
 - The engine is created once in `lifespan`, and the session factory once from it with
   `create_db_session_factory(db_engine)`. Never build an `async_sessionmaker` by hand;
   the factory carries the session options and the soft-delete rule. Db sessions are
-  per-request. The one exception is a row a long-running route needs (Services › Rows
-  a long-running route needs).
+  per-request. The exceptions are a row a long-running route needs (Services › Rows
+  a long-running route needs) and a validation guard on a route that starts a
+  background job (Services › Validation guards).
 - A service may import any Orm it needs; the domain boundary applies to services, not
   tables.
 - Python code handles aware UTC datetimes only, and every "now" a query compares with

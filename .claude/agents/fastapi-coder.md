@@ -30,8 +30,7 @@ to touch so your code matches what is there.
 
 The rules files say where each of these lives and how it is shaped.
 
-- **Domain library code**, including the roles and permissions lib, `libs/permissions/`
-  — services, including a `<Domain>ValidationService` for
+- **Domain library code** — services, including a `<Domain>ValidationService` for
   validation guards (`fastapi-structure.md` › Services › Validation guards), Input and
   Result models, domain settings,
   constants, enums (`types.py`), after-response tasks (`after_response_tasks.py`), prompts, exceptions,

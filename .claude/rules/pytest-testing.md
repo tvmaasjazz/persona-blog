@@ -118,7 +118,8 @@ backend/tests/
 | Middleware                           | `tests/api/test_<module>.py`           | Observable effect on a real route (§9) |
 | `libs/database/orm/*.py`             | None                                   | Service database tests cover them; CI's drift check catches mismatches with migrations |
 | `migrations/`                        | `tests/migrations/test_revisions.py`   | One file covers every revision (§10) |
-| `settings.py`, `constants.py`        | None                                   | — |
+| `settings.py`                        | None, unless it has a model validator  | The validator's accepted and rejected cases |
+| `constants.py`                       | None                                   | — |
 
 ## Conventions for every test
 
@@ -649,8 +650,9 @@ def weather_service_stub(fastapi_app: FastAPI) -> WeatherServiceStub:
 (`AuthUserDep`). A session holds an `AuthUser` with a role and its permissions, built
 with `build_auth_user` (`tests/factories/auth.py`), which gives a role its seeded
 permissions unless the test passes others. `signed_in_user` is a creator, so it holds
-every route's permission; `signed_in_reader` is a reader, which holds only the persona
-and blog post reads.
+every route's permission, and starts with $5.00 of credit, enough to start a run;
+`signed_in_reader` is a reader, which holds only the persona and blog post reads, and
+starts at $0.
 
 ```python
 # tests/api/conftest.py
@@ -661,7 +663,7 @@ async def signed_in_user(
     redis_client: Redis,
     app_settings: AppSettings,
 ) -> UserOrm:
-    user_record = await insert_user_row(db_session)
+    user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("5.00"))
     auth_session_service = AuthSessionService(
         redis_client=redis_client, auth_settings=app_settings.auth
     )
