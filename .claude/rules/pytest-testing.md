@@ -104,7 +104,8 @@ backend/tests/
 | `libs/<d>/states.py`                 | `tests/libs/<d>/test_states.py`        | Only a method that does more than group stored fields; otherwise the graph and service tests cover it |
 | Class with an enum dispatch map      | That class's test file                 | Every enum member has a handler (§1) |
 | `apps/api/domains/<d>/router.py`     | `tests/api/<d>/test_router.py`         | For each route: happy path, 422 per declared constraint, each exception the service raises, 401 if protected, 403 if a reader lacks its permission, persisted state for writes (§6) |
-| `apps/api/domains/<d>/dtos.py`, `apps/api/core/dtos.py` | None, unless a mapper has logic | Route tests cover plain field copying |
+| `apps/api/domains/<d>/dtos.py`       | None, unless a mapper has logic        | Route tests cover plain field copying |
+| `apps/api/core/dtos.py`              | `tests/api/core/test_dtos.py`          | Each field type with a serializer: what it writes in JSON, that it parses back to the same value, and that it is unchanged outside JSON |
 | `apps/api/domains/<d>/dependencies.py` | None                                 | Route tests run the real factories |
 | `apps/api/core/dependencies.py`      | `tests/api/core/test_dependencies.py`  | Session commits and rolls back, `require_permissions` passing and refusing (§7) |
 | `apps/api/app_factory.py`            | `tests/api/test_app_factory.py`        | Every route names a permission or is on the open-route allowlist, and each names exactly its permission (§7, `fastapi-structure.md` › The acting user) |

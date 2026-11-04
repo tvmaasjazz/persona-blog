@@ -15,7 +15,7 @@ backend/
 │       ├── core/
 │       │   ├── config.py      # root AppSettings
 │       │   ├── dependencies.py# global deps: db session, AuthUserDep, require_permissions
-│       │   ├── dtos.py        # IdentityResponseDto, EmptyResponseDto
+│       │   ├── dtos.py        # IdentityResponseDto, EmptyResponseDto, UsdDecimal
 │       │   ├── event_loop_monitor.py # development-only event loop lag monitor
 │       │   ├── exception_handlers.py # standard exception → status code map
 │       │   ├── logging.py     # configure_logging(), called once from lifespan
@@ -362,8 +362,8 @@ Names that escape the package stay fully explicit: `user_router`, `UserService`,
 ## DTOs
 
 Never use the word "schema". HTTP payload classes are DTOs, in the domain's
-`dtos.py` under `apps/`. The response DTOs every domain shares live in
-`apps/api/core/dtos.py`.
+`dtos.py` under `apps/`. The response DTOs every domain shares, and the `UsdDecimal`
+field type, live in `apps/api/core/dtos.py`.
 
 ### Inbound
 
@@ -410,6 +410,11 @@ A check that needs the database, or more than one field, is a validation guard
 
 On a CRUD route, a custom `ResponseDto` appears only on a `GET`. Every route declares
 its response DTO as its return annotation.
+
+A USD amount in a response DTO is a `UsdDecimal` (`apps/api/core/dtos.py`), never a
+bare `Decimal`. It writes the exact value as plain digits, `"0.0000000000"`, where
+Pydantic's default would write a rounded zero as `"0E-10"`. It changes only the JSON;
+the value stays a `Decimal` everywhere else.
 
 A list is never a bare array. The service returns a `Result` and the route a
 `<Entity>ListResponseDto`, each holding the rows under a plural field, so pagination
@@ -712,6 +717,11 @@ A record becomes a `Result` through `model_validate(<entity>_record, from_attrib
 which copies only the fields the `Result` declares, including nested `Result`s. The
 flag goes on the call; a `Result` class never sets `model_config`, so it stays a plain
 shape.
+
+A `Result` that adds a value the record doesn't hold, such as a flag computed from a
+setting, is built with its constructor, listing each field. The added field has no
+default, so a caller can't forget it: `FindUserByIdentityResult` and
+`is_credit_balance_low`.
 
 A `Result` that spans related rows is built the same way, from a record whose
 relationships were loaded up front: `contains_eager` when the query already joins them
