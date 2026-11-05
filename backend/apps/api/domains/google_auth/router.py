@@ -10,7 +10,7 @@ from apps.api.domains.google_auth.dependencies import (
 from apps.api.domains.invites.dependencies import InviteServiceDep
 from libs.auth.constants import SESSION_COOKIE_NAME
 from libs.google_auth.constants import SIGN_IN_ERROR_EXCEPTIONS
-from libs.google_auth.utils import GoogleSignInErrorUtils
+from libs.google_auth.utils import GoogleAuthUtils
 from libs.invites.utils import InviteUtils
 
 google_auth_router = APIRouter(prefix="/auth/google", tags=["google-auth"])
@@ -51,7 +51,7 @@ async def get_google_callback(
     try:
         google_sign_in_result = await google_sign_in_service.sign_in_with_google(code, state)
     except SIGN_IN_ERROR_EXCEPTIONS as sign_in_exception:
-        sign_in_error_type = GoogleSignInErrorUtils.find_sign_in_error_type(sign_in_exception)
+        sign_in_error_type = GoogleAuthUtils.find_sign_in_error_type(sign_in_exception)
         sign_in_error_url = f"{app_settings.auth.frontend_url}/sign-in?error={sign_in_error_type}"
         return RedirectResponse(sign_in_error_url, status_code=303)
 

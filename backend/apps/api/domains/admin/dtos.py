@@ -40,7 +40,7 @@ InviteNameStr = Annotated[
 InviteNoteStr = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 
 
-class CreditGrantDto(BaseModel):
+class AdminCreditGrantDto(BaseModel):
     amount_usd: CreditGrantAmountUsdDecimal
     note: CreditGrantNoteStr
 
@@ -48,7 +48,7 @@ class CreditGrantDto(BaseModel):
         return AdminGrantUserCreditsInput(amount_usd=self.amount_usd, note=self.note)
 
 
-class InviteDto(BaseModel):
+class AdminInviteDto(BaseModel):
     name: InviteNameStr
     credit_amount_usd: CreditGrantAmountUsdDecimal
     note: InviteNoteStr | None = None
@@ -66,14 +66,14 @@ class InviteDto(BaseModel):
         )
 
 
-class UserRoleDto(BaseModel):
+class AdminUserRoleDto(BaseModel):
     role: Literal[RoleType.READER, RoleType.CREATOR]
 
     def to_input(self) -> AdminSetUserRoleInput:
         return AdminSetUserRoleInput(role=self.role)
 
 
-class UserActiveDto(BaseModel):
+class AdminUserActiveDto(BaseModel):
     is_active: bool
 
     def to_input(self) -> AdminSetUserActiveInput:
@@ -119,21 +119,21 @@ class AdminUserListResponseDto(BaseModel):
         )
 
 
-class InviteCreateResponseDto(BaseModel):
+class AdminInviteCreateResponseDto(BaseModel):
     identity: UUID
     invite_url: str
 
     @classmethod
     def from_result(
         cls, admin_create_invite_result: AdminCreateInviteResult
-    ) -> InviteCreateResponseDto:
+    ) -> AdminInviteCreateResponseDto:
         return cls(
             identity=admin_create_invite_result.identity,
             invite_url=admin_create_invite_result.invite_url,
         )
 
 
-class InviteResponseDto(BaseModel):
+class AdminInviteResponseDto(BaseModel):
     identity: UUID
     name: str
     credit_amount_usd: UsdDecimal
@@ -147,7 +147,9 @@ class InviteResponseDto(BaseModel):
     created_by_email: str
 
     @classmethod
-    def from_result(cls, admin_invite_detail_result: AdminInviteDetailResult) -> InviteResponseDto:
+    def from_result(
+        cls, admin_invite_detail_result: AdminInviteDetailResult
+    ) -> AdminInviteResponseDto:
         return cls(
             identity=admin_invite_detail_result.identity,
             name=admin_invite_detail_result.name,
@@ -163,22 +165,22 @@ class InviteResponseDto(BaseModel):
         )
 
 
-class InviteListResponseDto(BaseModel):
-    invites: list[InviteResponseDto]
+class AdminInviteListResponseDto(BaseModel):
+    invites: list[AdminInviteResponseDto]
 
     @classmethod
     def from_result(
         cls, find_invite_list_result: AdminFindInviteListResult
-    ) -> InviteListResponseDto:
+    ) -> AdminInviteListResponseDto:
         return cls(
             invites=[
-                InviteResponseDto.from_result(admin_invite_detail_result)
+                AdminInviteResponseDto.from_result(admin_invite_detail_result)
                 for admin_invite_detail_result in find_invite_list_result.invites
             ]
         )
 
 
-class CreditLedgerEntryResponseDto(BaseModel):
+class AdminCreditLedgerEntryResponseDto(BaseModel):
     identity: UUID
     entry_type: CreditLedgerEntryType
     amount_usd: UsdDecimal
@@ -190,7 +192,7 @@ class CreditLedgerEntryResponseDto(BaseModel):
     @classmethod
     def from_result(
         cls, credit_ledger_entry_result: AdminCreditLedgerEntryResult
-    ) -> CreditLedgerEntryResponseDto:
+    ) -> AdminCreditLedgerEntryResponseDto:
         return cls(
             identity=credit_ledger_entry_result.identity,
             entry_type=credit_ledger_entry_result.entry_type,
@@ -202,16 +204,16 @@ class CreditLedgerEntryResponseDto(BaseModel):
         )
 
 
-class CreditLedgerResponseDto(BaseModel):
-    credit_ledger_entries: list[CreditLedgerEntryResponseDto]
+class AdminCreditLedgerResponseDto(BaseModel):
+    credit_ledger_entries: list[AdminCreditLedgerEntryResponseDto]
 
     @classmethod
     def from_result(
         cls, find_user_credit_ledger_result: AdminFindUserCreditLedgerResult
-    ) -> CreditLedgerResponseDto:
+    ) -> AdminCreditLedgerResponseDto:
         return cls(
             credit_ledger_entries=[
-                CreditLedgerEntryResponseDto.from_result(credit_ledger_entry_result)
+                AdminCreditLedgerEntryResponseDto.from_result(credit_ledger_entry_result)
                 for credit_ledger_entry_result in (
                     find_user_credit_ledger_result.credit_ledger_entries
                 )

@@ -62,7 +62,7 @@ class GenerateTextRunService:
 
     async def start_run(self, run_id: int) -> bool:
         """Marks a PENDING run RUNNING and stamps its start; False when it wasn't pending, such
-        as a run failed before its job started."""
+        as a run failed before its job started, and NotFoundException for an unknown run."""
         run_start_update = (
             update(GenerateTextRunOrm)
             .where(
@@ -76,6 +76,8 @@ class GenerateTextRunService:
         )
         async with self._db_session_factory() as db_session, db_session.begin():
             run_start_update_result = await db_session.execute(run_start_update)
+            if run_start_update_result.rowcount == 0:
+                await self._raise_if_run_missing(db_session, run_id)
         return run_start_update_result.rowcount == 1
 
     async def claim_paused_run(self, run_id: int, lease_owner: str, lease_seconds: int) -> bool:

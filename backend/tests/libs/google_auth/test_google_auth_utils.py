@@ -9,7 +9,7 @@ from libs.core.exceptions import (
     ServiceUnavailableException,
     UnauthorizedException,
 )
-from libs.google_auth.utils import GoogleSignInErrorUtils
+from libs.google_auth.utils import GoogleAuthUtils
 from libs.users.exceptions import UserEmailTakenException, UserInactiveException
 
 
@@ -46,7 +46,7 @@ class ExpiredSignInStateSubclassException(AuthSignInStateExpiredException): ...
 def test_find_sign_in_error_type_mapped_exception_returns_its_error_type(
     sign_in_exception: Exception, expected_sign_in_error_type: SignInErrorType
 ) -> None:
-    sign_in_error_type = GoogleSignInErrorUtils.find_sign_in_error_type(sign_in_exception)
+    sign_in_error_type = GoogleAuthUtils.find_sign_in_error_type(sign_in_exception)
 
     assert sign_in_error_type == expected_sign_in_error_type
 
@@ -54,7 +54,7 @@ def test_find_sign_in_error_type_mapped_exception_returns_its_error_type(
 def test_find_sign_in_error_type_subclass_of_specific_entry_returns_specific_error_type() -> None:
     sign_in_exception = ExpiredSignInStateSubclassException("expired")
 
-    sign_in_error_type = GoogleSignInErrorUtils.find_sign_in_error_type(sign_in_exception)
+    sign_in_error_type = GoogleAuthUtils.find_sign_in_error_type(sign_in_exception)
 
     assert sign_in_error_type == SignInErrorType.SIGN_IN_EXPIRED
 
@@ -71,6 +71,6 @@ def test_find_sign_in_error_type_unmapped_exception_is_re_raised(
     unmapped_exception: Exception,
 ) -> None:
     with pytest.raises(type(unmapped_exception)) as raised_exception_info:
-        GoogleSignInErrorUtils.find_sign_in_error_type(unmapped_exception)
+        GoogleAuthUtils.find_sign_in_error_type(unmapped_exception)
 
     assert raised_exception_info.value is unmapped_exception
