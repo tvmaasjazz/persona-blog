@@ -3,7 +3,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from apps.api.core.dependencies import AuthUserDep, require_permissions
+from apps.api.core.dependencies import (
+    AuthUserDep,
+    OptionalAuthUserDep,
+    require_permissions,
+)
 from apps.api.core.dtos import EmptyResponseDto, IdentityResponseDto
 from apps.api.domains.blog_posts.dependencies import (
     BlogPostServiceDep,
@@ -19,6 +23,7 @@ from apps.api.domains.blog_posts.dtos import (
     BlogPostResponseDto,
     CreateBlogPostDto,
     CreateBlogPostFromGenerateTextRunDto,
+    PublicBlogPostResponseDto,
 )
 from libs.permissions.types import PermissionType
 
@@ -52,9 +57,23 @@ async def find_user_blog_post_list(
 async def find_blog_post(
     blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
 ) -> BlogPostResponseDto:
-    """Returns one blog post, or 404 when it doesn't exist or the user can't access it."""
+    """Returns one of the signed-in user's own blog posts, or 404 for anyone else's."""
     find_blog_post_result = await blog_post_service.find_blog_post(blog_post_identity, auth_user)
     return BlogPostResponseDto.from_result(find_blog_post_result)
+
+
+@blog_post_router.get("/{blog_post_identity}/public")
+async def find_public_blog_post(
+    blog_post_identity: UUID,
+    auth_user: OptionalAuthUserDep,
+    blog_post_service: BlogPostServiceDep,
+) -> PublicBlogPostResponseDto:
+    """Returns a blog post's public view to anyone, signed in or not; 404 unless it is
+    published and public or the signed-in user's own."""
+    find_public_blog_post_result = await blog_post_service.find_public_blog_post(
+        blog_post_identity, auth_user
+    )
+    return PublicBlogPostResponseDto.from_result(find_public_blog_post_result)
 
 
 @blog_post_router.post(

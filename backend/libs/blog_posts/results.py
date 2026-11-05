@@ -28,5 +28,10 @@ class BlogPostDetailResult(BaseModel):
     content_item: BlogPostContentItemResult
 
 
+class PublicBlogPostResult(BaseModel):
+    blog_post: BlogPostDetailResult
+    is_owner: bool
+
+
 class FindUserBlogPostListResult(BaseModel):
     blog_posts: list[BlogPostDetailResult]

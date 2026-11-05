@@ -22,9 +22,10 @@ class BlogPostValidationService:
     async def validate_blog_post_visibility(
         self, blog_post_identity: UUID, is_public: bool, auth_user: AuthUser
     ) -> None:
-        """Rejects making the caller's post public when its persona is private."""
+        """Rejects turning the caller's private post public when its persona is private; a post
+        already public passes."""
         persona_identity_query = (
-            select(PersonaOrm.identity)
+            select(PersonaOrm.identity, ContentItemOrm.is_public)
             .select_from(BlogPostOrm)
             .join(ContentItemOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
             .join(PersonaOrm, ContentItemOrm.persona_id == PersonaOrm.id)
@@ -34,9 +35,13 @@ class BlogPostValidationService:
             )
         )
         persona_identity_query_result = await self._db_session.execute(persona_identity_query)
-        persona_identity = persona_identity_query_result.scalar_one_or_none()
+        persona_identity_row = persona_identity_query_result.one_or_none()
 
-        if persona_identity is None:
+        if persona_identity_row is None:
+            return
+        persona_identity, is_already_public = persona_identity_row
+        # A post already public stays valid even if its persona has since gone private
+        if is_already_public:
             return
         await self._content_item_validation_service.validate_persona_allows_public(
             persona_identity, is_public, auth_user
