@@ -7,11 +7,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.admin.exceptions import AdminCreditGrantSystemUserException
-from libs.admin.inputs import GrantUserCreditsInput
+from libs.admin.inputs import AdminGrantUserCreditsInput
 from libs.admin.results import (
-    CreditLedgerEntryResult,
-    FindUserCreditLedgerResult,
-    GrantUserCreditsResult,
+    AdminCreditLedgerEntryResult,
+    AdminFindUserCreditLedgerResult,
+    AdminGrantUserCreditsResult,
 )
 from libs.admin.services import AdminCreditService
 from libs.core.exceptions import NotFoundException
@@ -69,9 +69,9 @@ async def test_find_user_credit_ledger_returns_rows_newest_first_with_run_and_cr
         user_record.identity
     )
 
-    assert find_user_credit_ledger_result == FindUserCreditLedgerResult(
+    assert find_user_credit_ledger_result == AdminFindUserCreditLedgerResult(
         credit_ledger_entries=[
-            CreditLedgerEntryResult(
+            AdminCreditLedgerEntryResult(
                 identity=newer_charge_record.identity,
                 entry_type=CreditLedgerEntryType.CHARGE,
                 amount_usd=Decimal("-0.30"),
@@ -80,7 +80,7 @@ async def test_find_user_credit_ledger_returns_rows_newest_first_with_run_and_cr
                 created_by_email="ada@example.com",
                 created_at=newer_created_at,
             ),
-            CreditLedgerEntryResult(
+            AdminCreditLedgerEntryResult(
                 identity=older_grant_record.identity,
                 entry_type=CreditLedgerEntryType.GRANT,
                 amount_usd=Decimal("5.00"),
@@ -122,7 +122,9 @@ async def test_find_user_credit_ledger_user_without_rows_returns_empty_list(
         user_record.identity
     )
 
-    assert find_user_credit_ledger_result == FindUserCreditLedgerResult(credit_ledger_entries=[])
+    assert find_user_credit_ledger_result == AdminFindUserCreditLedgerResult(
+        credit_ledger_entries=[]
+    )
 
 
 async def test_find_user_credit_ledger_unknown_identity_raises_not_found_exception(
@@ -154,7 +156,7 @@ async def test_grant_user_credits_writes_grant_row_and_raises_balance(
     admin_auth_user = build_auth_user(
         user_id=admin_record.id, user_identity=admin_record.identity, role=RoleType.ADMIN
     )
-    grant_user_credits_input = GrantUserCreditsInput(
+    grant_user_credits_input = AdminGrantUserCreditsInput(
         amount_usd=Decimal("5.00"), note="Welcome credit"
     )
     admin_credit_service = _build_admin_credit_service(db_session)
@@ -167,7 +169,7 @@ async def test_grant_user_credits_writes_grant_row_and_raises_balance(
     grant_query = select(CreditLedgerOrm).where(CreditLedgerOrm.user_id == user_record.id)
     grant_record = await db_session.scalar(grant_query)
     assert grant_record is not None
-    assert grant_user_credits_result == GrantUserCreditsResult(
+    assert grant_user_credits_result == AdminGrantUserCreditsResult(
         identity=grant_record.identity, user_id=user_record.id, is_made_creator=False
     )
     assert grant_record.amount_usd == Decimal("5.00")
@@ -183,7 +185,9 @@ async def test_grant_user_credits_reader_becomes_creator(db_session: AsyncSessio
     admin_auth_user = build_auth_user(
         user_id=admin_record.id, user_identity=admin_record.identity, role=RoleType.ADMIN
     )
-    grant_user_credits_input = GrantUserCreditsInput(amount_usd=Decimal("5.00"), note="Welcome")
+    grant_user_credits_input = AdminGrantUserCreditsInput(
+        amount_usd=Decimal("5.00"), note="Welcome"
+    )
     admin_credit_service = _build_admin_credit_service(db_session)
 
     grant_user_credits_result = await admin_credit_service.grant_user_credits(
@@ -212,7 +216,7 @@ async def test_grant_user_credits_creator_or_admin_keeps_role(
     admin_auth_user = build_auth_user(
         user_id=admin_record.id, user_identity=admin_record.identity, role=RoleType.ADMIN
     )
-    grant_user_credits_input = GrantUserCreditsInput(amount_usd=Decimal("5.00"), note="Top up")
+    grant_user_credits_input = AdminGrantUserCreditsInput(amount_usd=Decimal("5.00"), note="Top up")
     admin_credit_service = _build_admin_credit_service(db_session)
 
     grant_user_credits_result = await admin_credit_service.grant_user_credits(
@@ -237,7 +241,9 @@ async def test_grant_user_credits_inactive_user_is_granted(db_session: AsyncSess
     admin_auth_user = build_auth_user(
         user_id=admin_record.id, user_identity=admin_record.identity, role=RoleType.ADMIN
     )
-    grant_user_credits_input = GrantUserCreditsInput(amount_usd=Decimal("2.00"), note="Reinstated")
+    grant_user_credits_input = AdminGrantUserCreditsInput(
+        amount_usd=Decimal("2.00"), note="Reinstated"
+    )
     admin_credit_service = _build_admin_credit_service(db_session)
 
     await admin_credit_service.grant_user_credits(
@@ -255,7 +261,7 @@ async def test_grant_user_credits_unknown_identity_raises_not_found_and_writes_n
     admin_auth_user = build_auth_user(
         user_id=admin_record.id, user_identity=admin_record.identity, role=RoleType.ADMIN
     )
-    grant_user_credits_input = GrantUserCreditsInput(amount_usd=Decimal("5.00"), note="Orphan")
+    grant_user_credits_input = AdminGrantUserCreditsInput(amount_usd=Decimal("5.00"), note="Orphan")
     admin_credit_service = _build_admin_credit_service(db_session)
 
     with pytest.raises(NotFoundException):
@@ -275,7 +281,7 @@ async def test_grant_user_credits_system_user_raises_admin_credit_grant_system_u
     admin_auth_user = build_auth_user(
         user_id=admin_record.id, user_identity=admin_record.identity, role=RoleType.ADMIN
     )
-    grant_user_credits_input = GrantUserCreditsInput(amount_usd=Decimal("5.00"), note="Nope")
+    grant_user_credits_input = AdminGrantUserCreditsInput(amount_usd=Decimal("5.00"), note="Nope")
     admin_credit_service = _build_admin_credit_service(db_session)
 
     with pytest.raises(AdminCreditGrantSystemUserException):

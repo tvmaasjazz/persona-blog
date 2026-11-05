@@ -5,11 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from libs.admin.exceptions import AdminCreditGrantSystemUserException
-from libs.admin.inputs import GrantUserCreditsInput
+from libs.admin.inputs import AdminGrantUserCreditsInput
 from libs.admin.results import (
-    CreditLedgerEntryResult,
-    FindUserCreditLedgerResult,
-    GrantUserCreditsResult,
+    AdminCreditLedgerEntryResult,
+    AdminFindUserCreditLedgerResult,
+    AdminGrantUserCreditsResult,
 )
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
@@ -29,7 +29,7 @@ class AdminCreditService:
         self._db_session = db_session
         self._credit_ledger_service = credit_ledger_service
 
-    async def find_user_credit_ledger(self, user_identity: UUID) -> FindUserCreditLedgerResult:
+    async def find_user_credit_ledger(self, user_identity: UUID) -> AdminFindUserCreditLedgerResult:
         """The user's ledger rows, newest first, empty when they have none; NotFoundException
         for an unknown identity or the system user."""
         user_id = await self._find_user_id(user_identity)
@@ -56,9 +56,9 @@ class AdminCreditService:
         credit_ledger_query_result = await self._db_session.execute(credit_ledger_query)
         credit_ledger_rows = credit_ledger_query_result.mappings().all()
 
-        return FindUserCreditLedgerResult(
+        return AdminFindUserCreditLedgerResult(
             credit_ledger_entries=[
-                CreditLedgerEntryResult.model_validate(credit_ledger_row)
+                AdminCreditLedgerEntryResult.model_validate(credit_ledger_row)
                 for credit_ledger_row in credit_ledger_rows
             ]
         )
@@ -66,9 +66,9 @@ class AdminCreditService:
     async def grant_user_credits(
         self,
         user_identity: UUID,
-        grant_user_credits_input: GrantUserCreditsInput,
+        grant_user_credits_input: AdminGrantUserCreditsInput,
         auth_user: AuthUser,
-    ) -> GrantUserCreditsResult:
+    ) -> AdminGrantUserCreditsResult:
         """Grants the user credits and makes a reader a creator, saying whether it did;
         NotFoundException for an unknown identity, AdminCreditGrantSystemUserException for the
         system user."""
@@ -110,7 +110,7 @@ class AdminCreditService:
         )
         user_role_update_result = await self._db_session.execute(user_role_update)
 
-        return GrantUserCreditsResult(
+        return AdminGrantUserCreditsResult(
             identity=grant_credits_result.identity,
             user_id=user_id,
             is_made_creator=user_role_update_result.rowcount == 1,

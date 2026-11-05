@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from libs.admin.results import AdminUserDetailResult, FindUserListResult
+from libs.admin.results import AdminFindUserListResult, AdminUserDetailResult
 from libs.admin.services import AdminUserService
 from libs.core.exceptions import NotFoundException
 from libs.permissions.types import RoleType
@@ -38,7 +38,7 @@ async def test_find_user_list_returns_users_newest_first_with_role_balance_and_a
 
     find_user_list_result = await admin_user_service.find_user_list()
 
-    assert find_user_list_result == FindUserListResult(
+    assert find_user_list_result == AdminFindUserListResult(
         users=[
             AdminUserDetailResult(
                 identity=newer_user_record.identity,

@@ -3,7 +3,7 @@ import secrets
 from pydantic import ValidationError
 from redis.asyncio import Redis
 
-from libs.auth.constants import SESSION_KEY_PREFIX, USER_SESSIONS_KEY_PREFIX
+from libs.auth.constants import USER_SESSION_KEY_PREFIX, USER_SESSION_LIST_KEY_PREFIX
 from libs.auth.results import AuthUser
 from libs.auth.settings import AuthSettings
 from libs.core.exceptions import UnauthorizedException
@@ -22,24 +22,24 @@ class AuthSessionService:
         user's set, and returns its new id."""
         session_id = secrets.token_urlsafe(32)
         session_ttl_seconds = self._auth_settings.session_ttl_seconds
-        user_sessions_key = f"{USER_SESSIONS_KEY_PREFIX}{auth_user.id}"
+        user_session_list_key = f"{USER_SESSION_LIST_KEY_PREFIX}{auth_user.id}"
         async with self._redis_client.pipeline(transaction=True) as redis_pipeline:
             redis_pipeline.set(
-                f"{SESSION_KEY_PREFIX}{session_id}",
+                f"{USER_SESSION_KEY_PREFIX}{session_id}",
                 auth_user.model_dump_json(),
                 ex=session_ttl_seconds,
             )
             # The set lives as long as the newest session; an id whose session already
             # expired is deleted harmlessly later
-            redis_pipeline.sadd(user_sessions_key, session_id)
-            redis_pipeline.expire(user_sessions_key, session_ttl_seconds)
+            redis_pipeline.sadd(user_session_list_key, session_id)
+            redis_pipeline.expire(user_session_list_key, session_ttl_seconds)
             await redis_pipeline.execute()
         return session_id
 
     async def find_session(self, session_id: str) -> AuthUser:
         """The user the session belongs to; UnauthorizedException if it is missing, expired,
         or stored in a shape that no longer validates, such as before roles existed."""
-        stored_session = await self._redis_client.get(f"{SESSION_KEY_PREFIX}{session_id}")
+        stored_session = await self._redis_client.get(f"{USER_SESSION_KEY_PREFIX}{session_id}")
         if stored_session is None:
             raise UnauthorizedException("Session is missing or expired")
         try:
@@ -51,15 +51,17 @@ class AuthSessionService:
         """Removes the session and its place in the user's set; an unknown id is not an
         error."""
         async with self._redis_client.pipeline(transaction=True) as redis_pipeline:
-            redis_pipeline.delete(f"{SESSION_KEY_PREFIX}{session_id}")
-            redis_pipeline.srem(f"{USER_SESSIONS_KEY_PREFIX}{user_id}", session_id)
+            redis_pipeline.delete(f"{USER_SESSION_KEY_PREFIX}{session_id}")
+            redis_pipeline.srem(f"{USER_SESSION_LIST_KEY_PREFIX}{user_id}", session_id)
             await redis_pipeline.execute()
 
     async def delete_user_sessions(self, user_id: int) -> None:
         """Signs the user out everywhere by deleting every session in their set, and the set;
         a user with none is not an error."""
-        user_sessions_key = f"{USER_SESSIONS_KEY_PREFIX}{user_id}"
-        session_ids = await self._redis_client.smembers(user_sessions_key)
+        user_session_list_key = f"{USER_SESSION_LIST_KEY_PREFIX}{user_id}"
+        session_ids = await self._redis_client.smembers(user_session_list_key)
         # The client returns bytes, so each id is decoded before it's built into a key
-        session_keys = [f"{SESSION_KEY_PREFIX}{session_id.decode()}" for session_id in session_ids]
-        await self._redis_client.delete(user_sessions_key, *session_keys)
+        session_keys = [
+            f"{USER_SESSION_KEY_PREFIX}{session_id.decode()}" for session_id in session_ids
+        ]
+        await self._redis_client.delete(user_session_list_key, *session_keys)

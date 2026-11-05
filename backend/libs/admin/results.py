@@ -19,11 +19,11 @@ class AdminUserDetailResult(BaseModel):
     last_activity_at: datetime | None
 
 
-class FindUserListResult(BaseModel):
+class AdminFindUserListResult(BaseModel):
     users: list[AdminUserDetailResult]
 
 
-class CreditLedgerEntryResult(BaseModel):
+class AdminCreditLedgerEntryResult(BaseModel):
     identity: UUID
     entry_type: CreditLedgerEntryType
     amount_usd: Decimal
@@ -33,11 +33,11 @@ class CreditLedgerEntryResult(BaseModel):
     created_at: datetime
 
 
-class FindUserCreditLedgerResult(BaseModel):
-    credit_ledger_entries: list[CreditLedgerEntryResult]
+class AdminFindUserCreditLedgerResult(BaseModel):
+    credit_ledger_entries: list[AdminCreditLedgerEntryResult]
 
 
-class GrantUserCreditsResult(BaseModel):
+class AdminGrantUserCreditsResult(BaseModel):
     identity: UUID
     user_id: int
     is_made_creator: bool

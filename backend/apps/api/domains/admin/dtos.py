@@ -7,12 +7,12 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from apps.api.core.dtos import UsdDecimal
 from libs.admin.constants import MAX_CREDIT_GRANT_USD
-from libs.admin.inputs import GrantUserCreditsInput
+from libs.admin.inputs import AdminGrantUserCreditsInput
 from libs.admin.results import (
+    AdminCreditLedgerEntryResult,
+    AdminFindUserCreditLedgerResult,
+    AdminFindUserListResult,
     AdminUserDetailResult,
-    CreditLedgerEntryResult,
-    FindUserCreditLedgerResult,
-    FindUserListResult,
 )
 from libs.credits.types import CreditLedgerEntryType
 from libs.permissions.types import RoleType
@@ -30,8 +30,8 @@ class CreditGrantDto(BaseModel):
     amount_usd: CreditGrantAmountUsdDecimal
     note: CreditGrantNoteStr
 
-    def to_input(self) -> GrantUserCreditsInput:
-        return GrantUserCreditsInput(amount_usd=self.amount_usd, note=self.note)
+    def to_input(self) -> AdminGrantUserCreditsInput:
+        return AdminGrantUserCreditsInput(amount_usd=self.amount_usd, note=self.note)
 
 
 class AdminUserResponseDto(BaseModel):
@@ -62,7 +62,9 @@ class AdminUserListResponseDto(BaseModel):
     users: list[AdminUserResponseDto]
 
     @classmethod
-    def from_result(cls, find_user_list_result: FindUserListResult) -> AdminUserListResponseDto:
+    def from_result(
+        cls, find_user_list_result: AdminFindUserListResult
+    ) -> AdminUserListResponseDto:
         return cls(
             users=[
                 AdminUserResponseDto.from_result(admin_user_detail_result)
@@ -82,7 +84,7 @@ class CreditLedgerEntryResponseDto(BaseModel):
 
     @classmethod
     def from_result(
-        cls, credit_ledger_entry_result: CreditLedgerEntryResult
+        cls, credit_ledger_entry_result: AdminCreditLedgerEntryResult
     ) -> CreditLedgerEntryResponseDto:
         return cls(
             identity=credit_ledger_entry_result.identity,
@@ -100,7 +102,7 @@ class CreditLedgerResponseDto(BaseModel):
 
     @classmethod
     def from_result(
-        cls, find_user_credit_ledger_result: FindUserCreditLedgerResult
+        cls, find_user_credit_ledger_result: AdminFindUserCreditLedgerResult
     ) -> CreditLedgerResponseDto:
         return cls(
             credit_ledger_entries=[

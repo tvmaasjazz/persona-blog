@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from libs.admin.results import AdminUserDetailResult, FindUserListResult
+from libs.admin.results import AdminFindUserListResult, AdminUserDetailResult
 from libs.core.exceptions import NotFoundException
 from libs.database.orm import RoleOrm, UserOrm
 
@@ -15,7 +15,7 @@ class AdminUserService:
     def __init__(self, db_session: AsyncSession) -> None:
         self._db_session = db_session
 
-    async def find_user_list(self) -> FindUserListResult:
+    async def find_user_list(self) -> AdminFindUserListResult:
         """Every user but the system user, newest first, with their role and balance."""
         user_query = (
             self._build_admin_user_query()
@@ -25,7 +25,7 @@ class AdminUserService:
         user_query_result = await self._db_session.execute(user_query)
         user_rows = user_query_result.mappings().all()
 
-        return FindUserListResult(
+        return AdminFindUserListResult(
             users=[AdminUserDetailResult.model_validate(user_row) for user_row in user_rows]
         )
 
