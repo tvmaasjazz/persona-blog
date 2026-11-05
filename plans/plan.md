@@ -47,8 +47,9 @@ frontend comes in item 8.
   reads no table per request. A stored session that doesn't match the current shape is
   treated as expired, so a change to the session's shape costs one sign-in and no
   deploy step.
-- Granting credits makes the user a creator: `backend/scripts/grant_credits.py` today,
-  the admin panel (item 2) next. Anything else is SQL. Changing a role in code deletes
+- Granting credits makes the user a creator: `backend/scripts/grant_credits.py` or
+  the admin panel (item 2). The admin sets a reader or creator's role in the panel
+  (item 4); making an admin is SQL. Changing a role in code deletes
   the user's sessions, and they sign in again with the new set. A user has a session per
   browser or device, and sessions are in Redis by session id today, so the admin panel
   PR adds a per-user set of session ids to find them all. After an SQL change, the user
@@ -180,7 +181,7 @@ One PR, on item 3's branch. Two admin actions under `/admin`, held to the admin 
 - **Placement:** `AdminUserService.set_user_role()` and `set_user_active()` write the
   user row themselves, since only an admin makes these writes (the rule change below).
   Failing runs goes through `GenerateTextRunService.fail_run()`, from a
-  `fail_user_active_runs` task in `libs/generate_text/after_response_tasks.py`.
+  `fail_user_unfinished_runs` task in `libs/generate_text/after_response_tasks.py`.
 - **Rule change** in `fastapi-structure.md` › Services: an admin service writes through
   the owning domain's service when that service already makes the same write; a write
   only an admin makes is the admin service's own.
