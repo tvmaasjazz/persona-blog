@@ -15,7 +15,7 @@ before.
 What a user may do comes from their role's permissions. What a creator may spend comes
 from their credit balance. There are no payments yet, but both are the shapes payments
 will use. The backend is done: roles and permissions in #36, credits in #37. The
-frontend comes in item 8.
+frontend comes in item 11.
 
 **Roles:**
 
@@ -100,8 +100,8 @@ frontend comes in item 8.
 
 ### 2. Admin panel (backend)
 
-One PR. Admin-only endpoints under `/admin`, in their own router, for the admin panel's
-pages (item 8): a table of users, each linking to a user page with the account, a
+Built in #39. Admin-only endpoints under `/admin`, in their own router, for the admin panel's
+pages (item 11): a table of users, each linking to a user page with the account, a
 grant form and the ledger.
 
 - **Permissions,** held by the admin only and checked per route: `USER_READ` (any
@@ -112,10 +112,10 @@ grant form and the ledger.
   (`fastapi-structure.md` › Services). A balance still only changes through
   `CreditLedgerService`.
 - **Users:** `GET /admin/users`, every user but the system user, newest first, with
-  their role and balance. No search or pagination yet; the list takes on item 7's after
-  it lands. `GET /admin/users/{user_identity}` for the user page.
+  their role and balance. No search or pagination yet; item 10 pages it.
+  `GET /admin/users/{user_identity}` for the user page.
 - **A user's ledger:** `GET /admin/users/{user_identity}/credit-ledger`, every row,
-  newest first, until item 7 pages it.
+  newest first, until item 10 pages it.
 - **Grant credits:** `POST /admin/users/{user_identity}/credit-grants`, an amount up to
   $100 and a required note, written as a `GRANT` on the ledger. A reader becomes a
   creator, and their sessions are deleted after the response, so they sign in with the
@@ -126,9 +126,9 @@ grant form and the ledger.
 
 ### 3. Run status guards (backend)
 
-One PR, before item 4, which fails runs that are still going. Each write that moves a
-generate-text run or step to a new status applies only from the statuses it's meant to
-leave, so a late write from a job that's being stopped can't undo a newer one:
+Built in #40, before item 4, which fails runs that are still going. Each write that
+moves a generate-text run or step to a new status applies only from the statuses it's
+meant to leave, so a late write from a job that's being stopped can't undo a newer one:
 
 | Write | Applies only when | Otherwise |
 | --- | --- | --- |
@@ -152,7 +152,7 @@ leave, so a late write from a job that's being stopped can't undo a newer one:
 
 ### 4. Set a role and suspend (backend)
 
-One PR, on item 3's branch. Two admin actions under `/admin`, held to the admin by a new
+Built in #41. Two admin actions under `/admin`, held to the admin by a new
 `USER_WRITE`:
 
 - **Set a role:** `PUT /admin/users/{user_identity}/role` with `{"role": "READER"}` or
@@ -171,7 +171,7 @@ One PR, on item 3's branch. Two admin actions under `/admin`, held to the admin 
     Failing runs after the commit means a suspension that rolls back never killed a
     run; a failure there is only logged, and the user is still suspended and signed out.
 - **A suspended user's content is hidden** where it's read: their personas and posts
-  are treated as private, the way a private persona's posts are (item 7). Nothing is
+  are treated as private, the way a private persona's posts are (item 6). Nothing is
   changed on the rows, so reactivating shows them again at once.
 - **Reactivating** restores the account as it was (role, credits, content); the user
   signs in again. Failed runs stay failed.
@@ -188,7 +188,7 @@ One PR, on item 3's branch. Two admin actions under `/admin`, held to the admin 
 
 ### 5. Invite links (backend)
 
-One PR, on item 4's branch. The admin creates an invite carrying a name, a credit amount,
+Built in #42. The admin creates an invite carrying a name, a credit amount,
 an optional note and an expiry, and gets back its link. There's no email in the app:
 the admin copies the link and sends it by email or text. The name is required and says
 who it's for, since the invite isn't tied to an email, so the list shows who each link
@@ -232,12 +232,63 @@ went to.
   reader a creator now has two callers, a grant and an invite, so it moves to one
   method both call.
 
-### 6. Post views and the feed's order (backend)
+### 6. Reading signed out (backend)
 
-One PR. Simple counts of how posts are read, and a score to order the homepage by.
+One PR. A shared link to a persona or a post works for anyone, signed in or not. It
+pages nothing, so a reviewer only has to think about who can see what.
+
+- **Open routes:** `GET /personas/{persona_identity}` and
+  `GET /blog-posts/{blog_post_identity}` take no permission, and signing in is
+  optional. A signed-in owner still sees their own private persona or post, and anyone
+  else gets a 404 for one, as `find_persona` and `find_blog_post` do today. They join
+  the open routes list in `fastapi-structure.md` › The acting user and
+  `test_app_factory.py`. The owner's own lists, writes and generation keep their
+  permissions.
+- **The read permissions stay.** Every role that signs in keeps `PERSONA_READ` and
+  `BLOG_POST_READ`, but the open routes don't check them for now. They're kept for
+  later rules that may check them again, such as showing a signed-out reader only half
+  a post.
+- **A post shows to others only if its persona is public too.** Making a persona
+  private changes no post: its posts keep `is_public = true` but are treated as
+  private, so they leave the feed and a link to one returns a 404 to anyone but the
+  owner. Making the persona public again brings back exactly the posts that were public,
+  at once. Every query that shows posts to others checks both flags, as
+  `ContentItemQueryUtils.build_accessible_condition` does today. A private persona
+  still can't make a post public, as today. The frontend warns when a persona with
+  public posts is made private: "Its 4 public posts will be hidden until the persona is
+  public again."
+- A suspended owner's personas and posts stay hidden from others (item 4).
+
+### 7. Paging and search (backend)
+
+One PR. One way of paging and searching every list in the app, used first by a
+persona's page, which needs paging but not the feed's score.
+
+- **Pagination:** a query DTO with a page size and a cursor or offset, and the same
+  response shape on every list. The pattern goes in `fastapi-structure.md`, so items 9
+  and 10 follow it.
+- **Search:** one search box per list, matching the fields that list chooses (a post's
+  title and body, a user's email and name). Filters can be fixed by the page at first,
+  with no filter menu yet.
+- **A persona's page:** a new open route listing a public persona's public posts,
+  newest first, paged and searchable, so anyone can read a persona and what it's
+  written. Today's lists show only the signed-in user's own.
+
+**To decide:**
+
+- Cursor or offset pagination. A cursor keeps pages steady while new posts arrive, but
+  can't jump to a page number
+- Search with Postgres full-text search, or a simple `ILIKE` to start
+
+### 8. Post views and the feed's order (backend)
+
+
+One PR. Simple counts of how posts are read, and a score to order the homepage by
+(item 9).
 
 - **Views:** the frontend records a view when a post opens. One view per viewer, per
-  post, per day: by user when signed in, else by an anonymous id in a cookie.
+  post, per day: by user when signed in, else by an anonymous id in a cookie. Recording
+  a view is an open route, since signed-out readers count.
 - **How far they read:** the frontend reports the furthest point read, in quarters (25,
   50, 75, 100%), as the reader scrolls, stored on the view.
 - **The score:** recent engagement over age, as in Hacker News. Each view in the last 7
@@ -255,48 +306,33 @@ One PR. Simple counts of how posts are read, and a score to order the homepage b
   stay small
 - Whether a view by the post's own author counts
 
-### 7. Pagination, search and the homepage feed (backend)
+### 9. The homepage feed (backend)
 
-One PR. One way of paging and searching every list in the app, used first by the
-homepage feed. The admin's user list and the other lists take it on after.
-
-- **Pagination:** a page size and a cursor or offset, and the same response shape on
-  every list.
-- **Search:** one search box per list, matching the fields that list chooses (a post's
-  title and body, a user's email and name). Filters can be fixed by the page at first,
-  with no filter menu yet.
-- **The homepage feed:** every public post, ordered by the score (item 6), paged, with
-  a search.
-- **A persona's page:** a public persona's public posts, so anyone can read a persona
-  and what it's written. Today's lists show only the signed-in user's own.
-- **Reading signed out:** the feed, a persona, a persona's posts and a post are open
-  routes, with no permission, so a shared link works for anyone. Sign-in is optional on
-  them: a signed-in owner still sees their own private persona or post, and anyone else
-  gets a 404 for one, as `find_persona` and `find_blog_post` do today. They join the
-  open routes list in `test_app_factory.py`. Recording a view is open too. The owner's
-  own lists, writes and generation keep their permissions.
-- **The read permissions stay.** Every role that signs in keeps `PERSONA_READ` and
-  `BLOG_POST_READ`, but the open routes don't check them for now. They're kept for
-  later rules that may check them again, such as showing a signed-out reader only half
-  a post.
-- **A post shows to others only if its persona is public too.** Making a persona
-  private changes no post: its posts keep `is_public = true` but are treated as
-  private, so they leave the feed and a link to one returns a 404 to anyone but the
-  owner. Making the persona public again brings back exactly the posts that were public,
-  at once. Every query that shows posts to others checks both flags. A private persona
-  still can't make a post public, as today. The frontend warns when a persona with
-  public posts is made private: "Its 4 public posts will be hidden until the persona is
-  public again."
-- The frontend's table, search box and pager, built once in item 8 and used by every
-  list.
+One PR, after items 7 and 8. Every public post, ordered by the score (item 8), paged
+and searchable with item 7's pattern. An open route, like a persona's page.
 
 **To decide:**
 
-- Cursor or offset pagination. A cursor keeps pages steady while new posts arrive, but
-  can't jump to a page number
-- Search with Postgres full-text search, or a simple `ILIKE` to start
+- How to page a ranked feed. The score changes over time, so a cursor keyed on it
+  isn't stable from one page to the next: a feed fixed to the time of its first page,
+  or offset paging for the feed even if other lists use cursors
 
-### 8. Frontend
+### 10. Lists take on paging (backend)
+
+One PR, after item 7. The five lists the app has today move to item 7's paging and
+search, so the frontend's shared table and pager (item 11) has one shape to build
+against:
+
+- `GET /admin/users`, searching email and name
+- `GET /admin/invites`, searching the name
+- `GET /admin/users/{user_identity}/credit-ledger`, newest first
+- `GET /personas`, the signed-in user's own personas
+- `GET /blog-posts`, the signed-in user's own posts
+
+Which fields each list searches, and whether the ledger needs a search at all, are
+decided with item 7's pattern in hand.
+
+### 11. Frontend
 
 Everything the backend-only PRs added, before the deploy:
 
@@ -305,23 +341,24 @@ Everything the backend-only PRs added, before the deploy:
 - **Credits:** the balance on the profile, the low balance banner, and the 402 message
   when a run is refused.
 - **Admin panel:** users with their role and balance, a user page with granting credits
-  with a note, setting the role and suspending (item 4), the user's ledger, and creating, listing and revoking invites, with the new link shown
-  once to copy.
+  with a note, setting the role and suspending (item 4), the user's ledger, and
+  creating, listing and revoking invites, with the new link shown once to copy.
 - **Invite sign-up:** the link's page checks the code, then signs the user in with
   Google, carrying the code (item 5).
 - **One sign-in result page** reads `error`, `invite_error` and `invite` from the
   sign-in redirect and shows a message for each code: a suspended account, an email
   already in use, an expired or used invite, or the credits an invite gave.
-- **Homepage:** the feed, replacing My personas as the start page, with search and
-  paging, and recording views and how far a post is read.
-- **A persona's page:** its public posts, reached from a post or the feed. Making a
-  persona with public posts private warns that they'll be hidden (item 7).
-- The table, search box and pager the lists share.
+- **Homepage:** the feed (item 9), replacing My personas as the start page, with search
+  and paging, and recording views and how far a post is read (item 8).
+- **A persona's page:** its public posts (item 7), reached from a post or the feed, and
+  readable signed out (item 6). Making a persona with public posts private warns that
+  they'll be hidden.
+- The table, search box and pager every list shares (items 7 and 10).
 
 Probably more than one PR, split by area: the shared pieces and roles and credits first,
 then the admin panel and invites, then the homepage and persona pages.
 
-### 9. Deploy readiness
+### 12. Deploy readiness
 
 Assume any worker can restart mid-run and any request can land on any replica. The
 lease, handoff and drain work in the archive covers runs a redeploy stops.
@@ -350,7 +387,7 @@ lease, handoff and drain work in the archive covers runs a redeploy stops.
 
 - A subdomain of an existing domain first, or a dedicated domain from the start
 
-### 10. Initial deploy
+### 13. Initial deploy
 
 - [ ] Deploy the frontend, the backend, Postgres and Redis on Railway
 - [ ] Run the `backend/scripts/e2e/` scripts against the deployed API
