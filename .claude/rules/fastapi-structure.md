@@ -321,9 +321,12 @@ they're never confused:
   its lease, is a service of its own (Services).
 
 An after-response task is a function in `libs/<domain>/after_response_tasks.py`,
-scheduled from the dependency or route that knows it's needed. It takes a session
-factory and opens its own session and transaction, because the request's session is
-closed by the time it runs. That's also why it's a function rather than a service.
+scheduled from the dependency or route that knows it's needed. It runs once the
+response is sent and the request's session has committed and closed, so it never uses
+that session. A task that writes the database takes a session factory and opens its own
+session and transaction. A task that only touches Redis takes the Redis client and
+builds the service it needs, like `libs/auth/after_response_tasks.py`. It's a function
+rather than a service because it's scheduled per request with the values it acts on.
 
 A background job outlives the request's session too, so every service it calls takes
 the session factory and opens a short session per write, like `GenerateTextRunService`.
@@ -335,8 +338,9 @@ transaction on its `db_session` and never commits:
 collaborators arrive through `__init__`, and request-scoped services share the
 request's session through their dependency factories.
 
-A lib creates a session in only three places: an after-response task, the services a
-background job calls, and a record that must survive the caller's rollback (below).
+A lib creates a session in only three places: an after-response task that writes the
+database, the services a background job calls, and a record that must survive the
+caller's rollback (below).
 
 Everything else a task needs — the Redis client, the domain's settings, the values it
 acts on — is passed in, so `libs/` still never imports `AppSettings`. A time the task

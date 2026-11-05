@@ -107,10 +107,9 @@ grant form and the ledger.
   user's account: email, role, balance), `CREDIT_READ` (any user's ledger) and
   `CREDIT_WRITE` (granting). `USER_WRITE` comes with item 3. A user's public profile,
   when there is one, gets its own `PROFILE_READ`.
-- **Admin services:** a method that acts on any user's rows, skipping the ownership
-  check other services make, lives in `libs/admin/` as `Admin<Entity>Service`. It reads
-  directly and writes through the owning domain's service, so a balance still only
-  changes through `CreditLedgerService`.
+- **Admin services:** `AdminUserService` and `AdminCreditService` in `libs/admin/`
+  (`fastapi-structure.md` › Services). A balance still only changes through
+  `CreditLedgerService`.
 - **Users:** `GET /admin/users`, every user but the system user, newest first, with
   their role and balance. No search or pagination yet; the list takes on item 6's after
   it lands. `GET /admin/users/{user_identity}` for the user page.
