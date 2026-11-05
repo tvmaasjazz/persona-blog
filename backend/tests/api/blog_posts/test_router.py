@@ -458,6 +458,31 @@ async def test_create_blog_post_signed_out_returns_401(api_client: AsyncClient) 
     assert create_blog_post_response.status_code == 401
 
 
+async def _create_other_users_blog_post(
+    other_user_client: AsyncClient,
+    *,
+    is_persona_public: bool = True,
+    is_public: bool = True,
+    published_at: str | None = None,
+) -> tuple[str, str]:
+    create_persona_response = await other_user_client.post(
+        "/personas",
+        json={"name": "Public Persona", "bio": "Writes essays.", "is_public": is_persona_public},
+    )
+    persona_identity = create_persona_response.json()["identity"]
+    create_blog_post_response = await other_user_client.post(
+        "/blog-posts",
+        json={
+            "persona_identity": persona_identity,
+            "title": "Public Post",
+            "body": VALID_BLOG_POST_BODY,
+            "is_public": is_public,
+            "published_at": published_at,
+        },
+    )
+    return persona_identity, create_blog_post_response.json()["identity"]
+
+
 async def test_find_user_blog_post_list_returns_only_signed_in_users_newest_first(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
@@ -653,29 +678,31 @@ async def test_find_blog_post_never_inserted_returns_404(
     assert find_blog_post_response.status_code == 404
 
 
-async def test_find_blog_post_another_users_public_published_post_on_public_persona_returns_200(
+async def test_find_blog_post_another_users_public_published_post_returns_404(
     api_client: AsyncClient, signed_in_user: UserOrm, other_user_client: AsyncClient
 ) -> None:
-    other_create_persona_response = await other_user_client.post(
-        "/personas", json={"name": "Public Persona", "bio": "Writes essays.", "is_public": True}
+    _, other_blog_post_identity = await _create_other_users_blog_post(
+        other_user_client, published_at="2020-01-01T00:00:00+00:00"
     )
-    other_persona_identity = other_create_persona_response.json()["identity"]
-    other_create_blog_post_response = await other_user_client.post(
-        "/blog-posts",
-        json={
-            "persona_identity": other_persona_identity,
-            "title": "Public Post",
-            "body": VALID_BLOG_POST_BODY,
-            "is_public": True,
-            "published_at": "2020-01-01T00:00:00+00:00",
-        },
-    )
-    other_blog_post_identity = other_create_blog_post_response.json()["identity"]
 
     find_blog_post_response = await api_client.get(f"/blog-posts/{other_blog_post_identity}")
 
-    assert find_blog_post_response.status_code == 200
-    assert find_blog_post_response.json() == {
+    assert find_blog_post_response.status_code == 404
+
+
+async def test_find_public_blog_post_signed_out_published_post_returns_public_response(
+    api_client: AsyncClient, other_user_client: AsyncClient
+) -> None:
+    other_persona_identity, other_blog_post_identity = await _create_other_users_blog_post(
+        other_user_client, published_at="2020-01-01T00:00:00+00:00"
+    )
+
+    find_public_blog_post_response = await api_client.get(
+        f"/blog-posts/{other_blog_post_identity}/public"
+    )
+
+    assert find_public_blog_post_response.status_code == 200
+    assert find_public_blog_post_response.json() == {
         "identity": other_blog_post_identity,
         "persona_identity": other_persona_identity,
         "title": "Public Post",
@@ -685,7 +712,130 @@ async def test_find_blog_post_another_users_public_published_post_on_public_pers
         "published_at": "2020-01-01T00:00:00Z",
         "created_at": ANY,
         "updated_at": ANY,
+        "is_owner": False,
     }
+
+
+async def test_find_public_blog_post_signed_in_as_another_user_is_not_owner(
+    api_client: AsyncClient, signed_in_user: UserOrm, other_user_client: AsyncClient
+) -> None:
+    _, other_blog_post_identity = await _create_other_users_blog_post(
+        other_user_client, published_at="2020-01-01T00:00:00+00:00"
+    )
+
+    find_public_blog_post_response = await api_client.get(
+        f"/blog-posts/{other_blog_post_identity}/public"
+    )
+
+    assert find_public_blog_post_response.status_code == 200
+    assert find_public_blog_post_response.json()["is_owner"] is False
+
+
+async def test_find_public_blog_post_signed_in_as_owner_private_post_flags_owner(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(db_session, created_by_id=signed_in_user.id)
+    content_item_record = await insert_content_item_row(
+        db_session, created_by_id=signed_in_user.id, persona_id=persona_record.id
+    )
+    blog_post_record = await insert_blog_post_row(
+        db_session,
+        created_by_id=signed_in_user.id,
+        content_item_id=content_item_record.id,
+        title="A Title",
+        subtitle="A Subtitle",
+    )
+    await db_session.commit()
+
+    find_public_blog_post_response = await api_client.get(
+        f"/blog-posts/{blog_post_record.identity}/public"
+    )
+
+    assert find_public_blog_post_response.status_code == 200
+    assert find_public_blog_post_response.json() == {
+        "identity": str(blog_post_record.identity),
+        "persona_identity": str(persona_record.identity),
+        "title": "A Title",
+        "subtitle": "A Subtitle",
+        "body": VALID_BLOG_POST_BODY,
+        "is_public": False,
+        "published_at": None,
+        "created_at": ANY,
+        "updated_at": ANY,
+        "is_owner": True,
+    }
+
+
+@pytest.mark.parametrize(
+    ("is_persona_public", "is_public", "published_at"),
+    [
+        pytest.param(True, False, "2020-01-01T00:00:00+00:00", id="private_post"),
+        pytest.param(True, True, None, id="unpublished_post"),
+        pytest.param(True, True, "2030-01-01T00:00:00+00:00", id="scheduled_post"),
+        pytest.param(False, False, None, id="post_on_private_persona"),
+    ],
+)
+async def test_find_public_blog_post_signed_out_hidden_post_returns_404(
+    api_client: AsyncClient,
+    other_user_client: AsyncClient,
+    is_persona_public: bool,
+    is_public: bool,
+    published_at: str | None,
+) -> None:
+    _, other_blog_post_identity = await _create_other_users_blog_post(
+        other_user_client,
+        is_persona_public=is_persona_public,
+        is_public=is_public,
+        published_at=published_at,
+    )
+
+    find_public_blog_post_response = await api_client.get(
+        f"/blog-posts/{other_blog_post_identity}/public"
+    )
+
+    assert find_public_blog_post_response.status_code == 404
+
+
+async def test_find_public_blog_post_persona_made_private_after_publishing_returns_404(
+    api_client: AsyncClient, other_user_client: AsyncClient
+) -> None:
+    other_persona_identity, other_blog_post_identity = await _create_other_users_blog_post(
+        other_user_client, published_at="2020-01-01T00:00:00+00:00"
+    )
+    await other_user_client.put(
+        f"/personas/{other_persona_identity}",
+        json={"name": "Public Persona", "bio": "Writes essays.", "is_public": False},
+    )
+
+    find_public_blog_post_response = await api_client.get(
+        f"/blog-posts/{other_blog_post_identity}/public"
+    )
+
+    assert find_public_blog_post_response.status_code == 404
+
+
+async def test_find_public_blog_post_never_inserted_returns_404(api_client: AsyncClient) -> None:
+    find_public_blog_post_response = await api_client.get(f"/blog-posts/{uuid4()}/public")
+
+    assert find_public_blog_post_response.status_code == 404
+
+
+async def test_find_public_blog_post_malformed_identity_returns_422(
+    api_client: AsyncClient,
+) -> None:
+    find_public_blog_post_response = await api_client.get("/blog-posts/not-a-uuid/public")
+
+    response_body = find_public_blog_post_response.json()
+    assert find_public_blog_post_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == ["path", "blog_post_identity"]
+
+
+async def test_find_public_blog_post_invalid_session_returns_401(api_client: AsyncClient) -> None:
+    api_client.cookies.set("sid", "not-a-real-session-id")
+
+    find_public_blog_post_response = await api_client.get(f"/blog-posts/{uuid4()}/public")
+
+    assert find_public_blog_post_response.status_code == 401
 
 
 async def test_find_blog_post_another_users_draft_returns_404(
@@ -903,6 +1053,57 @@ async def test_update_blog_post_is_public_on_private_persona_returns_422(
     )
 
     assert update_blog_post_response.status_code == 422
+
+
+async def test_update_blog_post_already_public_on_private_persona_keeping_public_returns_200(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_user.id, is_public=False
+    )
+    content_item_record = await insert_content_item_row(
+        db_session, created_by_id=signed_in_user.id, persona_id=persona_record.id, is_public=True
+    )
+    blog_post_record = await insert_blog_post_row(
+        db_session, created_by_id=signed_in_user.id, content_item_id=content_item_record.id
+    )
+    await db_session.commit()
+
+    update_blog_post_response = await api_client.put(
+        f"/blog-posts/{blog_post_record.identity}",
+        json={"title": "New Title", "body": VALID_BLOG_POST_BODY, "is_public": True},
+    )
+
+    await db_session.refresh(blog_post_record)
+    await db_session.refresh(content_item_record)
+    assert update_blog_post_response.status_code == 200
+    assert update_blog_post_response.json() == {}
+    assert blog_post_record.title == "New Title"
+    assert content_item_record.is_public is True
+
+
+async def test_update_blog_post_already_public_on_private_persona_made_private_returns_200(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_user.id, is_public=False
+    )
+    content_item_record = await insert_content_item_row(
+        db_session, created_by_id=signed_in_user.id, persona_id=persona_record.id, is_public=True
+    )
+    blog_post_record = await insert_blog_post_row(
+        db_session, created_by_id=signed_in_user.id, content_item_id=content_item_record.id
+    )
+    await db_session.commit()
+
+    update_blog_post_response = await api_client.put(
+        f"/blog-posts/{blog_post_record.identity}",
+        json={"title": "A Title", "body": VALID_BLOG_POST_BODY, "is_public": False},
+    )
+
+    await db_session.refresh(content_item_record)
+    assert update_blog_post_response.status_code == 200
+    assert content_item_record.is_public is False
 
 
 @pytest.mark.parametrize(

@@ -139,3 +139,55 @@ async def test_validate_blog_post_visibility_missing_blog_post_returns_none(
     )
 
     assert validate_blog_post_visibility_result is None
+
+
+async def test_validate_blog_post_visibility_already_public_on_private_persona_returns_none(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=user_record.id, is_public=False
+    )
+    content_item_record = await insert_content_item_row(
+        db_session, created_by_id=user_record.id, persona_id=persona_record.id, is_public=True
+    )
+    blog_post_record = await insert_blog_post_row(
+        db_session, created_by_id=user_record.id, content_item_id=content_item_record.id
+    )
+    await db_session.commit()
+    blog_post_validation_service = _build_db_backed_blog_post_validation_service(db_session)
+
+    validate_blog_post_visibility_result = (
+        await blog_post_validation_service.validate_blog_post_visibility(
+            blog_post_record.identity, True, auth_user
+        )
+    )
+
+    assert validate_blog_post_visibility_result is None
+
+
+async def test_validate_blog_post_visibility_already_public_made_private_returns_none(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=user_record.id, is_public=False
+    )
+    content_item_record = await insert_content_item_row(
+        db_session, created_by_id=user_record.id, persona_id=persona_record.id, is_public=True
+    )
+    blog_post_record = await insert_blog_post_row(
+        db_session, created_by_id=user_record.id, content_item_id=content_item_record.id
+    )
+    await db_session.commit()
+    blog_post_validation_service = _build_db_backed_blog_post_validation_service(db_session)
+
+    validate_blog_post_visibility_result = (
+        await blog_post_validation_service.validate_blog_post_visibility(
+            blog_post_record.identity, False, auth_user
+        )
+    )
+
+    assert validate_blog_post_visibility_result is None
