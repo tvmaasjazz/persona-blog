@@ -132,9 +132,11 @@ by job:
 - **A method that acts on any user's rows is an admin service's.** Other services
   check ownership: the caller's own rows, or public ones. A method that skips that
   check, such as listing every user or reading anyone's ledger, lives in `libs/admin/`
-  as `Admin<Entity>Service`, so a non-admin route can't call it by mistake. It reads
-  directly and writes through the owning domain's service, so that domain's rules
-  stay in one place: `AdminCreditService.grant_user_credits()` calls
+  as `Admin<Entity>Service`, so a non-admin route can't call it by mistake. Every class
+  in `libs/admin/` takes the `Admin` prefix, so its inputs and results never share a
+  name with the owning domain's: `AdminGrantUserCreditsInput` beside
+  `GrantCreditsInput`. An admin service reads directly and writes through the owning
+  domain's service, so that domain's rules stay in one place: `AdminCreditService.grant_user_credits()` calls
   `CreditLedgerService.grant_credits()`. Its routes are in `apps/api/domains/admin/`,
   one router under `/admin`.
 
