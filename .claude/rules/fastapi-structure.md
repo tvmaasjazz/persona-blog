@@ -21,6 +21,7 @@ backend/
 │       │   ├── logging.py     # configure_logging(), called once from lifespan
 │       │   └── types.py       # app-wide enums: EnvironmentType
 │       ├── domains/
+│       │   ├── admin/                # every admin-only route, under /admin
 │       │   └── users/
 │       │       ├── dependencies.py   # factories + Annotated aliases
 │       │       ├── router.py
@@ -48,6 +49,8 @@ backend/
 │   │       ├── user.py        # UserOrm
 │   │       ├── role.py        # RoleOrm, with permission.py and role_permission.py
 │   │       └── persona.py     # PersonaOrm
+│   ├── admin/
+│   │   └── services/          # AdminUserService, AdminCreditService: any user's rows
 │   ├── auth/
 │   │   └── services/          # a lib with more than one service
 │   │       ├── __init__.py    # re-exports both
@@ -126,6 +129,14 @@ by job:
   through a `build_<service>(app_state)` in the domain's `dependencies.py` and runs the
   loop as a task. `apps/api/core/` holds only loops that belong to no domain, like the
   event loop monitor.
+- **A method that acts on any user's rows is an admin service's.** Other services
+  check ownership: the caller's own rows, or public ones. A method that skips that
+  check, such as listing every user or reading anyone's ledger, lives in `libs/admin/`
+  as `Admin<Entity>Service`, so a non-admin route can't call it by mistake. It reads
+  directly and writes through the owning domain's service, so that domain's rules
+  stay in one place: `AdminCreditService.grant_user_credits()` calls
+  `CreditLedgerService.grant_credits()`. Its routes are in `apps/api/domains/admin/`,
+  one router under `/admin`.
 
 ### Validation guards
 
