@@ -1,0 +1,1 @@
+DELETE FROM pb_permission WHERE code IN ('USER_READ', 'CREDIT_READ', 'CREDIT_WRITE');
