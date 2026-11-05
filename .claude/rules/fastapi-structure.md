@@ -22,6 +22,7 @@ backend/
 │       │   └── types.py       # app-wide enums: EnvironmentType
 │       ├── domains/
 │       │   ├── admin/                # every admin-only route, under /admin
+│       │   ├── invites/              # POST /invites/check, an open route
 │       │   └── users/
 │       │       ├── dependencies.py   # factories + Annotated aliases
 │       │       ├── router.py
@@ -50,7 +51,7 @@ backend/
 │   │       ├── role.py        # RoleOrm, with permission.py and role_permission.py
 │   │       └── persona.py     # PersonaOrm
 │   ├── admin/
-│   │   └── services/          # AdminUserService, AdminCreditService: any user's rows
+│   │   └── services/          # AdminUserService, AdminCreditService, AdminInviteService
 │   ├── auth/
 │   │   └── services/          # a lib with more than one service
 │   │       ├── __init__.py    # re-exports both
@@ -58,6 +59,7 @@ backend/
 │   │       └── oauth_state_service.py
 │   ├── credits/
 │   │   └── services/          # CreditLedgerService, CreditValidationService
+│   ├── invites/               # InviteService: checks and redeems an invite code
 │   ├── permissions/
 │   │   ├── services.py        # PermissionService: which permissions a role holds
 │   │   └── types.py           # RoleType, PermissionType

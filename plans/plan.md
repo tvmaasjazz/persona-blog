@@ -209,11 +209,13 @@ went to.
   expired, revoked) and who used it; `POST /admin/invites/{invite_identity}/revoke`
   sets `revoked_at` on an unused invite, and a used one returns 409.
 - **Checking a code:** `POST /invites/check` with `{"code": ...}`, an open route,
-  returns the status and the credit amount, not the name or note. It's a `POST` so the
+  returns the status and the credit amount, not the name or note, and a 404 for an
+  unknown code. It's a `POST` so the
   code stays out of API URLs and logs before it's used. The invite page calls it first
   and shows Google sign-in only for a valid code.
-- **Using it:** `/auth/google/login?invite_code=...` checks the code again, redirecting
-  back with `invite_error` if it's no longer valid, then carries it in the OAuth state.
+- **Using it:** `/auth/google/login?invite_code=...` checks the code again: an unknown
+  or no longer valid code redirects (303) to `{frontend_url}/sign-in?invite_error=...`
+  without going to Google; otherwise it carries the code in the OAuth state.
   At the callback, once the user is found or created, whether they just signed up or
   already had an account, one update marks the invite used, guarded on unused,
   unexpired and unrevoked, so it's used once. In the same transaction a reader becomes a
@@ -222,7 +224,9 @@ went to.
   as its author. The session is created after, with the new role.
 - **Redirects:** `?invite=ACCEPTED` on success; a code that fails at the callback still
   signs the user in, with `?invite_error=INVITE_EXPIRED`, `INVITE_USED` or
-  `INVITE_REVOKED`.
+  `INVITE_REVOKED`; the login refuses an unknown code with `INVITE_NOT_FOUND`. Both go to
+  `{frontend_url}/sign-in`, and a sign-in with no invite still goes to the frontend's
+  root.
 - **Placement:** `AdminInviteService` in `libs/admin/` creates, lists and revokes, since
   only an admin does; `InviteService` in `libs/invites/` checks and uses a code. Making a
   reader a creator now has two callers, a grant and an invite, so it moves to one
