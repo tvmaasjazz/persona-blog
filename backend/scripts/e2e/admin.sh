@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Walks the admin panel end to end against a running dev server: lists users, reads one
 # and their ledger, grants a reader credits, and checks the grant made them a creator and
-# signed them out everywhere. Prints each response and checks what it can. Run from
-# backend/:
+# signed them out everywhere; then sets them back to a reader, suspends them and
+# reactivates them. Prints each response and checks what it can. Run from backend/:
 #
 #   ./scripts/e2e/admin.sh
 #
@@ -28,6 +28,62 @@ step() { printf '\n\033[1m── %s\033[0m\n' "$1" >&2; }
 fail() { printf '\033[31mFAIL\033[0m %s\n' "$1" >&2; exit 1; }
 pass() { printf '\033[32m  ok\033[0m %s\n' "$1" >&2; }
 
+# Mints a fresh session for the reader with their current role, as signing in would,
+# and prints its id.
+mint_reader_session() {
+  uv run python - <<'PY'
+import asyncio
+import os
+
+from redis.asyncio import Redis
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from apps.api.core.config import AppSettings
+from libs.auth.results import AuthUser
+from libs.auth.services import AuthSessionService
+from libs.database.orm import RoleOrm, UserOrm
+from libs.database.session import create_db_session_factory
+from libs.permissions.services import PermissionService
+
+
+async def main() -> None:
+    app_settings = AppSettings()
+    db_engine = create_async_engine(app_settings.database_url)
+    db_session_factory = create_db_session_factory(db_engine)
+    redis_client = Redis.from_url(app_settings.redis_url)
+    try:
+        async with db_session_factory() as db_session:
+            reader_query = (
+                select(UserOrm, RoleOrm.code)
+                .join(RoleOrm, RoleOrm.id == UserOrm.role_id)
+                .where(UserOrm.email == os.environ["READER_EMAIL"])
+            )
+            reader_query_result = await db_session.execute(reader_query)
+            reader_record, role = reader_query_result.one()
+            permission_service = PermissionService(db_session=db_session)
+            find_role_permission_list_result = await permission_service.find_role_permission_list(
+                role
+            )
+        reader_auth_user = AuthUser(
+            id=reader_record.id,
+            identity=reader_record.identity,
+            role=role,
+            permissions=frozenset(find_role_permission_list_result.permissions),
+        )
+        auth_session_service = AuthSessionService(
+            redis_client=redis_client, auth_settings=app_settings.auth
+        )
+        reader_session_id = await auth_session_service.create_session(reader_auth_user)
+        print(reader_session_id)
+    finally:
+        await redis_client.aclose()
+        await db_engine.dispose()
+
+
+asyncio.run(main())
+PY
+}
 read_json_field() { python3 -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
 # Builds a JSON object from key=value pairs: @NAME reads environment variable NAME as
 # a string, anything else is parsed as a JSON literal. See generate_text.sh for
@@ -177,6 +233,7 @@ async def main() -> None:
         print(reader_first_session_id)
         print(reader_second_session_id)
         print(system_user_identity)
+        print(admin_record.identity)
     finally:
         await redis_client.aclose()
         await db_engine.dispose()
@@ -190,6 +247,7 @@ READER_IDENTITY="$(echo "$SEED_OUTPUT" | sed -n 2p)"
 READER_FIRST_SESSION_ID="$(echo "$SEED_OUTPUT" | sed -n 3p)"
 READER_SECOND_SESSION_ID="$(echo "$SEED_OUTPUT" | sed -n 4p)"
 SYSTEM_USER_IDENTITY="$(echo "$SEED_OUTPUT" | sed -n 5p)"
+ADMIN_IDENTITY="$(echo "$SEED_OUTPUT" | sed -n 6p)"
 pass "admin session ready; reader $READER_EMAIL has two sessions"
 
 step "1. The reader is signed in on both sessions"
@@ -258,4 +316,43 @@ assert entries[0]["note"] == os.environ["GRANT_NOTE"], entries[0]["note"]
 ' || fail "the ledger doesn't hold the one grant"
 pass "one GRANT of 2.5000000000 with the note"
 
-printf '\n\033[32mAll steps passed.\033[0m The reader %s stays in the database as a creator.\n' "$READER_EMAIL"
+step "9. Role and suspension changes that are refused"
+request 422 "making someone an admin" -X PUT "$API_URL/admin/users/$READER_IDENTITY/role" \
+  -H 'Content-Type: application/json' -d "$(json_body role='"ADMIN"')" >/dev/null
+request 409 "changing an admin's role" -X PUT "$API_URL/admin/users/$ADMIN_IDENTITY/role" \
+  -H 'Content-Type: application/json' -d "$(json_body role='"READER"')" >/dev/null
+request 409 "suspending an admin" -X PUT "$API_URL/admin/users/$ADMIN_IDENTITY/active" \
+  -H 'Content-Type: application/json' -d "$(json_body is_active=false)" >/dev/null
+request 404 "the system user" -X PUT "$API_URL/admin/users/$SYSTEM_USER_IDENTITY/active" \
+  -H 'Content-Type: application/json' -d "$(json_body is_active=false)" >/dev/null
+
+step "10. Set the creator back to a reader, which signs them out"
+CREATOR_SESSION_ID="$(mint_reader_session)"
+request 200 "set the role to READER" -X PUT "$API_URL/admin/users/$READER_IDENTITY/role" \
+  -H 'Content-Type: application/json' -d "$(json_body role='"READER"')" >/dev/null
+DEMOTED_BODY="$(request 200 "read the user again" "$API_URL/admin/users/$READER_IDENTITY")"
+[ "$(echo "$DEMOTED_BODY" | read_json_field role)" = "READER" ] || fail "expected role READER"
+CREATOR_STATUS="$(curl -s -o /dev/null -w '%{http_code}' -b "sid=$CREATOR_SESSION_ID" "$API_URL/users/me")"
+[ "$CREATOR_STATUS" = "401" ] || fail "creator session after the demotion: expected 401, got $CREATOR_STATUS"
+pass "a READER again, and their creator session → 401"
+
+step "11. Suspend them, which signs them out"
+SUSPENDED_SESSION_ID="$(mint_reader_session)"
+request 200 "suspend" -X PUT "$API_URL/admin/users/$READER_IDENTITY/active" \
+  -H 'Content-Type: application/json' -d "$(json_body is_active=false)" >/dev/null
+request 200 "suspend again, which changes nothing" -X PUT "$API_URL/admin/users/$READER_IDENTITY/active" \
+  -H 'Content-Type: application/json' -d "$(json_body is_active=false)" >/dev/null
+SUSPENDED_BODY="$(request 200 "read the user again" "$API_URL/admin/users/$READER_IDENTITY")"
+[ "$(echo "$SUSPENDED_BODY" | read_json_field is_active)" = "False" ] || fail "expected is_active false"
+SUSPENDED_STATUS="$(curl -s -o /dev/null -w '%{http_code}' -b "sid=$SUSPENDED_SESSION_ID" "$API_URL/users/me")"
+[ "$SUSPENDED_STATUS" = "401" ] || fail "session after the suspension: expected 401, got $SUSPENDED_STATUS"
+pass "suspended, and their session → 401"
+
+step "12. Reactivate them"
+request 200 "reactivate" -X PUT "$API_URL/admin/users/$READER_IDENTITY/active" \
+  -H 'Content-Type: application/json' -d "$(json_body is_active=true)" >/dev/null
+REACTIVATED_BODY="$(request 200 "read the user again" "$API_URL/admin/users/$READER_IDENTITY")"
+[ "$(echo "$REACTIVATED_BODY" | read_json_field is_active)" = "True" ] || fail "expected is_active true"
+pass "active again, still a $(echo "$REACTIVATED_BODY" | read_json_field role)"
+
+printf '\n\033[32mAll steps passed.\033[0m The user %s stays in the database as an active reader.\n' "$READER_EMAIL"
