@@ -821,6 +821,8 @@ content items, that `WHERE` adds `<Orm>.deleted_at.is_(None)`:
             .where(GenerateTextStepOrm.id == step_id)
             .values(
                 human_decision=human_decision,
+                human_feedback=human_feedback,
+                decided_by_id=auth_user.id,
                 decided_at=DatabaseClockUtils.build_utc_now_sql(),
                 updated_by_id=auth_user.id,
             )
@@ -839,9 +841,9 @@ reports whether it changed a row.
 `start_run` moves only a `PENDING` run, `complete_run` only a `RUNNING` one, and
 `fail_run` only an unfinished one. A row count of 0 then means the row moved on, which
 is not an error; when an unknown row must still raise, a read of its id tells the two
-apart (`_raise_if_run_missing`). Writes from different sessions that touch a run and
-its steps lock the run first, as `fail_run` does with `with_for_update()`, so two
-transactions never wait on each other's rows.
+apart (`_raise_if_run_missing`, `_raise_if_step_missing`). Writes from different sessions that touch a run and
+its steps lock the run first, as `fail_run`, `create_step` and `complete_step` do with
+`with_for_update()`, so two transactions never wait on each other's rows.
 
 Deletes are updates too: set `deleted_at` from the
 database clock and `deleted_by_id`. `updated_at` needs nothing (`database.md` ›

@@ -133,8 +133,8 @@ leave, so a late write from a job that's being stopped can't undo a newer one:
 | --- | --- | --- |
 | `start_run` | The run is `PENDING` | Returns `False`, and the job ends without running the graph |
 | `create_step` | The run is `RUNNING` | Raises, and the job ends |
-| `complete_step` | The step is `RUNNING` | Does nothing; the step is charged only when this write completed it |
-| `record_awaiting_review` and `fail_step` (step) | The step is `RUNNING` | Does nothing |
+| `complete_step` | The run and the step are `RUNNING` | Does nothing; the step is charged only when this write completed it, and an unknown step still raises `NotFoundException` |
+| `record_awaiting_review` and `fail_step` (step) | The step is `RUNNING` | Does nothing; an unknown step still raises `NotFoundException` |
 | `complete_run` and `record_awaiting_review` (run) | The run is `RUNNING` | Does nothing; an unknown run still raises `NotFoundException` |
 | `fail_run` | The run is `PENDING`, `RUNNING` or `AWAITING_REVIEW` | Does nothing. Today it skips only a `FAILED` run, so it would fail a `COMPLETED` one |
 
@@ -146,8 +146,8 @@ leave, so a late write from a job that's being stopped can't undo a newer one:
   renewal (every 15 seconds) fails and cancels the job mid-call. At most the call in
   flight is lost, and it's never charged.
 - This also closes the same gap when a lease is lost today.
-- A rule for `fastapi-structure.md`: a write that moves a run or step to a new status
-  names the statuses it moves from in its `WHERE`.
+- The rule is in `fastapi-structure.md` › Querying and writing: a write that moves a
+  row to a new status names the statuses it moves from.
 
 ### 4. Set a role and suspend (backend)
 
