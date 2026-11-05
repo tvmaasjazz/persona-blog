@@ -348,8 +348,8 @@ collaborators arrive through `__init__`, and request-scoped services share the
 request's session through their dependency factories.
 
 A lib creates a session in only three places: an after-response task that writes the
-database, the services a background job calls, and a record that must survive the
-caller's rollback (below).
+database, or the service it hands the session factory to; the services a background job
+calls; and a record that must survive the caller's rollback (below).
 
 Everything else a task needs — the Redis client, the domain's settings, the values it
 acts on — is passed in, so `libs/` still never imports `AppSettings`. A time the task
@@ -707,8 +707,9 @@ application code uses the database.
   `create_db_session_factory(db_engine)`. Never build an `async_sessionmaker` by hand;
   the factory carries the session options and the soft-delete rule. Db sessions are
   per-request. The exceptions are a row a long-running route needs (Services › Rows
-  a long-running route needs) and a validation guard on a route that starts a
-  background job (Services › Validation guards).
+  a long-running route needs), a validation guard on a route that starts a
+  background job (Services › Validation guards), and the places a lib creates a session
+  (Services › After-response tasks and background jobs).
 - A service may import any Orm it needs; the domain boundary applies to services, not
   tables.
 - Python code handles aware UTC datetimes only, and every "now" a query compares with
@@ -779,8 +780,9 @@ renamed field can't write to the wrong column. A time it writes is
 `JSONB` column is cleared with `null()`, never `None`, which stores JSON `null` and
 passes `IS NOT NULL`. A service doesn't commit a session it was handed; one that opens
 its own session commits it (Services › Records that must survive a rollback). This
-governs application code. Test factories (`pytest-testing.md` › Test data) and e2e
-seed scripts still create rows through the Orm with `add()` and `flush()`.
+governs application code. Test factories and tests (`pytest-testing.md` › Test data)
+and e2e seed scripts still create and change rows through the Orm with `add()`,
+attributes and `flush()`.
 
 A create returns what its caller needs with `.returning(...)`:
 
@@ -1173,7 +1175,8 @@ def create_app() -> FastAPI:
   its flow raises and redirects to `{frontend_url}/sign-in?error=<CODE>`. The lib owns
   the map from exception to code and the tuple the route catches
   (`libs/google_auth/constants.py`), and its `Utils` does the matching
-  (`GoogleAuthUtils.find_sign_in_error_type`); the route only catches and redirects.
+  (`GoogleAuthUtils.find_sign_in_error_type`, `build_sign_in_error_url`); the route
+  only catches and redirects.
   An exception not in the map still reaches the standard handlers.
 - A lib may build a frontend URL to redirect to in its own `Utils`, from a
   `frontend_url` passed in: `InviteUtils.build_sign_in_redirect_url`. The values of its

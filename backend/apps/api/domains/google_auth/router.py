@@ -35,7 +35,9 @@ async def get_google_callback(
         google_sign_in_result = await google_sign_in_service.sign_in_with_google(code, state)
     except SIGN_IN_ERROR_EXCEPTIONS as sign_in_exception:
         sign_in_error_type = GoogleAuthUtils.find_sign_in_error_type(sign_in_exception)
-        sign_in_error_url = f"{app_settings.auth.frontend_url}/sign-in?error={sign_in_error_type}"
+        sign_in_error_url = GoogleAuthUtils.build_sign_in_error_url(
+            app_settings.auth.frontend_url, sign_in_error_type
+        )
         return RedirectResponse(sign_in_error_url, status_code=303)
 
     # The frontend root, or its sign-in page with the invite's outcome

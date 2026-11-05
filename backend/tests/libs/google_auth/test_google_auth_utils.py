@@ -74,3 +74,11 @@ def test_find_sign_in_error_type_unmapped_exception_is_re_raised(
         GoogleAuthUtils.find_sign_in_error_type(unmapped_exception)
 
     assert raised_exception_info.value is unmapped_exception
+
+
+def test_build_sign_in_error_url_returns_sign_in_page_with_error_code() -> None:
+    sign_in_error_url = GoogleAuthUtils.build_sign_in_error_url(
+        "https://app.example.com", SignInErrorType.ACCOUNT_SUSPENDED
+    )
+
+    assert sign_in_error_url == "https://app.example.com/sign-in?error=ACCOUNT_SUSPENDED"
