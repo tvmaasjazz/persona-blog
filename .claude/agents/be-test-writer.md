@@ -89,8 +89,9 @@ comparison into a partial one, catching the exception, or adding `skip` / `xfail
 - If the rules don't cover a situation, make the most conservative call, and report
   it as a judgement call with proposed rule wording. Don't quietly invent a
   convention.
-- Report a contradiction between rules, or between a rule and the task, under
-  Contradictions with file and line, and leave that test unwritten.
+- When rules contradict each other or the task, follow the more specific rule and
+  write the test, then report it under Contradictions: both rules with file and line,
+  and which one you followed.
 
 ## Report
 
@@ -120,8 +121,8 @@ line. Write "None" if none.
 **Judgement calls**: situations the rules didn't cover, what you chose, and the exact
 wording you'd propose adding and to which rules file. Write "None" if none.
 
-**Contradictions**: conflicts between rules, or between a rule and the task. Write
-"None" if none.
+**Contradictions**: conflicts between rules, or between a rule and the task, and which
+one you followed. Write "None" if none.
 
 **Follow-up needed**: work outside your scope that this change requires, such as
 source fixes, config or dependency changes, and fixtures waiting on a resource that

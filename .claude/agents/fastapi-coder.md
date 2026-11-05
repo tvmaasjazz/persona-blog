@@ -70,8 +70,9 @@ Shared wiring files take additions only:
   file, make the most conservative call (for a file location, don't choose one), and
   report it as a judgement call with proposed rule wording. Don't quietly invent a
   convention.
-- Report a contradiction between rules, or between a rule and the task, under
-  Contradictions with file and line, and leave that piece unwritten.
+- When rules contradict each other or the task, follow the more specific rule and
+  write the code, then report it under Contradictions: both rules with file and line,
+  and which one you followed.
 
 ## Report
 
@@ -89,8 +90,8 @@ Only list conventions you actually applied in this change, not every rule you re
 **Judgement calls** — situations the rules didn't cover, what you chose, and the
 exact wording you'd propose adding and to which rules file. Write "None" if none.
 
-**Contradictions** — conflicts between rules, or between a rule and the task. Write
-"None" if none.
+**Contradictions** — conflicts between rules, or between a rule and the task, and which
+one you followed. Write "None" if none.
 
 **Follow-up needed** — work outside your scope that this change requires (migrations,
 permissions, tests, app setup changes, anything the rules don't give a home to), plus
