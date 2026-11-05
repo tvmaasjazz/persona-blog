@@ -131,7 +131,7 @@ leave, so a late write from a job that's being stopped can't undo a newer one:
 
 | Write | Applies only when | Otherwise |
 | --- | --- | --- |
-| `start_run` | The run is `PENDING` | Returns `False`, and the job ends without running the graph |
+| `start_run` | The run is `PENDING` | Returns `False`, and the job ends without running the graph; an unknown run still raises `NotFoundException` |
 | `create_step` | The run is `RUNNING` | Raises, and the job ends |
 | `complete_step` | The run and the step are `RUNNING` | Does nothing; the step is charged only when this write completed it, and an unknown step still raises `NotFoundException` |
 | `record_awaiting_review` and `fail_step` (step) | The step is `RUNNING` | Does nothing; an unknown step still raises `NotFoundException` |

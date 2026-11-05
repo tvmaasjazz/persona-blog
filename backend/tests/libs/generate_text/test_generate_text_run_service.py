@@ -146,14 +146,13 @@ async def test_start_run_not_pending_returns_false_and_keeps_status(
     assert run_record.started_at is None
 
 
-async def test_start_run_unknown_run_returns_false(
+async def test_start_run_unknown_run_raises_not_found_exception(
     db_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
-    is_started = await generate_text_run_service.start_run(999999)
-
-    assert is_started is False
+    with pytest.raises(NotFoundException):
+        await generate_text_run_service.start_run(999999)
 
 
 async def test_complete_run_unknown_run_raises_not_found_exception(
