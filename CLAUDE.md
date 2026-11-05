@@ -89,6 +89,17 @@ written. They are expected to grow.
   and `.claude/commands/` for anything that scopes work by file type, and propose
   matching edits to their descriptions and scope lists.
 - Propose the edit; don't apply it unless asked.
+- Write a rule for the next feature, not as a record of this one. These files load on
+  every matching task, so every line costs tokens:
+  - State the rule generically. Name a real file or class only as the pattern to go
+    read ("the pattern is `libs/personas/services/persona_service.py`"), never to
+    narrate what the app already has.
+  - Point to a file instead of pasting code that copies it.
+  - Leave out history ("before X", "today"), framework or library behaviour, and
+    anything one file's own code already shows. Keep a reason only when it prevents a
+    likely mistake.
+  - Say it once. A rule lives in one rules file; anywhere else, including an agent or
+    command, points to it.
 - Before a PR that changes `.claude/rules/`, `.claude/agents/`, or
   `.claude/commands/` is ready to merge, run the auditor for each side the change
   touches on the changed files: `be-docs-auditor` for the backend, `fe-docs-auditor` for the
