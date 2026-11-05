@@ -1,8 +1,11 @@
+from urllib.parse import parse_qs, urlparse
+
 from httpx import AsyncClient
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from libs.auth.exceptions import AuthSignInStateExpiredException
 from libs.auth.results import AuthUser
 from libs.auth.types import AuthProviderType
 from libs.core.exceptions import UnauthorizedException
@@ -100,7 +103,7 @@ async def test_get_google_callback_known_creator_stores_role_and_permissions_in_
     )
 
 
-async def test_get_google_callback_inactive_user_returns_403(
+async def test_get_google_callback_inactive_user_redirects_to_sign_in_with_account_suspended(
     api_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     user_record = await insert_user_row(db_session, email="ada@example.com", is_active=False)
@@ -114,10 +117,14 @@ async def test_get_google_callback_inactive_user_returns_403(
         follow_redirects=False,
     )
 
-    assert get_google_callback_response.status_code == 403
+    redirect_location = urlparse(get_google_callback_response.headers["location"])
+    assert get_google_callback_response.status_code == 303
+    assert redirect_location.path == "/sign-in"
+    assert parse_qs(redirect_location.query) == {"error": ["ACCOUNT_SUSPENDED"]}
+    assert get_google_callback_response.headers.get_list("set-cookie") == []
 
 
-async def test_get_google_callback_email_taken_by_another_user_returns_409(
+async def test_get_google_callback_email_taken_redirects_to_sign_in_with_email_taken(
     api_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     await insert_user_row(db_session, email="ada@example.com")
@@ -128,13 +135,17 @@ async def test_get_google_callback_email_taken_by_another_user_returns_409(
         follow_redirects=False,
     )
 
-    assert get_google_callback_response.status_code == 409
+    redirect_location = urlparse(get_google_callback_response.headers["location"])
+    assert get_google_callback_response.status_code == 303
+    assert redirect_location.path == "/sign-in"
+    assert parse_qs(redirect_location.query) == {"error": ["EMAIL_TAKEN"]}
+    assert get_google_callback_response.headers.get_list("set-cookie") == []
 
 
-async def test_get_google_callback_bad_state_returns_401(
+async def test_get_google_callback_bad_state_redirects_to_sign_in_with_sign_in_expired(
     api_client: AsyncClient, google_oauth_service_stub: GoogleOAuthServiceStub
 ) -> None:
-    google_oauth_service_stub.exchange_code_for_identity_error = UnauthorizedException(
+    google_oauth_service_stub.exchange_code_for_identity_error = AuthSignInStateExpiredException(
         "Sign-in state is missing or expired"
     )
 
@@ -144,4 +155,28 @@ async def test_get_google_callback_bad_state_returns_401(
         follow_redirects=False,
     )
 
-    assert get_google_callback_response.status_code == 401
+    redirect_location = urlparse(get_google_callback_response.headers["location"])
+    assert get_google_callback_response.status_code == 303
+    assert redirect_location.path == "/sign-in"
+    assert parse_qs(redirect_location.query) == {"error": ["SIGN_IN_EXPIRED"]}
+    assert get_google_callback_response.headers.get_list("set-cookie") == []
+
+
+async def test_get_google_callback_google_rejects_code_redirects_to_sign_in_with_sign_in_failed(
+    api_client: AsyncClient, google_oauth_service_stub: GoogleOAuthServiceStub
+) -> None:
+    google_oauth_service_stub.exchange_code_for_identity_error = UnauthorizedException(
+        "Google rejected the code"
+    )
+
+    get_google_callback_response = await api_client.get(
+        "/auth/google/callback",
+        params={"code": "bad-code", "state": "state-1"},
+        follow_redirects=False,
+    )
+
+    redirect_location = urlparse(get_google_callback_response.headers["location"])
+    assert get_google_callback_response.status_code == 303
+    assert redirect_location.path == "/sign-in"
+    assert parse_qs(redirect_location.query) == {"error": ["SIGN_IN_FAILED"]}
+    assert get_google_callback_response.headers.get_list("set-cookie") == []

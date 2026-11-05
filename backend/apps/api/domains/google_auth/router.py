@@ -8,6 +8,8 @@ from apps.api.domains.google_auth.dependencies import (
     GoogleSignInServiceDep,
 )
 from libs.auth.constants import SESSION_COOKIE_NAME
+from libs.google_auth.constants import SIGN_IN_ERROR_EXCEPTIONS
+from libs.google_auth.utils import GoogleAuthUtils
 
 google_auth_router = APIRouter(prefix="/auth/google", tags=["google-auth"])
 
@@ -28,8 +30,14 @@ async def get_google_callback(
     app_settings: AppSettingsDep,
     google_sign_in_service: GoogleSignInServiceDep,
 ) -> RedirectResponse:
-    """Completes Google sign-in, sets the session cookie and redirects to the frontend."""
-    google_sign_in_result = await google_sign_in_service.sign_in_with_google(code, state)
+    """Completes Google sign-in, sets the session cookie and redirects to the frontend; a
+    known sign-in failure redirects to its sign-in page with the error code instead."""
+    try:
+        google_sign_in_result = await google_sign_in_service.sign_in_with_google(code, state)
+    except SIGN_IN_ERROR_EXCEPTIONS as sign_in_exception:
+        sign_in_error_type = GoogleAuthUtils.find_sign_in_error_type(sign_in_exception)
+        sign_in_error_url = f"{app_settings.auth.frontend_url}/sign-in?error={sign_in_error_type}"
+        return RedirectResponse(sign_in_error_url, status_code=303)
 
     redirect_response = RedirectResponse(app_settings.auth.frontend_url, status_code=303)
     redirect_response.set_cookie(

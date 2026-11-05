@@ -232,6 +232,82 @@ async def test_find_persona_another_users_public_persona_returns_persona_detail_
     )
 
 
+async def test_find_persona_another_users_public_persona_inactive_creator_raises_not_found(
+    db_session: AsyncSession,
+) -> None:
+    suspended_owner_record = await insert_user_row(db_session, is_active=False)
+    other_user_record = await insert_user_row(db_session)
+    other_auth_user = build_auth_user(
+        user_id=other_user_record.id, user_identity=other_user_record.identity
+    )
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=suspended_owner_record.id, is_public=True
+    )
+    persona_service = PersonaService(db_session=db_session)
+
+    with pytest.raises(NotFoundException):
+        await persona_service.find_persona(persona_record.identity, other_auth_user)
+
+
+async def test_find_persona_public_persona_creator_reactivated_returns_persona_detail_result(
+    db_session: AsyncSession,
+) -> None:
+    owner_record = await insert_user_row(db_session, is_active=False)
+    other_user_record = await insert_user_row(db_session)
+    other_auth_user = build_auth_user(
+        user_id=other_user_record.id, user_identity=other_user_record.identity
+    )
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=owner_record.id, name="Ada the Essayist", is_public=True
+    )
+    persona_service = PersonaService(db_session=db_session)
+    owner_record.is_active = True
+    await db_session.flush()
+
+    find_persona_result = await persona_service.find_persona(
+        persona_record.identity, other_auth_user
+    )
+
+    assert find_persona_result.identity == persona_record.identity
+    assert find_persona_result.name == "Ada the Essayist"
+
+
+async def test_find_persona_owner_inactive_returns_own_persona(db_session: AsyncSession) -> None:
+    suspended_owner_record = await insert_user_row(db_session, is_active=False)
+    owner_auth_user = build_auth_user(
+        user_id=suspended_owner_record.id, user_identity=suspended_owner_record.identity
+    )
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=suspended_owner_record.id, name="Ada the Essayist", is_public=True
+    )
+    persona_service = PersonaService(db_session=db_session)
+
+    find_persona_result = await persona_service.find_persona(
+        persona_record.identity, owner_auth_user
+    )
+
+    assert find_persona_result.identity == persona_record.identity
+
+
+async def test_update_persona_another_users_public_persona_inactive_creator_raises_not_found(
+    db_session: AsyncSession,
+) -> None:
+    suspended_owner_record = await insert_user_row(db_session, is_active=False)
+    other_user_record = await insert_user_row(db_session)
+    other_auth_user = build_auth_user(
+        user_id=other_user_record.id, user_identity=other_user_record.identity
+    )
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=suspended_owner_record.id, is_public=True
+    )
+    persona_service = PersonaService(db_session=db_session)
+
+    with pytest.raises(NotFoundException):
+        await persona_service.update_persona(
+            persona_record.identity, build_persona_input(), other_auth_user
+        )
+
+
 async def test_find_user_persona_list_returns_only_live_personas_newest_first(
     db_session: AsyncSession,
 ) -> None:

@@ -170,3 +170,50 @@ async def test_build_accessible_condition_soft_deleted_persona_hides_content_ite
     )
 
     assert content_item_record.id not in accessible_content_item_ids
+
+
+async def test_build_accessible_condition_other_user_does_not_see_content_of_inactive_creator(
+    db_session: AsyncSession,
+) -> None:
+    suspended_owner_record = await insert_user_row(db_session, is_active=False)
+    other_user_record = await insert_user_row(db_session)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=suspended_owner_record.id, is_public=True
+    )
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=suspended_owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=PAST_PUBLISHED_AT,
+    )
+    await db_session.commit()
+
+    accessible_content_item_ids = await _find_accessible_content_item_ids(
+        db_session, other_user_record.id
+    )
+
+    assert content_item_record.id not in accessible_content_item_ids
+
+
+async def test_build_accessible_condition_inactive_owner_still_sees_own_content_item(
+    db_session: AsyncSession,
+) -> None:
+    suspended_owner_record = await insert_user_row(db_session, is_active=False)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=suspended_owner_record.id, is_public=True
+    )
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=suspended_owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=PAST_PUBLISHED_AT,
+    )
+    await db_session.commit()
+
+    accessible_content_item_ids = await _find_accessible_content_item_ids(
+        db_session, suspended_owner_record.id
+    )
+
+    assert content_item_record.id in accessible_content_item_ids

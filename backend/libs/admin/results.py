@@ -41,3 +41,14 @@ class AdminGrantUserCreditsResult(BaseModel):
     identity: UUID
     user_id: int
     is_made_creator: bool
+
+
+class AdminSetUserRoleResult(BaseModel):
+    user_id: int
+    is_changed: bool
+    is_demoted_to_reader: bool
+
+
+class AdminSetUserActiveResult(BaseModel):
+    user_id: int
+    is_changed: bool

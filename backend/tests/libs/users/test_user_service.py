@@ -7,9 +7,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.auth.types import AuthProviderType
-from libs.core.exceptions import ConflictException, ForbiddenException, NotFoundException
+from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.database.orm import RoleOrm, UserAuthProviderOrm, UserOrm
 from libs.permissions.types import RoleType
+from libs.users.exceptions import UserEmailTakenException, UserInactiveException
 from libs.users.results import FindOrCreateUserFromAuthProviderResult, FindUserByIdentityResult
 from libs.users.services import UserService
 from tests.factories.users import (
@@ -157,7 +158,7 @@ async def test_find_or_create_user_from_auth_provider_existing_provider_returns_
     assert find_or_create_user_from_auth_provider_result.role == RoleType.ADMIN
 
 
-async def test_find_or_create_user_from_auth_provider_inactive_user_raises_forbidden_exception(
+async def test_find_or_create_user_from_auth_provider_inactive_user_raises_user_inactive(
     db_session: AsyncSession,
 ) -> None:
     user_record = await insert_user_row(db_session, is_active=False)
@@ -171,7 +172,7 @@ async def test_find_or_create_user_from_auth_provider_inactive_user_raises_forbi
         build_find_or_create_user_from_auth_provider_input(provider_subject="google-subject-3")
     )
 
-    with pytest.raises(ForbiddenException):
+    with pytest.raises(UserInactiveException):
         await user_service.find_or_create_user_from_auth_provider(
             find_or_create_user_from_auth_provider_input
         )
@@ -198,7 +199,7 @@ async def test_find_or_create_user_from_auth_provider_soft_deleted_user_raises_f
         )
 
 
-async def test_find_or_create_user_from_auth_provider_email_taken_raises_conflict_exception(
+async def test_find_or_create_user_from_auth_provider_email_taken_raises_user_email_taken(
     db_session: AsyncSession,
 ) -> None:
     await insert_user_row(db_session, email="ada@example.com")
@@ -209,13 +210,13 @@ async def test_find_or_create_user_from_auth_provider_email_taken_raises_conflic
         build_find_or_create_user_from_auth_provider_input(email="ada@example.com")
     )
 
-    with pytest.raises(ConflictException):
+    with pytest.raises(UserEmailTakenException):
         await user_service.find_or_create_user_from_auth_provider(
             find_or_create_user_from_auth_provider_input
         )
 
 
-async def test_find_or_create_user_from_auth_provider_email_case_diff_raises_conflict_exception(
+async def test_find_or_create_user_from_auth_provider_email_case_diff_raises_user_email_taken(
     db_session: AsyncSession,
 ) -> None:
     await insert_user_row(db_session, email="ADA@example.com")
@@ -226,7 +227,7 @@ async def test_find_or_create_user_from_auth_provider_email_case_diff_raises_con
         build_find_or_create_user_from_auth_provider_input(email="ada@example.com")
     )
 
-    with pytest.raises(ConflictException):
+    with pytest.raises(UserEmailTakenException):
         await user_service.find_or_create_user_from_auth_provider(
             find_or_create_user_from_auth_provider_input
         )

@@ -4,10 +4,11 @@ from uuid import UUID
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from libs.core.exceptions import ConflictException, ForbiddenException, NotFoundException
+from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.credits.utils import CreditUtils
 from libs.database.orm import RoleOrm, UserAuthProviderOrm, UserOrm
 from libs.permissions.types import RoleType
+from libs.users.exceptions import UserEmailTakenException, UserInactiveException
 from libs.users.inputs import FindOrCreateUserFromAuthProviderInput
 from libs.users.results import FindOrCreateUserFromAuthProviderResult, FindUserByIdentityResult
 
@@ -87,7 +88,7 @@ class UserService:
             raise ForbiddenException("User account is not available")
         user_record, role = user_row
         if not user_record.is_active:
-            raise ForbiddenException("User account is inactive")
+            raise UserInactiveException("User account is inactive")
         return FindOrCreateUserFromAuthProviderResult(
             id=user_record.id,
             identity=user_record.identity,
@@ -107,7 +108,7 @@ class UserService:
         email_owner_record = email_owner_query_result.scalar_one_or_none()
 
         if email_owner_record is not None:
-            raise ConflictException("An account with this email already exists")
+            raise UserEmailTakenException("An account with this email already exists")
 
         user_insert = (
             insert(UserOrm)

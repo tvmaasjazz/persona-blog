@@ -135,10 +135,12 @@ by job:
   as `Admin<Entity>Service`, so a non-admin route can't call it by mistake. Every class
   in `libs/admin/` takes the `Admin` prefix, so its inputs and results never share a
   name with the owning domain's: `AdminGrantUserCreditsInput` beside
-  `GrantCreditsInput`. An admin service reads directly and writes through the owning
-  domain's service, so that domain's rules stay in one place: `AdminCreditService.grant_user_credits()` calls
-  `CreditLedgerService.grant_credits()`. Its routes are in `apps/api/domains/admin/`,
-  one router under `/admin`.
+  `GrantCreditsInput`. An admin service reads directly. It writes through the owning
+  domain's service when that service already makes the same write, so that domain's
+  rules stay in one place: `AdminCreditService.grant_user_credits()` calls
+  `CreditLedgerService.grant_credits()`. A write only an admin makes, such as setting a
+  role or suspending a user, is the admin service's own. Admin routes are in
+  `apps/api/domains/admin/`, one router under `/admin`.
 
 ### Validation guards
 

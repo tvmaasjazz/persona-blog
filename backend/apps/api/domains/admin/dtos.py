@@ -1,13 +1,17 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints
 
 from apps.api.core.dtos import UsdDecimal
 from libs.admin.constants import MAX_CREDIT_GRANT_USD
-from libs.admin.inputs import AdminGrantUserCreditsInput
+from libs.admin.inputs import (
+    AdminGrantUserCreditsInput,
+    AdminSetUserActiveInput,
+    AdminSetUserRoleInput,
+)
 from libs.admin.results import (
     AdminCreditLedgerEntryResult,
     AdminFindUserCreditLedgerResult,
@@ -26,12 +30,26 @@ CreditGrantNoteStr = Annotated[
 ]
 
 
-class CreditGrantDto(BaseModel):
+class AdminCreditGrantDto(BaseModel):
     amount_usd: CreditGrantAmountUsdDecimal
     note: CreditGrantNoteStr
 
     def to_input(self) -> AdminGrantUserCreditsInput:
         return AdminGrantUserCreditsInput(amount_usd=self.amount_usd, note=self.note)
+
+
+class AdminUserRoleDto(BaseModel):
+    role: Literal[RoleType.READER, RoleType.CREATOR]
+
+    def to_input(self) -> AdminSetUserRoleInput:
+        return AdminSetUserRoleInput(role=self.role)
+
+
+class AdminUserActiveDto(BaseModel):
+    is_active: bool
+
+    def to_input(self) -> AdminSetUserActiveInput:
+        return AdminSetUserActiveInput(is_active=self.is_active)
 
 
 class AdminUserResponseDto(BaseModel):
@@ -73,7 +91,7 @@ class AdminUserListResponseDto(BaseModel):
         )
 
 
-class CreditLedgerEntryResponseDto(BaseModel):
+class AdminCreditLedgerEntryResponseDto(BaseModel):
     identity: UUID
     entry_type: CreditLedgerEntryType
     amount_usd: UsdDecimal
@@ -85,7 +103,7 @@ class CreditLedgerEntryResponseDto(BaseModel):
     @classmethod
     def from_result(
         cls, credit_ledger_entry_result: AdminCreditLedgerEntryResult
-    ) -> CreditLedgerEntryResponseDto:
+    ) -> AdminCreditLedgerEntryResponseDto:
         return cls(
             identity=credit_ledger_entry_result.identity,
             entry_type=credit_ledger_entry_result.entry_type,
@@ -97,16 +115,16 @@ class CreditLedgerEntryResponseDto(BaseModel):
         )
 
 
-class CreditLedgerResponseDto(BaseModel):
-    credit_ledger_entries: list[CreditLedgerEntryResponseDto]
+class AdminCreditLedgerResponseDto(BaseModel):
+    credit_ledger_entries: list[AdminCreditLedgerEntryResponseDto]
 
     @classmethod
     def from_result(
         cls, find_user_credit_ledger_result: AdminFindUserCreditLedgerResult
-    ) -> CreditLedgerResponseDto:
+    ) -> AdminCreditLedgerResponseDto:
         return cls(
             credit_ledger_entries=[
-                CreditLedgerEntryResponseDto.from_result(credit_ledger_entry_result)
+                AdminCreditLedgerEntryResponseDto.from_result(credit_ledger_entry_result)
                 for credit_ledger_entry_result in (
                     find_user_credit_ledger_result.credit_ledger_entries
                 )

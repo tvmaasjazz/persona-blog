@@ -3,9 +3,9 @@ import secrets
 from redis.asyncio import Redis
 
 from libs.auth.constants import OAUTH_STATE_KEY_PREFIX
+from libs.auth.exceptions import AuthSignInStateExpiredException
 from libs.auth.results import OAuthStateResult
 from libs.auth.settings import AuthSettings
-from libs.core.exceptions import UnauthorizedException
 
 
 class OAuthStateService:
@@ -33,5 +33,5 @@ class OAuthStateService:
         """Reads the state and deletes it, so one sign-in attempt can't be replayed."""
         stored_state = await self._redis_client.getdel(f"{OAUTH_STATE_KEY_PREFIX}{oauth_state}")
         if stored_state is None:
-            raise UnauthorizedException("Sign-in state is missing or expired")
+            raise AuthSignInStateExpiredException("Sign-in state is missing or expired")
         return OAuthStateResult.model_validate_json(stored_state)

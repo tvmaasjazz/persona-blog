@@ -439,6 +439,81 @@ async def test_find_blog_post_others_published_post_returns_blog_post_detail_res
     )
 
 
+async def test_find_blog_post_others_published_post_inactive_creator_raises_not_found(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    suspended_owner_record = await insert_user_row(db_session, is_active=False)
+    other_user_record = await insert_user_row(db_session)
+    other_auth_user = build_auth_user(
+        user_id=other_user_record.id, user_identity=other_user_record.identity
+    )
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=suspended_owner_record.id, is_public=True
+    )
+    _, blog_post_record = await _insert_blog_post(
+        db_session,
+        created_by_id=suspended_owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+    await db_session.commit()
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
+
+    with pytest.raises(NotFoundException):
+        await blog_post_service.find_blog_post(blog_post_record.identity, other_auth_user)
+
+
+async def test_find_blog_post_others_published_post_creator_reactivated_returns_result(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    owner_record = await insert_user_row(db_session, is_active=False)
+    other_user_record = await insert_user_row(db_session)
+    other_auth_user = build_auth_user(
+        user_id=other_user_record.id, user_identity=other_user_record.identity
+    )
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=owner_record.id, is_public=True
+    )
+    _, blog_post_record = await _insert_blog_post(
+        db_session,
+        created_by_id=owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+    owner_record.is_active = True
+    await db_session.commit()
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
+
+    find_blog_post_result = await blog_post_service.find_blog_post(
+        blog_post_record.identity, other_auth_user
+    )
+
+    assert find_blog_post_result.identity == blog_post_record.identity
+
+
+async def test_find_blog_post_own_post_inactive_owner_returns_blog_post_detail_result(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    suspended_owner_record = await insert_user_row(db_session, is_active=False)
+    owner_auth_user = build_auth_user(
+        user_id=suspended_owner_record.id, user_identity=suspended_owner_record.identity
+    )
+    persona_record = await insert_persona_row(db_session, created_by_id=suspended_owner_record.id)
+    _, blog_post_record = await _insert_blog_post(
+        db_session, created_by_id=suspended_owner_record.id, persona_id=persona_record.id
+    )
+    await db_session.commit()
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
+
+    find_blog_post_result = await blog_post_service.find_blog_post(
+        blog_post_record.identity, owner_auth_user
+    )
+
+    assert find_blog_post_result.identity == blog_post_record.identity
+
+
 async def test_find_blog_post_others_private_post_raises_not_found_exception(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
@@ -661,6 +736,33 @@ async def test_update_blog_post_others_visible_post_raises_forbidden_exception(
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
     with pytest.raises(ForbiddenException):
+        await blog_post_service.update_blog_post(
+            blog_post_record.identity, build_update_blog_post_input(), other_auth_user
+        )
+
+
+async def test_update_blog_post_others_published_post_inactive_creator_raises_not_found(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    suspended_owner_record = await insert_user_row(db_session, is_active=False)
+    other_user_record = await insert_user_row(db_session)
+    other_auth_user = build_auth_user(
+        user_id=other_user_record.id, user_identity=other_user_record.identity
+    )
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=suspended_owner_record.id, is_public=True
+    )
+    _, blog_post_record = await _insert_blog_post(
+        db_session,
+        created_by_id=suspended_owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+    await db_session.commit()
+    blog_post_service = _build_blog_post_service(db_session, db_session_factory)
+
+    with pytest.raises(NotFoundException):
         await blog_post_service.update_blog_post(
             blog_post_record.identity, build_update_blog_post_input(), other_auth_user
         )

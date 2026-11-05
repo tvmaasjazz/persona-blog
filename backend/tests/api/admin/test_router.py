@@ -13,6 +13,7 @@ from apps.api.core.config import AppSettings
 from libs.auth.services import AuthSessionService
 from libs.credits.types import CreditLedgerEntryType
 from libs.database.orm import CreditLedgerOrm, RoleOrm, UserOrm
+from libs.generate_text.types import GenerateTextRunStatusType
 from libs.permissions.types import RoleType
 from tests.factories.auth import build_auth_user
 from tests.factories.credits import insert_credit_ledger_row
@@ -508,3 +509,553 @@ async def test_admin_route_malformed_user_identity_returns_422(
     response_body = admin_response.json()
     assert admin_response.status_code == 422
     assert response_body["detail"][0]["loc"] == ["path", "user_identity"]
+
+
+# PUT /admin/users/{user_identity}/role
+
+
+async def _find_role_code(db_session: AsyncSession, user_record: UserOrm) -> RoleType:
+    await db_session.refresh(user_record)
+    role_code_query = select(RoleOrm.code).where(RoleOrm.id == user_record.role_id)
+    role_code = await db_session.scalar(role_code_query)
+    assert role_code is not None
+    return role_code
+
+
+async def _count_existing_session_keys(redis_client: Redis, session_ids: list[str]) -> int:
+    session_keys = [f"session:{session_id}" for session_id in session_ids]
+    return await redis_client.exists(*session_keys)
+
+
+async def test_set_user_role_reader_to_creator_returns_empty_and_persists_role(
+    api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
+) -> None:
+    reader_record = await insert_user_row(db_session, role=RoleType.READER)
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{reader_record.identity}/role", json={"role": "CREATOR"}
+    )
+
+    role_code = await _find_role_code(db_session, reader_record)
+    assert set_user_role_response.status_code == 200
+    assert set_user_role_response.json() == {}
+    assert role_code == RoleType.CREATOR
+    assert reader_record.updated_by_id == signed_in_admin.id
+
+
+async def test_set_user_role_creator_to_reader_persists_role(
+    api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
+) -> None:
+    creator_record = await insert_user_row(db_session, role=RoleType.CREATOR)
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{creator_record.identity}/role", json={"role": "READER"}
+    )
+
+    role_code = await _find_role_code(db_session, creator_record)
+    assert set_user_role_response.status_code == 200
+    assert set_user_role_response.json() == {}
+    assert role_code == RoleType.READER
+    assert creator_record.updated_by_id == signed_in_admin.id
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_role_inactive_user_persists_role(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    inactive_record = await insert_user_row(db_session, role=RoleType.READER, is_active=False)
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{inactive_record.identity}/role", json={"role": "CREATOR"}
+    )
+
+    role_code = await _find_role_code(db_session, inactive_record)
+    assert set_user_role_response.status_code == 200
+    assert role_code == RoleType.CREATOR
+    assert inactive_record.is_active is False
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_role_same_role_returns_empty_and_changes_nothing(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    creator_record = await insert_user_row(db_session, role=RoleType.CREATOR)
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{creator_record.identity}/role", json={"role": "CREATOR"}
+    )
+
+    role_code = await _find_role_code(db_session, creator_record)
+    assert set_user_role_response.status_code == 200
+    assert set_user_role_response.json() == {}
+    assert role_code == RoleType.CREATOR
+    assert creator_record.updated_by_id is None
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("current_role", "new_role"),
+    [
+        pytest.param(RoleType.READER, "CREATOR", id="promoted_to_creator"),
+        pytest.param(RoleType.CREATOR, "READER", id="demoted_to_reader"),
+    ],
+)
+async def test_set_user_role_changed_deletes_all_the_users_sessions(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    redis_client: Redis,
+    app_settings: AppSettings,
+    current_role: RoleType,
+    new_role: str,
+) -> None:
+    user_record = await insert_user_row(db_session, role=current_role)
+    user_session_ids = await _create_sessions(redis_client, app_settings, user_record, current_role)
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{user_record.identity}/role", json={"role": new_role}
+    )
+
+    remaining_session_count = await _count_existing_session_keys(redis_client, user_session_ids)
+    user_sessions_exists = await redis_client.exists(f"user-sessions:{user_record.id}")
+    assert set_user_role_response.status_code == 200
+    assert remaining_session_count == 0
+    assert user_sessions_exists == 0
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_role_same_role_keeps_the_users_sessions(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    redis_client: Redis,
+    app_settings: AppSettings,
+) -> None:
+    creator_record = await insert_user_row(db_session, role=RoleType.CREATOR)
+    creator_session_ids = await _create_sessions(
+        redis_client, app_settings, creator_record, RoleType.CREATOR
+    )
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{creator_record.identity}/role", json={"role": "CREATOR"}
+    )
+
+    remaining_session_count = await _count_existing_session_keys(redis_client, creator_session_ids)
+    assert set_user_role_response.status_code == 200
+    assert remaining_session_count == 2
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_role_creator_to_reader_fails_unfinished_runs_and_keeps_finished_ones(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    creator_record = await insert_user_row(db_session, role=RoleType.CREATOR)
+    pending_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=creator_record.id, status=GenerateTextRunStatusType.PENDING
+    )
+    awaiting_review_run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=creator_record.id,
+        status=GenerateTextRunStatusType.AWAITING_REVIEW,
+    )
+    completed_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=creator_record.id, status=GenerateTextRunStatusType.COMPLETED
+    )
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{creator_record.identity}/role", json={"role": "READER"}
+    )
+
+    await db_session.refresh(pending_run_record)
+    await db_session.refresh(awaiting_review_run_record)
+    await db_session.refresh(completed_run_record)
+    assert set_user_role_response.status_code == 200
+    assert pending_run_record.status == GenerateTextRunStatusType.FAILED
+    assert pending_run_record.error_code == "UserRoleChanged"
+    assert awaiting_review_run_record.status == GenerateTextRunStatusType.FAILED
+    assert awaiting_review_run_record.error_code == "UserRoleChanged"
+    assert completed_run_record.status == GenerateTextRunStatusType.COMPLETED
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_role_reader_to_creator_fails_no_runs(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    reader_record = await insert_user_row(db_session, role=RoleType.READER)
+    running_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=reader_record.id, status=GenerateTextRunStatusType.RUNNING
+    )
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{reader_record.identity}/role", json={"role": "CREATOR"}
+    )
+
+    await db_session.refresh(running_run_record)
+    assert set_user_role_response.status_code == 200
+    assert running_run_record.status == GenerateTextRunStatusType.RUNNING
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_role_same_reader_role_fails_no_runs(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    reader_record = await insert_user_row(db_session, role=RoleType.READER)
+    running_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=reader_record.id, status=GenerateTextRunStatusType.RUNNING
+    )
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{reader_record.identity}/role", json={"role": "READER"}
+    )
+
+    await db_session.refresh(running_run_record)
+    assert set_user_role_response.status_code == 200
+    assert running_run_record.status == GenerateTextRunStatusType.RUNNING
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    "request_body",
+    [
+        pytest.param({}, id="missing_role"),
+        pytest.param({"role": "ADMIN"}, id="admin_role"),
+        pytest.param({"role": "SYSTEM"}, id="system_role"),
+        pytest.param({"role": "OWNER"}, id="unknown_role"),
+    ],
+)
+async def test_set_user_role_invalid_body_returns_422(
+    api_client: AsyncClient, request_body: dict[str, str]
+) -> None:
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{UNKNOWN_USER_IDENTITY}/role", json=request_body
+    )
+
+    response_body = set_user_role_response.json()
+    assert set_user_role_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == ["body", "role"]
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_role_malformed_user_identity_returns_422(api_client: AsyncClient) -> None:
+    set_user_role_response = await api_client.put(
+        "/admin/users/not-a-uuid/role", json={"role": "CREATOR"}
+    )
+
+    response_body = set_user_role_response.json()
+    assert set_user_role_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == ["path", "user_identity"]
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_role_unknown_user_returns_404(api_client: AsyncClient) -> None:
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{UNKNOWN_USER_IDENTITY}/role", json={"role": "CREATOR"}
+    )
+
+    assert set_user_role_response.status_code == 404
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_role_system_user_returns_404(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    system_user_record = await find_system_user_row(db_session)
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{system_user_record.identity}/role", json={"role": "CREATOR"}
+    )
+
+    assert set_user_role_response.status_code == 404
+
+
+async def test_set_user_role_acting_admin_returns_409_and_keeps_role(
+    api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
+) -> None:
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{signed_in_admin.identity}/role", json={"role": "READER"}
+    )
+
+    role_code = await _find_role_code(db_session, signed_in_admin)
+    assert set_user_role_response.status_code == 409
+    assert role_code == RoleType.ADMIN
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_role_another_admin_returns_409_and_keeps_role(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    other_admin_record = await insert_user_row(db_session, role=RoleType.ADMIN)
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{other_admin_record.identity}/role", json={"role": "READER"}
+    )
+
+    role_code = await _find_role_code(db_session, other_admin_record)
+    assert set_user_role_response.status_code == 409
+    assert role_code == RoleType.ADMIN
+
+
+async def test_set_user_role_creator_returns_403_and_changes_nothing(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    reader_record = await insert_user_row(db_session, role=RoleType.READER)
+
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{reader_record.identity}/role", json={"role": "CREATOR"}
+    )
+
+    role_code = await _find_role_code(db_session, reader_record)
+    assert set_user_role_response.status_code == 403
+    assert role_code == RoleType.READER
+
+
+async def test_set_user_role_signed_out_returns_401(api_client: AsyncClient) -> None:
+    set_user_role_response = await api_client.put(
+        f"/admin/users/{UNKNOWN_USER_IDENTITY}/role", json={"role": "CREATOR"}
+    )
+
+    assert set_user_role_response.status_code == 401
+
+
+# PUT /admin/users/{user_identity}/active
+
+
+async def test_set_user_active_suspend_returns_empty_and_persists_state(
+    api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
+) -> None:
+    user_record = await insert_user_row(db_session, role=RoleType.CREATOR)
+
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{user_record.identity}/active", json={"is_active": False}
+    )
+
+    await db_session.refresh(user_record)
+    assert set_user_active_response.status_code == 200
+    assert set_user_active_response.json() == {}
+    assert user_record.is_active is False
+    assert user_record.updated_by_id == signed_in_admin.id
+
+
+async def test_set_user_active_reactivate_returns_empty_and_persists_state(
+    api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
+) -> None:
+    suspended_record = await insert_user_row(db_session, is_active=False)
+
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{suspended_record.identity}/active", json={"is_active": True}
+    )
+
+    await db_session.refresh(suspended_record)
+    assert set_user_active_response.status_code == 200
+    assert set_user_active_response.json() == {}
+    assert suspended_record.is_active is True
+    assert suspended_record.updated_by_id == signed_in_admin.id
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("is_user_active", "new_is_active"),
+    [
+        pytest.param(True, False, id="suspended"),
+        pytest.param(False, True, id="reactivated"),
+    ],
+)
+async def test_set_user_active_changed_deletes_all_the_users_sessions(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    redis_client: Redis,
+    app_settings: AppSettings,
+    is_user_active: bool,
+    new_is_active: bool,
+) -> None:
+    user_record = await insert_user_row(db_session, is_active=is_user_active)
+    user_session_ids = await _create_sessions(
+        redis_client, app_settings, user_record, RoleType.CREATOR
+    )
+
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{user_record.identity}/active", json={"is_active": new_is_active}
+    )
+
+    remaining_session_count = await _count_existing_session_keys(redis_client, user_session_ids)
+    user_sessions_exists = await redis_client.exists(f"user-sessions:{user_record.id}")
+    assert set_user_active_response.status_code == 200
+    assert remaining_session_count == 0
+    assert user_sessions_exists == 0
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_active_same_value_returns_empty_and_keeps_sessions_and_runs(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    redis_client: Redis,
+    app_settings: AppSettings,
+) -> None:
+    active_record = await insert_user_row(db_session, is_active=True)
+    active_session_ids = await _create_sessions(
+        redis_client, app_settings, active_record, RoleType.CREATOR
+    )
+    running_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=active_record.id, status=GenerateTextRunStatusType.RUNNING
+    )
+
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{active_record.identity}/active", json={"is_active": True}
+    )
+
+    await db_session.refresh(running_run_record)
+    remaining_session_count = await _count_existing_session_keys(redis_client, active_session_ids)
+    assert set_user_active_response.status_code == 200
+    assert set_user_active_response.json() == {}
+    assert remaining_session_count == 2
+    assert running_run_record.status == GenerateTextRunStatusType.RUNNING
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_active_suspend_fails_unfinished_runs_and_keeps_finished_ones(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user_record = await insert_user_row(db_session)
+    pending_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=user_record.id, status=GenerateTextRunStatusType.PENDING
+    )
+    awaiting_review_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=user_record.id, status=GenerateTextRunStatusType.AWAITING_REVIEW
+    )
+    completed_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=user_record.id, status=GenerateTextRunStatusType.COMPLETED
+    )
+
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{user_record.identity}/active", json={"is_active": False}
+    )
+
+    await db_session.refresh(pending_run_record)
+    await db_session.refresh(awaiting_review_run_record)
+    await db_session.refresh(completed_run_record)
+    assert set_user_active_response.status_code == 200
+    assert pending_run_record.status == GenerateTextRunStatusType.FAILED
+    assert pending_run_record.error_code == "UserSuspended"
+    assert awaiting_review_run_record.status == GenerateTextRunStatusType.FAILED
+    assert awaiting_review_run_record.error_code == "UserSuspended"
+    assert completed_run_record.status == GenerateTextRunStatusType.COMPLETED
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_active_reactivate_fails_no_runs(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    suspended_record = await insert_user_row(db_session, is_active=False)
+    pending_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=suspended_record.id, status=GenerateTextRunStatusType.PENDING
+    )
+
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{suspended_record.identity}/active", json={"is_active": True}
+    )
+
+    await db_session.refresh(pending_run_record)
+    assert set_user_active_response.status_code == 200
+    assert pending_run_record.status == GenerateTextRunStatusType.PENDING
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    "request_body",
+    [
+        pytest.param({}, id="missing_is_active"),
+        pytest.param({"is_active": "maybe"}, id="not_a_boolean"),
+    ],
+)
+async def test_set_user_active_invalid_body_returns_422(
+    api_client: AsyncClient, request_body: dict[str, str]
+) -> None:
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{UNKNOWN_USER_IDENTITY}/active", json=request_body
+    )
+
+    response_body = set_user_active_response.json()
+    assert set_user_active_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == ["body", "is_active"]
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_active_malformed_user_identity_returns_422(
+    api_client: AsyncClient,
+) -> None:
+    set_user_active_response = await api_client.put(
+        "/admin/users/not-a-uuid/active", json={"is_active": False}
+    )
+
+    response_body = set_user_active_response.json()
+    assert set_user_active_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == ["path", "user_identity"]
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_active_unknown_user_returns_404(api_client: AsyncClient) -> None:
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{UNKNOWN_USER_IDENTITY}/active", json={"is_active": False}
+    )
+
+    assert set_user_active_response.status_code == 404
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_active_system_user_returns_404(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    system_user_record = await find_system_user_row(db_session)
+
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{system_user_record.identity}/active", json={"is_active": False}
+    )
+
+    assert set_user_active_response.status_code == 404
+
+
+async def test_set_user_active_acting_admin_returns_409_and_stays_active(
+    api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
+) -> None:
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{signed_in_admin.identity}/active", json={"is_active": False}
+    )
+
+    await db_session.refresh(signed_in_admin)
+    assert set_user_active_response.status_code == 409
+    assert signed_in_admin.is_active is True
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_set_user_active_another_admin_returns_409_and_stays_active(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    other_admin_record = await insert_user_row(db_session, role=RoleType.ADMIN)
+
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{other_admin_record.identity}/active", json={"is_active": False}
+    )
+
+    await db_session.refresh(other_admin_record)
+    assert set_user_active_response.status_code == 409
+    assert other_admin_record.is_active is True
+
+
+async def test_set_user_active_creator_returns_403_and_changes_nothing(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    user_record = await insert_user_row(db_session)
+
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{user_record.identity}/active", json={"is_active": False}
+    )
+
+    await db_session.refresh(user_record)
+    assert set_user_active_response.status_code == 403
+    assert user_record.is_active is True
+
+
+async def test_set_user_active_signed_out_returns_401(api_client: AsyncClient) -> None:
+    set_user_active_response = await api_client.put(
+        f"/admin/users/{UNKNOWN_USER_IDENTITY}/active", json={"is_active": False}
+    )
+
+    assert set_user_active_response.status_code == 401
