@@ -6,7 +6,7 @@ from libs.permissions.services import PermissionService
 from libs.permissions.types import PermissionType, RoleType
 
 
-async def test_find_role_permission_list_admin_returns_all_nine_permissions(
+async def test_find_role_permission_list_admin_returns_all_ten_permissions(
     db_session: AsyncSession,
 ) -> None:
     permission_service = PermissionService(db_session=db_session)
@@ -25,6 +25,7 @@ async def test_find_role_permission_list_admin_returns_all_nine_permissions(
         PermissionType.PERSONA_READ,
         PermissionType.PERSONA_WRITE,
         PermissionType.USER_READ,
+        PermissionType.USER_WRITE,
     ]
 
 

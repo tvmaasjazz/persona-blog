@@ -1367,3 +1367,72 @@ async def test_fail_run_step_not_running_leaves_step_untouched(
     assert step_record.error_code is None
     assert step_record.error_message is None
     assert step_record.finished_at is None
+
+
+async def test_find_unfinished_run_ids_returns_only_unfinished_runs_of_the_user(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    other_user_record = await insert_user_row(db_session)
+    pending_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.PENDING
+    )
+    running_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.RUNNING
+    )
+    awaiting_review_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.AWAITING_REVIEW
+    )
+    await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.COMPLETED
+    )
+    await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.FAILED
+    )
+    await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.CANCELLED
+    )
+    await insert_generate_text_run_row(
+        db_session, created_by_id=other_user_record.id, status=GenerateTextRunStatusType.RUNNING
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    unfinished_run_ids = await generate_text_run_service.find_unfinished_run_ids(auth_user.id)
+
+    assert sorted(unfinished_run_ids) == sorted(
+        [pending_run_record.id, running_run_record.id, awaiting_review_run_record.id]
+    )
+
+
+async def test_find_unfinished_run_ids_soft_deleted_run_is_not_returned(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    live_run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.RUNNING
+    )
+    await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.RUNNING,
+        deleted_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        deleted_by_id=auth_user.id,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    unfinished_run_ids = await generate_text_run_service.find_unfinished_run_ids(auth_user.id)
+
+    assert unfinished_run_ids == [live_run_record.id]
+
+
+async def test_find_unfinished_run_ids_no_runs_returns_empty_list(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    unfinished_run_ids = await generate_text_run_service.find_unfinished_run_ids(auth_user.id)
+
+    assert unfinished_run_ids == []

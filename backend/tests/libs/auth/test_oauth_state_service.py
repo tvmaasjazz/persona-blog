@@ -1,10 +1,10 @@
 import pytest
 from redis.asyncio import Redis
 
+from libs.auth.exceptions import AuthSignInStateExpiredException
 from libs.auth.results import OAuthStateResult
 from libs.auth.services import OAuthStateService
 from libs.auth.settings import AuthSettings
-from libs.core.exceptions import UnauthorizedException
 
 
 async def test_create_state_two_calls_produce_distinct_values(redis_client: Redis) -> None:
@@ -39,14 +39,14 @@ async def test_consume_state_returns_stored_result_and_deletes_key(redis_client:
     consume_state_result = await oauth_state_service.consume_state(oauth_state_result.oauth_state)
 
     assert consume_state_result == oauth_state_result
-    with pytest.raises(UnauthorizedException):
+    with pytest.raises(AuthSignInStateExpiredException):
         await oauth_state_service.consume_state(oauth_state_result.oauth_state)
 
 
-async def test_consume_state_unknown_state_raises_unauthorized_exception(
+async def test_consume_state_unknown_state_raises_sign_in_state_expired_exception(
     redis_client: Redis,
 ) -> None:
     oauth_state_service = OAuthStateService(redis_client=redis_client, auth_settings=AuthSettings())
 
-    with pytest.raises(UnauthorizedException):
+    with pytest.raises(AuthSignInStateExpiredException):
         await oauth_state_service.consume_state("unknown-state")
