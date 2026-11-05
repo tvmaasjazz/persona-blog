@@ -513,7 +513,8 @@ validation guard, so a caller without it is refused before anything is read:
 `require_permissions(...)` in `core/dependencies.py` raises `ForbiddenException` unless
 the user holds every permission named. Code checks permissions, never roles. Every
 route names a permission, reads included, unless it's open by design: health, Google
-sign-in, logout, the development-only LLM route, and `GET /users/me`, which any
+sign-in, logout, the development-only LLM route, `POST /invites/check`, which someone
+opening an invite link calls before they have an account, and `GET /users/me`, which any
 signed-in user may call for their own profile. A read permission sits in front of the
 service's own access check, such as ownership or a public flag, and doesn't replace it.
 `tests/api/test_app_factory.py` walks the app's routes and fails on one that does
