@@ -1,5 +1,14 @@
+from libs.generate_text.types import GenerateTextRunStatusType
+
 # Key a text step's text is stored under in the JSONB output column
 STEP_OUTPUT_TEXT_KEY = "text"
+
+# A run in one of these hasn't finished, so failing it still means something
+UNFINISHED_RUN_STATUSES = (
+    GenerateTextRunStatusType.PENDING,
+    GenerateTextRunStatusType.RUNNING,
+    GenerateTextRunStatusType.AWAITING_REVIEW,
+)
 
 # The Redis list a stopping process pushes a released run's id onto. Every deployed
 # version must use the same key, or a handoff reaches no listener.

@@ -7,9 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
+from libs.database.orm.generate_text_step import GenerateTextStepOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.database.orm.persona import PersonaOrm
 from libs.database.utils import DatabaseClockUtils
+from libs.generate_text.constants import UNFINISHED_RUN_STATUSES
 from libs.generate_text.inputs import CreateGenerateTextRunInput
 from libs.generate_text.results import (
     ClaimExpiredGenerateTextRunResult,
@@ -18,7 +20,7 @@ from libs.generate_text.results import (
     FindLlmCallRollupResult,
 )
 from libs.generate_text.services.generate_text_credit_service import GenerateTextCreditService
-from libs.generate_text.types import GenerateTextRunStatusType
+from libs.generate_text.types import GenerateTextRunStatusType, GenerateTextStepStatusType
 
 
 class GenerateTextRunService:
@@ -58,11 +60,15 @@ class GenerateTextRunService:
 
         return CreateGenerateTextRunResult(id=run_id, identity=run_identity)
 
-    async def start_run(self, run_id: int) -> None:
-        """Marks the run RUNNING and stamps its start; NotFoundException if it is unknown."""
+    async def start_run(self, run_id: int) -> bool:
+        """Marks a PENDING run RUNNING and stamps its start; False when it wasn't pending, such
+        as a run failed before its job started."""
         run_start_update = (
             update(GenerateTextRunOrm)
-            .where(GenerateTextRunOrm.id == run_id)
+            .where(
+                GenerateTextRunOrm.id == run_id,
+                GenerateTextRunOrm.status == GenerateTextRunStatusType.PENDING,
+            )
             .values(
                 status=GenerateTextRunStatusType.RUNNING,
                 started_at=DatabaseClockUtils.build_utc_now_sql(),
@@ -70,8 +76,7 @@ class GenerateTextRunService:
         )
         async with self._db_session_factory() as db_session, db_session.begin():
             run_start_update_result = await db_session.execute(run_start_update)
-            if run_start_update_result.rowcount == 0:
-                raise NotFoundException(f"Generate text run {run_id} not found")
+        return run_start_update_result.rowcount == 1
 
     async def claim_paused_run(self, run_id: int, lease_owner: str, lease_seconds: int) -> bool:
         """Moves a paused run to RUNNING under the given lease. False when it wasn't paused."""
@@ -163,7 +168,8 @@ class GenerateTextRunService:
         return run_lease_release_update_result.rowcount == 1
 
     async def complete_run(self, run_id: int) -> None:
-        """Marks the run COMPLETED with its LLM cost totals and clears its lease."""
+        """Marks a RUNNING run COMPLETED with its LLM cost totals and clears its lease; leaves
+        a run that has since finished, and raises NotFoundException for an unknown one."""
         async with self._db_session_factory() as db_session, db_session.begin():
             # Sum what the run's LLM calls cost
             llm_call_rollup = await self._find_llm_call_rollup(db_session, run_id)
@@ -171,7 +177,10 @@ class GenerateTextRunService:
             # Mark the run completed; a finished run has no lease
             run_completion_update = (
                 update(GenerateTextRunOrm)
-                .where(GenerateTextRunOrm.id == run_id)
+                .where(
+                    GenerateTextRunOrm.id == run_id,
+                    GenerateTextRunOrm.status == GenerateTextRunStatusType.RUNNING,
+                )
                 .values(
                     status=GenerateTextRunStatusType.COMPLETED,
                     finished_at=DatabaseClockUtils.build_utc_now_sql(),
@@ -185,10 +194,11 @@ class GenerateTextRunService:
             )
             run_completion_update_result = await db_session.execute(run_completion_update)
             if run_completion_update_result.rowcount == 0:
-                raise NotFoundException(f"Generate text run {run_id} not found")
+                await self._raise_if_run_missing(db_session, run_id)
 
     async def record_awaiting_review(self, run_id: int) -> None:
-        """Marks the run AWAITING_REVIEW with its cost so far and clears its lease."""
+        """Marks a RUNNING run AWAITING_REVIEW with its cost so far and clears its lease;
+        leaves a run that has since finished, and raises NotFoundException for an unknown one."""
         async with self._db_session_factory() as db_session, db_session.begin():
             # Sum what the run's LLM calls cost so far
             llm_call_rollup = await self._find_llm_call_rollup(db_session, run_id)
@@ -196,7 +206,10 @@ class GenerateTextRunService:
             # Mark the run paused; a paused run has no lease
             run_pause_update = (
                 update(GenerateTextRunOrm)
-                .where(GenerateTextRunOrm.id == run_id)
+                .where(
+                    GenerateTextRunOrm.id == run_id,
+                    GenerateTextRunOrm.status == GenerateTextRunStatusType.RUNNING,
+                )
                 .values(
                     status=GenerateTextRunStatusType.AWAITING_REVIEW,
                     lease_owner=None,
@@ -209,17 +222,18 @@ class GenerateTextRunService:
             )
             run_pause_update_result = await db_session.execute(run_pause_update)
             if run_pause_update_result.rowcount == 0:
-                raise NotFoundException(f"Generate text run {run_id} not found")
+                await self._raise_if_run_missing(db_session, run_id)
 
     async def fail_run(
         self, run_id: int, error_code: str | None = None, error_message: str | None = None
     ) -> None:
-        """Marks the run FAILED, recording an error only when no step owns it, and refunds
-        the charges since its last review."""
+        """Marks an unfinished run FAILED, with its running step, recording an error only when
+        no step owns it, and refunds the charges since its last review; leaves a finished run."""
         async with self._db_session_factory() as db_session, db_session.begin():
             # Read the status first: a WHERE on it couldn't tell an unknown run from a failed one.
             # The row lock holds a second fail_run here until this one commits, so it reads
-            # FAILED and returns rather than refunding again
+            # FAILED and returns rather than refunding again. Step writes that charge take the
+            # same lock first, so the two never wait on each other's rows
             status_query = (
                 select(GenerateTextRunOrm.status)
                 .where(GenerateTextRunOrm.id == run_id)
@@ -229,8 +243,8 @@ class GenerateTextRunService:
             run_status = status_query_result.scalar_one_or_none()
             if run_status is None:
                 raise NotFoundException(f"Generate text run {run_id} not found")
-            if run_status is GenerateTextRunStatusType.FAILED:
-                # The first failure wins; a node's failure arrives here again as it propagates
+            if run_status not in UNFINISHED_RUN_STATUSES:
+                # The first ending wins; a node's failure arrives here again as it propagates
                 return
 
             # Sum what the run's LLM calls cost
@@ -254,6 +268,22 @@ class GenerateTextRunService:
                 )
             )
             await db_session.execute(run_failure_update)
+
+            # Fail the step it was running, so a late completion can't charge for it
+            running_step_failure_update = (
+                update(GenerateTextStepOrm)
+                .where(
+                    GenerateTextStepOrm.run_id == run_id,
+                    GenerateTextStepOrm.status == GenerateTextStepStatusType.RUNNING,
+                )
+                .values(
+                    status=GenerateTextStepStatusType.FAILED,
+                    error_code=error_code,
+                    error_message=error_message,
+                    finished_at=DatabaseClockUtils.build_utc_now_sql(),
+                )
+            )
+            await db_session.execute(running_step_failure_update)
 
             # Refund the steps whose work the failure lost, in the same transaction
             generate_text_credit_service = GenerateTextCreditService(db_session=db_session)
@@ -279,6 +309,14 @@ class GenerateTextRunService:
             run_record, from_attributes=True
         )
         return find_run_result.model_copy(update={"persona_identity": persona_identity})
+
+    @staticmethod
+    async def _raise_if_run_missing(db_session: AsyncSession, run_id: int) -> None:
+        """Tells an unknown run from one a guarded write left alone."""
+        run_id_query = select(GenerateTextRunOrm.id).where(GenerateTextRunOrm.id == run_id)
+        found_run_id = await db_session.scalar(run_id_query)
+        if found_run_id is None:
+            raise NotFoundException(f"Generate text run {run_id} not found")
 
     async def _find_llm_call_rollup(
         self, db_session: AsyncSession, run_id: int

@@ -2,6 +2,7 @@ from contextlib import aclosing
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+import structlog
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, StateSnapshot
@@ -12,6 +13,7 @@ from libs.core.exceptions import NotFoundException
 from libs.core.services import BackgroundJobService
 from libs.generate_text.exceptions import (
     GenerateTextRunNotPausedException,
+    GenerateTextRunNotRunningException,
     GenerateTextRunVersionMismatchException,
 )
 from libs.generate_text.inputs import (
@@ -39,6 +41,8 @@ if TYPE_CHECKING:
     from libs.generate_text.graphs.generate_text_graph_builder_registry import (
         GenerateTextGraphBuilderRegistry,
     )
+
+logger = structlog.get_logger(__name__)
 
 
 class GenerateTextService:
@@ -280,7 +284,10 @@ class GenerateTextService:
             # Run the graph while the lease is kept alive
             async with self._lease_service.keep_lease_alive(run_id):
                 if should_start_run:
-                    await self._run_service.start_run(run_id)
+                    is_started = await self._run_service.start_run(run_id)
+                    # A run failed before its job started is left as it ended
+                    if not is_started:
+                        return
                 is_stopped = await self._stream_graph(
                     generate_text_graph, graph_input, graph_run_config
                 )
@@ -293,6 +300,9 @@ class GenerateTextService:
             # Record whether the run completed or paused for review
             state_snapshot = await generate_text_graph.aget_state(graph_run_config)
             await self._finish(run_id, state_snapshot)
+        except GenerateTextRunNotRunningException:
+            # The run was ended from outside, such as by a suspension, and is already recorded
+            logger.info("run_stopped_after_ending", run_id=run_id)
         except Exception as background_exception:
             # A node's failure is already on its step, and the first failure recorded wins
             await self._run_service.fail_run(

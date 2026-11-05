@@ -7,10 +7,12 @@ from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.credits.settings import CreditSettings
 from libs.credits.utils import CreditUtils
+from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
 from libs.database.orm.llm_call import LlmCallOrm
 from libs.database.utils import DatabaseClockUtils
 from libs.generate_text.constants import STEP_OUTPUT_TEXT_KEY
+from libs.generate_text.exceptions import GenerateTextRunNotRunningException
 from libs.generate_text.inputs import CreateGenerateTextStepInput
 from libs.generate_text.results import (
     CreateGenerateTextStepResult,
@@ -18,7 +20,11 @@ from libs.generate_text.results import (
     FindLlmCallRollupResult,
 )
 from libs.generate_text.services.generate_text_credit_service import GenerateTextCreditService
-from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionType
+from libs.generate_text.types import (
+    GenerateTextRunStatusType,
+    GenerateTextStepStatusType,
+    HumanDecisionType,
+)
 
 
 class GenerateTextStepService:
@@ -35,11 +41,26 @@ class GenerateTextStepService:
     async def create_step(
         self, create_generate_text_step_input: CreateGenerateTextStepInput, auth_user: AuthUser
     ) -> CreateGenerateTextStepResult:
-        """Inserts a RUNNING step, or sets a paused review step of that name back to RUNNING."""
+        """Inserts a RUNNING step, or sets a paused review step of that name back to RUNNING;
+        GenerateTextRunNotRunningException once the run has stopped, which ends its job."""
         run_id = create_generate_text_step_input.run_id
         step_name = create_generate_text_step_input.step_name
 
         async with self._db_session_factory() as db_session, db_session.begin():
+            # A shared lock on the run makes fail_run wait for this step, then fail it too
+            run_status_query = (
+                select(GenerateTextRunOrm.status)
+                .where(GenerateTextRunOrm.id == run_id)
+                .with_for_update(read=True)
+            )
+            run_status = await db_session.scalar(run_status_query)
+            if run_status is None:
+                raise NotFoundException(f"Generate text run {run_id} not found")
+            if run_status is not GenerateTextRunStatusType.RUNNING:
+                raise GenerateTextRunNotRunningException(
+                    f"Generate text run {run_id} is {run_status}, not RUNNING"
+                )
+
             # A review node reruns on resume; reuse its paused row instead of adding one
             paused_step_record = await self._find_awaiting_review_step(
                 db_session, run_id, step_name
@@ -81,9 +102,24 @@ class GenerateTextStepService:
         return CreateGenerateTextStepResult(id=step_id, identity=step_identity)
 
     async def complete_step(self, step_id: int, output: str, duration_ms: int) -> None:
-        """Marks the step SUCCEEDED with its cost totals and charges its owner for them;
-        empty text stores no output."""
+        """Marks a RUNNING step of a RUNNING run SUCCEEDED with its cost totals and charges its
+        owner for them; leaves a step whose run has stopped uncharged, and stores no output for
+        empty text."""
         async with self._db_session_factory() as db_session, db_session.begin():
+            # Lock the run before the step, the order fail_run takes them in, and stop if the
+            # run has already ended
+            run_status_query = (
+                select(GenerateTextRunOrm.status)
+                .join(GenerateTextStepOrm, GenerateTextStepOrm.run_id == GenerateTextRunOrm.id)
+                .where(GenerateTextStepOrm.id == step_id)
+                .with_for_update(of=GenerateTextRunOrm)
+            )
+            run_status = await db_session.scalar(run_status_query)
+            if run_status is None:
+                raise NotFoundException(f"Generate text step {step_id} not found")
+            if run_status is not GenerateTextRunStatusType.RUNNING:
+                return
+
             # Sum what the step's LLM calls cost, and price it for the user
             llm_call_rollup = await self._find_llm_call_rollup(db_session, step_id)
             charge_usd = CreditUtils.compute_charge_usd(
@@ -93,7 +129,10 @@ class GenerateTextStepService:
             # Mark the step succeeded; no text stores nothing, so the latest-output query skips it
             step_completion_update = (
                 update(GenerateTextStepOrm)
-                .where(GenerateTextStepOrm.id == step_id)
+                .where(
+                    GenerateTextStepOrm.id == step_id,
+                    GenerateTextStepOrm.status == GenerateTextStepStatusType.RUNNING,
+                )
                 .values(
                     status=GenerateTextStepStatusType.SUCCEEDED,
                     # SQL NULL, not JSON null, which IS NOT NULL wouldn't skip
@@ -109,7 +148,7 @@ class GenerateTextStepService:
             )
             step_completion_update_result = await db_session.execute(step_completion_update)
             if step_completion_update_result.rowcount == 0:
-                raise NotFoundException(f"Generate text step {step_id} not found")
+                return
 
             # Charge the user for the step in the same transaction, so a charge never
             # exists without its step's completion
@@ -119,10 +158,14 @@ class GenerateTextStepService:
     async def fail_step(
         self, step_id: int, error_code: str, error_message: str, duration_ms: int
     ) -> None:
-        """Marks the step FAILED with the error; NotFoundException for an unknown step."""
+        """Marks a RUNNING step FAILED with the error; leaves a step that has already ended,
+        and raises NotFoundException for an unknown one."""
         step_failure_update = (
             update(GenerateTextStepOrm)
-            .where(GenerateTextStepOrm.id == step_id)
+            .where(
+                GenerateTextStepOrm.id == step_id,
+                GenerateTextStepOrm.status == GenerateTextStepStatusType.RUNNING,
+            )
             .values(
                 status=GenerateTextStepStatusType.FAILED,
                 error_code=error_code,
@@ -134,7 +177,7 @@ class GenerateTextStepService:
         async with self._db_session_factory() as db_session, db_session.begin():
             step_failure_update_result = await db_session.execute(step_failure_update)
             if step_failure_update_result.rowcount == 0:
-                raise NotFoundException(f"Generate text step {step_id} not found")
+                await self._raise_if_step_missing(db_session, step_id)
 
     async def record_decision(
         self,
@@ -173,6 +216,14 @@ class GenerateTextStepService:
                 .limit(1)
             )
             return await db_session.scalar(query)
+
+    @staticmethod
+    async def _raise_if_step_missing(db_session: AsyncSession, step_id: int) -> None:
+        """Tells an unknown step from one a guarded write left alone."""
+        step_id_query = select(GenerateTextStepOrm.id).where(GenerateTextStepOrm.id == step_id)
+        found_step_id = await db_session.scalar(step_id_query)
+        if found_step_id is None:
+            raise NotFoundException(f"Generate text step {step_id} not found")
 
     @staticmethod
     async def _find_awaiting_review_step(
@@ -214,10 +265,14 @@ class GenerateTextStepService:
         )
 
     async def record_awaiting_review(self, step_id: int, duration_ms: int) -> None:
-        """Marks a review step as paused awaiting review."""
+        """Marks a RUNNING review step as paused awaiting review; leaves a step that has
+        already ended, and raises NotFoundException for an unknown one."""
         step_pause_update = (
             update(GenerateTextStepOrm)
-            .where(GenerateTextStepOrm.id == step_id)
+            .where(
+                GenerateTextStepOrm.id == step_id,
+                GenerateTextStepOrm.status == GenerateTextStepStatusType.RUNNING,
+            )
             .values(
                 status=GenerateTextStepStatusType.AWAITING_REVIEW,
                 duration_ms=duration_ms,
@@ -226,7 +281,7 @@ class GenerateTextStepService:
         async with self._db_session_factory() as db_session, db_session.begin():
             step_pause_update_result = await db_session.execute(step_pause_update)
             if step_pause_update_result.rowcount == 0:
-                raise NotFoundException(f"Generate text step {step_id} not found")
+                await self._raise_if_step_missing(db_session, step_id)
 
     async def _find_llm_call_rollup(
         self, db_session: AsyncSession, step_id: int
