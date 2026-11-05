@@ -1,6 +1,6 @@
 ---
 name: schema-coder
-description: Writes database schema changes to this project's conventions — the .up.sql and .down.sql pair, the Alembic revision wrapper, and the matching Orm class in libs/database/orm/ — then verifies them against the test database with the migration stairway test and the schema drift check. Use once the table design is decided. It does not see this conversation, so pass the table, every column with type, nullability and default, constraints, indexes, enum types, and any backfill. Doesn't write services, DTOs, routers, or tests.
+description: Writes database schema changes to this project's conventions — the .up.sql and .down.sql pair, the Alembic revision wrapper, and the matching Orm class in libs/database/orm/ — and verifies them against the test database. Use once the table design is decided. It does not see this conversation, so pass the table, every column with type, nullability and default, constraints, indexes, enum types, and any backfill. Doesn't write services, DTOs, routers, or tests.
 tools: Read, Write, Edit, Glob, Grep, Bash
 model: sonnet
 effort: low
@@ -15,19 +15,10 @@ and prove they match.
 
 1. Read `.claude/rules/database.md` in full.
 2. Read `.claude/rules/python-naming.md` in full.
-3. Read `.claude/skills/db-migration/SKILL.md`. It's the procedure you follow.
+3. Read `.claude/skills/db-migration/SKILL.md` › Steps. It's the procedure you follow,
+   starting with what to read in the repository.
 
-Do this at the start of every task, even if the conventions seem familiar. These files
-are the source of truth, and they change. Don't write or edit a single file until
-you've read all three.
-
-Then look at what already exists:
-
-- `backend/migrations/revisions/`, to find the head and see how revisions are written
-- the SQL folders under `backend/migrations/sql/` for the tables you're touching and
-  their neighbours
-- `backend/libs/database/base.py` and every module in `backend/libs/database/orm/`
-- `backend/libs/<domain>/types.py` if the change adds or uses an enum
+Read them at the start of every task, before touching any file. They change.
 
 ## What you write
 
@@ -37,14 +28,14 @@ Then look at what already exists:
 - **Orm classes**: modules in `backend/libs/database/orm/`, association tables, and
   the exports in `libs/database/orm/__init__.py`
 - **Enums a column needs**: the `StrEnum` in the owning lib's `types.py`, when the
-  task adds a Postgres enum type
+  task adds a Postgres enum type or a value to one
 
 ## What you don't write
 
-- **Database setup files**: `libs/database/base.py`, `session.py`, `column_types.py`,
-  `constants.py`, `migrations/env.py`, `migration_runner.py`, `script.py.mako`,
-  `alembic.ini`, and `scripts/db/check_schema_drift.py`. If a change seems to need one,
-  such as a new shared column or a new column type, stop and report it.
+- **Database setup files**: those `database.md` › Orm classes names, plus the
+  migration machinery: `migrations/env.py`, `migration_runner.py`, `script.py.mako`,
+  `alembic.ini`, and `scripts/db/check_schema_drift.py`. If a change seems to need
+  one, such as a new shared column or a new column type, stop and report it.
 - **Application code**: services, Input and Result models, DTOs, dependencies, routers.
   That's `fastapi-coder`'s job.
 - **Tests**: anything under `backend/tests/`, including factories that need a new
@@ -72,13 +63,9 @@ compose needs to be running. Don't work around it.
 ## How to work
 
 - Apply the rules. Don't copy rule text into comments.
-- The SQL is the source of truth for names. Copy every constraint and index name from
-  the SQL into the Orm class exactly.
 - When the drift check reports a difference, work out which side is wrong before
   changing anything. Fix the side that disagrees with the task and the rules, and say
   which you changed.
-- Never edit a revision or SQL file that's already on `main`. A change to an applied
-  migration is a new migration.
 - If the rules don't cover a situation, make the most conservative call and report it
   as a judgement call with proposed rule wording. Don't quietly invent a convention.
 - If the task contradicts a rule, don't pick a side silently. Leave that piece
@@ -93,9 +80,7 @@ End with a report in this shape:
 **Conventions applied**: the specific conventions you followed, each tied to where you
 applied it. Name the rule and the file, e.g.:
 - `database.md` › Table shape: shared columns in order in
-  `sql/pb_persona/0001_create_pb_persona.up.sql`
-- `database.md` › Soft delete: partial unique index `pb_persona_slug_idx` mirrored in
-  `PersonaOrm.__table_args__`
+  `sql/pb_<table>/0001_create_pb_<table>.up.sql`
 
 **Verification**: each command you ran and its result. Include the drift check output
 if it reported anything, and the full suite's failures, if any, with a line on why each

@@ -35,10 +35,10 @@ Every class ends in the suffix for what it is:
 | `ResponseDto`| A route's response shape (`apps/` only)      | `BlogPostResponseDto`, `IdentityResponseDto` |
 | `Orm`        | SQLAlchemy table classes                     | `UserOrm`, `PersonaOrm`          |
 | `Key`        | Defined key objects                          | `CacheKey`, `StateKey`           |
-| `Exception`  | Exceptions: standard ones in `libs/core/`, domain-prefixed ones in their lib | `NotFoundException`, `GenerateTextInappropriateException` |
+| `Exception`  | Exceptions                                   | `NotFoundException`, `GenerateTextInappropriateException` |
 | `Stub`       | A hand-written test double (`tests/` only)   | `LlmServiceStub`, `HttpHandlerStub` |
 | `Mixin`      | SQLAlchemy column mixins (`libs/database/` only) | `SoftDeleteMixin`            |
-| `Model`      | Only when the purpose is genuinely unclear   | —                                |
+| `Model`      | Only when the purpose is genuinely unclear. A smell, not a default: flag it in your summary for Tyler to rename | — |
 
 An abstract class takes a `Base` prefix and keeps the suffix of what it is:
 `BaseLlmProviderService`, `BaseGenerateTextGraphBuilder`. A concrete one is named for
@@ -47,7 +47,7 @@ the case it handles, with no prefix: `OpenAiLlmService`, `BlogPostGraphBuilder`.
 A `Utils` class holds `@staticmethod`s and nothing else: no state, no `__init__`, no
 db session, no HTTP client, no settings held as attributes. Values it needs are
 arguments, and a log line is fine. The moment something needs a collaborator it is a
-service, not a util — otherwise every awkward function ends up there.
+service, not a util.
 
 Two classes take no suffix. SQLAlchemy column types are named for the value they
 hold (`UtcDateTime`). `AuthUser`, the signed-in user in request scope, is named for
@@ -74,9 +74,6 @@ like `get_health`.
 Never use the word `Schema`. A Pydantic class at the HTTP boundary is a `Dto`; one
 returned by a service is a `Result`.
 
-`Model` is a smell, not a default. If you use it, say so explicitly in your summary
-so Tyler can review and rename it.
-
 ## Enums
 
 Enums are `StrEnum`, and **the member name and its string value are identical, both
@@ -97,15 +94,11 @@ converts it on the way out.
 
 An enum that more than one provider could take is ours, not a mirror, even when today
 only one provider uses it. It stays UPPER_SNAKE, and each provider's code maps it to
-its own API's values with a map that fails loudly on a missing member (› Enum dispatch).
-`LlmReasoningEffortType` is one: any LLM provider could take it, and `OpenAiLlmUtils`
-maps it through `OPENAI_REASONING_EFFORT_BY_TYPE` (`LOW` → `"low"`).
+its own API's values with a map that fails loudly on a missing member (› Enum dispatch),
+such as a reasoning-effort enum mapped to one provider's spelling (`LOW` → `"low"`).
 
-For our own enums, this carries into the database: Postgres enum labels match the
-members exactly (`database.md` › Enums). A mirrored enum is never an Orm column, since
-its persisted names and serialized values would differ. SQLAlchemy's `Enum` column persists member *names* by
-default while Pydantic serializes *values* — when the two are identical, that
-difference stops being a source of bugs.
+SQLAlchemy's `Enum` column persists member *names* while Pydantic serializes *values*;
+keeping them identical stops the two diverging (`database.md` › Enums).
 
 ## Enum dispatch
 
@@ -113,15 +106,6 @@ When each enum value needs a different function, never `if/elif` over the enum.
 Build a dispatch map in `__init__` and look the handler up:
 
 ```python
-from enum import StrEnum
-
-
-class CommandType(StrEnum):
-    START = "START"
-    STOP = "STOP"
-    PAUSE = "PAUSE"
-
-
 class ExecutionEngine:
     def __init__(self) -> None:
         self._dispatch_map = {
@@ -139,8 +123,7 @@ class ExecutionEngine:
     def _execute_start(self) -> None: ...
 ```
 
-Adding an enum member without a map entry must fail loudly at call time, which the
-`NotImplementedError` above gives you.
+A member with no entry fails loudly at call time.
 
 ## Variables
 
@@ -228,13 +211,6 @@ return UserResponseDto.from_result(await user_service.find_user(user_identity))
 # yes
 find_user_result = await user_service.find_user(user_identity)
 return UserResponseDto.from_result(find_user_result)
-
-# also fine — returned directly, nothing wrapping it
-return await user_service.find_user(user_identity)
-
-# also fine — a statement on its own, the value is unused
-await user_service.delete_user(user_identity, auth_user)
-await redis_client.flushdb()
 ```
 
 **At most two calls per statement.** Three or more means splitting the line, even
@@ -266,7 +242,7 @@ The same applies to chained attribute access into a call:
 - Module filenames are short inside a domain package, since the folder already
   names the domain: `domains/users/router.py`, `libs/users/services.py`. Never
   `users/user_router.py`. Class and object names stay fully explicit regardless.
-- Enum members are `UPPER_SNAKE`. Constants are `UPPER_SNAKE` at module level.
+- Constants are `UPPER_SNAKE` at module level.
 - A mechanism gets one name, used in its service, methods, settings and log events:
   `GenerateTextRunPickupService`, `pick_up_expired_runs()`,
   `run_pickup_interval_seconds` and `run_pickup_failed`, never "pickup" in one place
@@ -277,12 +253,11 @@ The same applies to chained attribute access into a call:
   `ListPersonasResponseDto`. A `Result` is still named for its function
   (`FindUserPersonaListResult`).
 - Every public class, method and function in `libs/` and in a `router.py` has a
-  docstring, one plain sentence. It starts with what the function does or returns,
-  then adds what the name doesn't say, such as an edge case, what it raises, writes or
-  starts: "Returns X; NotFoundException if Y." Never a paragraph, never only the edge
-  case, and never the name restated. A reason, a constraint or a trap goes in a comment
-  beside the line it concerns. A route's docstring is also its description in the API
-  docs. Ruff's `D101`-`D103` enforce it.
+  docstring of one plain sentence: what it does or returns, then what the name doesn't
+  say, such as an edge case or what it raises, writes or starts: "Returns X;
+  NotFoundException if Y." Never a paragraph, never only the edge case, never the name
+  restated. A reason, a constraint or a trap goes in a comment beside its line. A
+  route's docstring is also its API description. Ruff's `D101`-`D103` enforce it.
 - Exempt from the requirement: tests, migrations, the shapes and declarations in
   `dtos.py`, `results.py`, `inputs.py`, `settings.py`, `types.py`, `exceptions.py`,
   the Orm modules in `libs/database/orm/` and `__init__.py`, and the app wiring
@@ -290,14 +265,6 @@ The same applies to chained attribute access into a call:
   `core/logging.py`, `core/exception_handlers.py`) and `scripts/`. There, and on a
   private helper, a docstring is written only when the name isn't enough, such as a
   dependency that raises or a guard that states its check.
-
-```python
-    async def find_persona(
-        self, persona_identity: UUID, auth_user: AuthUser
-    ) -> PersonaDetailResult:
-        """Returns the caller's own persona or anyone's public one; NotFoundException
-        otherwise."""
-```
 - A function with several steps gets a short comment above each block saying what the
   block does, so its steps read from the comments alone, without reading the code:
 

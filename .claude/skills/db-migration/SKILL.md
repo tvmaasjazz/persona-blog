@@ -18,6 +18,7 @@ them against the test database. It doesn't see this conversation, so pass it:
 - every column: name, type, nullability, default
 - constraints and indexes, including partial unique indexes on soft-deletable tables
 - enum types and their labels, and which lib's `types.py` owns the `StrEnum`
+- new `PermissionType` members and the roles that hold each
 - any backfill, and what should happen to existing rows
 - whether a down migration can reverse it
 
@@ -26,8 +27,10 @@ same steps.
 
 ## Steps
 
-1. **Read** `.claude/rules/database.md`, then the neighbouring SQL folders, the current
-   Orm modules, and `libs/database/base.py`.
+1. **Read** `.claude/rules/database.md`, then `migrations/revisions/` to see how
+   revisions are written, the SQL folders of the tables you're touching and their
+   neighbours, every Orm module, `libs/database/base.py`, and the owning lib's
+   `types.py` if the change adds or uses an enum.
 2. **Find the head** with `uv run alembic heads`. The new revision's `down_revision`
    points at it.
 3. **Write the `.up.sql`** in the table's folder, one logical change per file.

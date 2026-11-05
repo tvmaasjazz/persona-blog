@@ -17,16 +17,16 @@ the code, and you don't redesign the conventions.
 3. Read `.claude/rules/fastapi-structure.md` in full.
 4. Read `.claude/rules/database.md` in full if the code under test touches the
    database.
+5. Read `.claude/rules/langgraph.md` in full if the code under test is a LangGraph
+   graph, an LLM prompt, or an `OutputFormat`.
 
-Do this at the start of every task, even if the conventions seem familiar. These
-files are the source of truth, and they change. Don't write or edit a single file
-until you've read them.
+Read them at the start of every task, before touching any file. They change.
 
-`fastapi-structure.md` isn't a style guide for test code. It tells you how the source
-is supposed to behave: which response a route returns, when a write commits, where
-settings and errors come from. Use it to decide expected values and to spot source
-code that breaks it. Where it and `pytest-testing.md` differ about test code (loose
-literals, for example), `pytest-testing.md` wins.
+`fastapi-structure.md` and `langgraph.md` aren't style guides for test code. They tell
+you how the source is supposed to behave: which response a route returns, when a write
+commits, where settings and errors come from. Use them to decide expected values and
+to spot source code that breaks them. Where they and `pytest-testing.md` differ about
+test code (loose literals, for example), `pytest-testing.md` wins.
 
 Then look at what already exists:
 
@@ -40,19 +40,10 @@ Then look at what already exists:
 
 ## What you write
 
-Everything goes under `backend/tests/`. `pytest-testing.md` says where each of these
-lives and how it's shaped.
-
-- **Test modules**: the required cases from the "What to write for each source file"
-  table, for every source file in the task
-- **Fixtures**: in the `conftest.py` the fixture placement rules name
-- **Stubs**: `<Class>Stub` classes in `tests/stubs/<domain>.py`
-- **Factories**: `build_*`, `insert_*_row` and `find_*_row` functions in
-  `tests/factories/<domain>.py`
-- **Payloads**: third-party response builders in `tests/payloads/<provider>.py`
-
-Only add a fixture when the resource it wraps exists in the source. Don't add database
-fixtures before there's a database.
+Everything goes under `backend/tests/`: test modules with the required cases from
+`pytest-testing.md` › What to write for each source file, for every source file in the
+task, plus the fixtures, stubs, factories and payloads they need, placed as that file
+says. Add a fixture only for a resource the source has.
 
 ## What you don't write
 
@@ -62,19 +53,14 @@ fixtures before there's a database.
 - **Test configuration and dependencies**: the `[tool.pytest]` table and dev
   dependencies. If a pattern needs a config key or package that's missing, report
   it.
-- **Workarounds for hidden dependencies**: if code can only be tested by patching (a
-  client built inline, a module-level global, a direct call for the current time),
-  don't patch. Report what the source needs to take through `__init__` or a
-  dependency factory.
-- **Tests the rules say not to write**: framework behaviour, setting defaults,
-  private methods, and dependency factories tested directly.
 
 ## Running tests
 
 Run commands from `backend/`. You may run only these:
 
 - `uv run pytest <path>`: the files you wrote or changed, while you work
-- `uv run pytest`: the whole default suite, once, before you report
+- `uv run pytest`: the whole default suite, once, before you report, unless the brief
+  says other test writers are running in parallel. Then run only your own files.
 - `uv run ruff check --fix tests/` and `uv run ruff format tests/`
 
 Nothing else. No `docker`, `alembic`, `uv add`, `uv sync`, or `git`. Don't run
@@ -102,8 +88,6 @@ comparison into a partial one, catching the exception, or adding `skip` / `xfail
   it returns into an assertion. That only records whatever bugs the code already has.
   When the code disagrees with the intended behaviour, report a bug.
 - Never add a dependency or import a package the project doesn't already use.
-- A route test's signed-in fixture must hold the route's permission; the fixtures and
-  the 403 cases are in `pytest-testing.md` › §6 Route tests.
 - If the rules don't cover a situation, make the most conservative call, and report
   it as a judgement call with proposed rule wording. Don't quietly invent a
   convention.
@@ -111,8 +95,6 @@ comparison into a partial one, catching the exception, or adding `skip` / `xfail
   pick a side silently. If one is clearly more specific, follow the rule text, not an
   example that disagrees with it. Otherwise leave that test unwritten. Either way,
   report the contradiction with file and line.
-- Sections of `pytest-testing.md` marked provisional are guidance, not settled
-  convention. Report any call you make under them as a judgement call.
 
 ## Report
 
@@ -130,11 +112,8 @@ the environment, or an open question.
 
 **Conventions applied**: the specific conventions you followed, each tied to where you
 applied it. Name the rule and the file, e.g.:
-- `pytest-testing.md` › Test doubles: `LlmServiceStub` in `tests/stubs/llm.py`,
-  overriding only `complete`
-- `pytest-testing.md` › §6 Route tests: overrode `get_llm_service`, not
-  `get_generate_text_service`, in `tests/api/generate_text/conftest.py`
-- `python-naming.md` › Variables: `generate_text_response`, not `response`
+- `pytest-testing.md` › Test doubles: `<Name>ServiceStub` in `tests/stubs/<domain>.py`,
+  overriding only the method the test calls
 
 Only list conventions you actually applied in this change, not every rule you read.
 
