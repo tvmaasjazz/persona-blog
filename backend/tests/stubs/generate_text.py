@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
+from uuid import UUID
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
@@ -11,8 +12,13 @@ from libs.generate_text.graphs.base_generate_text_graph_builder import BaseGener
 from libs.generate_text.graphs.generate_text_graph_builder_registry import (
     GenerateTextGraphBuilderRegistry,
 )
+from libs.generate_text.inputs import CreateGenerateTextRunInput
 from libs.generate_text.prompts import BaseGenerateTextPrompt
-from libs.generate_text.results import BuildPromptResult
+from libs.generate_text.results import (
+    BuildPromptResult,
+    CreateGenerateTextRunResult,
+    FindGenerateTextRunByIdentityResult,
+)
 from libs.generate_text.services.generate_text_run_handoff_queue_service import (
     GenerateTextRunHandoffQueueService,
 )
@@ -135,13 +141,42 @@ class GenerateTextStepServiceStub(GenerateTextStepService):
 
 
 class GenerateTextRunServiceStub(GenerateTextRunService):
-    """Wraps a real run service so a test can wait for, fail or read lease renewals."""
+    """Wraps a real run service so a test can wait for, fail or read lease renewals, and park
+    a job just before it starts its run."""
 
     def __init__(self, run_service: GenerateTextRunService) -> None:
         self._run_service = run_service
+        self.start_run_is_blocked = False
+        self.start_run_started_event = asyncio.Event()
+        self.start_run_unblock_event = asyncio.Event()
         self.renew_lease_inputs: list[tuple[int, str, int]] = []
         self.renew_lease_error: Exception | None = None
         self.renew_lease_event = asyncio.Event()
+
+    async def create_run(
+        self, create_generate_text_run_input: CreateGenerateTextRunInput, auth_user: AuthUser
+    ) -> CreateGenerateTextRunResult:
+        return await self._run_service.create_run(create_generate_text_run_input, auth_user)
+
+    async def find_run_by_identity(self, run_identity: UUID) -> FindGenerateTextRunByIdentityResult:
+        return await self._run_service.find_run_by_identity(run_identity)
+
+    async def start_run(self, run_id: int) -> bool:
+        self.start_run_started_event.set()
+        if self.start_run_is_blocked:
+            await self.start_run_unblock_event.wait()
+        return await self._run_service.start_run(run_id)
+
+    async def complete_run(self, run_id: int) -> None:
+        await self._run_service.complete_run(run_id)
+
+    async def record_awaiting_review(self, run_id: int) -> None:
+        await self._run_service.record_awaiting_review(run_id)
+
+    async def fail_run(
+        self, run_id: int, error_code: str | None = None, error_message: str | None = None
+    ) -> None:
+        await self._run_service.fail_run(run_id, error_code, error_message)
 
     async def renew_lease(self, run_id: int, lease_owner: str, lease_seconds: int) -> bool:
         self.renew_lease_inputs.append((run_id, lease_owner, lease_seconds))

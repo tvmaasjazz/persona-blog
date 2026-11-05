@@ -65,6 +65,7 @@ async def test_instrument_writes_completed_step_with_step_name_and_rollup(
     create_run_result = await run_service.create_run(
         build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
+    await run_service.start_run(create_run_result.id)
     generate_text_state = build_generate_text_state(
         auth_user_id=auth_user.id,
         auth_user_identity=auth_user.identity,
@@ -124,6 +125,7 @@ async def test_instrument_node_raises_leaves_failed_step_and_failed_run(
     create_run_result = await run_service.create_run(
         build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
+    await run_service.start_run(create_run_result.id)
     generate_text_state = build_generate_text_state(
         auth_user_id=auth_user.id,
         auth_user_identity=auth_user.identity,
@@ -166,6 +168,7 @@ async def test_instrument_node_raises_graph_bubble_up_records_awaiting_review_an
     create_run_result = await run_service.create_run(
         build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
+    await run_service.start_run(create_run_result.id)
     generate_text_state = build_generate_text_state(
         auth_user_id=auth_user.id,
         auth_user_identity=auth_user.identity,
@@ -191,4 +194,4 @@ async def test_instrument_node_raises_graph_bubble_up_records_awaiting_review_an
     assert step_record is not None
     assert step_record.status == GenerateTextStepStatusType.AWAITING_REVIEW
     assert run_record is not None
-    assert run_record.status == GenerateTextRunStatusType.PENDING
+    assert run_record.status == GenerateTextRunStatusType.RUNNING

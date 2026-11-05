@@ -3,16 +3,19 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+import structlog.testing
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel
 from redis.asyncio import Redis
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.core.services import BackgroundJobService
+from libs.credits.types import CreditLedgerEntryType
+from libs.database.orm.credit_ledger import CreditLedgerOrm
 from libs.database.orm.generate_text_run import GenerateTextRunOrm
 from libs.database.orm.generate_text_step import GenerateTextStepOrm
 from libs.generate_text.exceptions import (
@@ -54,11 +57,12 @@ from tests.factories.generate_text import (
     build_resume_generate_text_input,
     insert_generate_text_run_row,
 )
-from tests.factories.llm import build_llm_completion_result
+from tests.factories.llm import build_llm_completion_result, insert_llm_call_row
 from tests.factories.personas import build_find_user_persona_result, insert_persona_row
 from tests.factories.users import insert_user_row
 from tests.stubs.generate_text import (
     GenerateTextGraphBuilderRegistryStub,
+    GenerateTextRunServiceStub,
     GenerateTextStepServiceStub,
 )
 from tests.stubs.llm import LlmServiceStub
@@ -100,8 +104,10 @@ def _build_generate_text_service(
     generate_text_settings: GenerateTextSettings | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
     step_service: GenerateTextStepService | None = None,
+    held_run_service: GenerateTextRunService | None = None,
 ) -> GenerateTextService:
-    """Replaces only the step service the service holds, not the graph nodes' one."""
+    """Replaces only the step and run services the service holds, not the graph nodes' or the
+    lease service's."""
     generate_text_settings = generate_text_settings or GenerateTextSettings()
     run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     real_step_service = GenerateTextStepService(
@@ -126,7 +132,7 @@ def _build_generate_text_service(
     )
     return GenerateTextService(
         graph_builder_registry=graph_builder_registry,
-        run_service=run_service,
+        run_service=held_run_service or run_service,
         step_service=step_service or real_step_service,
         lease_service=lease_service,
         checkpointer=checkpointer or InMemorySaver(),
@@ -969,3 +975,173 @@ async def test_generate_text_lease_lost_to_another_worker_cancels_job_without_re
     assert run_record.status == GenerateTextRunStatusType.RUNNING
     assert run_record.lease_owner == "other-worker"
     assert run_record.lease_expires_at == OTHER_WORKER_LEASE_EXPIRES_AT
+
+
+async def _start_run_blocked_in_outline_llm_call(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
+    llm_service_stub: LlmServiceStub,
+    auth_user: AuthUser,
+) -> int:
+    """Starts a run and returns its id once its outline step is mid-LLM-call with a priced call
+    already logged against it."""
+    find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
+    llm_service_stub.complete_is_blocked = True
+    generate_text_service = _build_generate_text_service(
+        db_session_factory, llm_service_stub, background_job_service, handoff_queue_service
+    )
+    await generate_text_service.generate_text(
+        build_generate_text_input(options=_build_all_auto_approved_options()),
+        find_user_persona_result,
+        auth_user,
+    )
+    await llm_service_stub.complete_started_event.wait()
+    step_query = select(GenerateTextStepOrm).where(
+        GenerateTextStepOrm.created_by_id == auth_user.id
+    )
+    step_record = await db_session.scalar(step_query)
+    assert step_record is not None
+    await insert_llm_call_row(
+        db_session,
+        created_by_id=auth_user.id,
+        run_id=step_record.run_id,
+        step_id=step_record.id,
+        cost_usd=Decimal("0.02"),
+    )
+    await db_session.commit()
+    return step_record.run_id
+
+
+async def test_generate_text_run_failed_mid_llm_call_fails_step_without_charge_and_stops_run(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
+) -> None:
+    user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("5.00"))
+    await db_session.commit()
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="# Final\n\nFinal text.")
+    run_id = await _start_run_blocked_in_outline_llm_call(
+        db_session,
+        db_session_factory,
+        background_job_service,
+        handoff_queue_service,
+        llm_service_stub,
+        auth_user,
+    )
+    run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    await run_service.fail_run(run_id, "SuspendedError", "run suspended")
+
+    llm_service_stub.complete_unblock_event.set()
+
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
+    run_record = await db_session.get(GenerateTextRunOrm, run_id)
+    step_query = select(GenerateTextStepOrm).where(GenerateTextStepOrm.run_id == run_id)
+    step_scalars = await db_session.scalars(step_query)
+    step_records = step_scalars.all()
+    charge_count_query = select(func.count(CreditLedgerOrm.id)).where(
+        CreditLedgerOrm.user_id == user_record.id,
+        CreditLedgerOrm.entry_type == CreditLedgerEntryType.CHARGE,
+    )
+    charge_count = await db_session.scalar(charge_count_query)
+    assert run_record is not None
+    await db_session.refresh(run_record)
+    await db_session.refresh(user_record)
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "SuspendedError"
+    assert run_record.error_message == "run suspended"
+    assert [step_record.step_name for step_record in step_records] == ["GENERATE_OUTLINE"]
+    assert step_records[0].status == GenerateTextStepStatusType.FAILED
+    assert step_records[0].error_code == "SuspendedError"
+    assert step_records[0].error_message == "run suspended"
+    assert step_records[0].output is None
+    assert charge_count == 0
+    assert user_record.credit_balance_usd == Decimal("5.00")
+    assert len(llm_service_stub.complete_inputs) == 1
+
+
+async def test_generate_text_run_failed_mid_run_ends_job_without_raising(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    llm_service_stub = LlmServiceStub()
+    llm_service_stub.complete_result = build_llm_completion_result(content="# Final\n\nFinal text.")
+    run_id = await _start_run_blocked_in_outline_llm_call(
+        db_session,
+        db_session_factory,
+        background_job_service,
+        handoff_queue_service,
+        llm_service_stub,
+        auth_user,
+    )
+    run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    await run_service.fail_run(run_id, "SuspendedError", "run suspended")
+
+    with structlog.testing.capture_logs() as captured_log_events:
+        llm_service_stub.complete_unblock_event.set()
+        await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
+
+    failed_job_log_events = [
+        log_event
+        for log_event in captured_log_events
+        if log_event["event"] == "background_job_failed"
+    ]
+    run_record = await db_session.get(GenerateTextRunOrm, run_id)
+    assert run_record is not None
+    await db_session.refresh(run_record)
+    assert failed_job_log_events == []
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "SuspendedError"
+    assert run_record.error_message == "run suspended"
+
+
+async def test_generate_text_run_failed_before_job_starts_ends_job_without_running_graph(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    background_job_service: BackgroundJobService,
+    handoff_queue_service: GenerateTextRunHandoffQueueService,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    find_user_persona_result = await _insert_owner_persona(db_session, auth_user)
+    llm_service_stub = LlmServiceStub()
+    run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+    run_service_stub = GenerateTextRunServiceStub(run_service)
+    run_service_stub.start_run_is_blocked = True
+    generate_text_service = _build_generate_text_service(
+        db_session_factory,
+        llm_service_stub,
+        background_job_service,
+        handoff_queue_service,
+        held_run_service=run_service_stub,
+    )
+    await generate_text_service.generate_text(
+        build_generate_text_input(options=_build_all_auto_approved_options()),
+        find_user_persona_result,
+        auth_user,
+    )
+    await run_service_stub.start_run_started_event.wait()
+    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.created_by_id == auth_user.id)
+    run_record = await db_session.scalar(run_query)
+    assert run_record is not None
+    await run_service.fail_run(run_record.id, "SuspendedError", "run suspended")
+
+    run_service_stub.start_run_unblock_event.set()
+
+    await background_job_service.drain(DRAIN_TIMEOUT_SECONDS)
+    await db_session.refresh(run_record)
+    step_count_query = select(func.count(GenerateTextStepOrm.id)).where(
+        GenerateTextStepOrm.run_id == run_record.id
+    )
+    step_count = await db_session.scalar(step_count_query)
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "SuspendedError"
+    assert run_record.started_at is None
+    assert step_count == 0
+    assert llm_service_stub.complete_inputs == []
