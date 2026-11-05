@@ -241,6 +241,9 @@ calls.
 - A test that must act while a job is mid-step uses the stub's blocking hooks, never a
   sleep: set `<method>_is_blocked`, wait on `<method>_started_event` to know the job
   got there, then set `<method>_unblock_event` to let it carry on.
+- A background job's failure is only logged, as `background_job_failed`, since
+  `drain` never re-raises. A test that has to prove a job ended quietly wraps the drain
+  in `structlog.testing.capture_logs()` and asserts that event is absent.
 - A test that starts a background job waits for it with
   `await background_job_service.drain(...)` before asserting or touching the database
   again. The job and the test share one test connection, which can't serve two
@@ -280,7 +283,12 @@ How to write a stub:
 - Never call `super().__init__()`. A method that isn't overridden then fails loudly
   instead of doing real work.
 - A stub may wrap a real instance of the class and pass calls through to it, when the
-  test needs the real effect plus a hook, such as an event to wait on.
+  test needs the real effect plus a hook, such as an event to wait on. It then passes
+  through every method its consumer calls, since an un-`__init__`'d subclass has no
+  state of its own.
+- A stub of a third-party boundary may wrap the real collaborator that writes to Redis
+  or the database (`GoogleOAuthServiceStub` takes a real `OAuthStateService`), so a
+  route test can assert what was stored while the outside call stays stubbed.
 - Name the stub's attributes `<method>_` plus what they hold:
   - `<method>_inputs`: every input received, in order
   - `<method>_result`: the value to return
@@ -325,6 +333,12 @@ Test data comes from `tests/factories/<domain>.py`, one module per lib domain:
   same timestamp. A factory leaves the column unset when it's `None`, so the default
   fills it in.
 - Write out keyword parameters, never `**overrides`, so a typo fails.
+- A test may set a column on a row it inserted, then flush, to put the database in the
+  state it needs (`owner_record.is_active = False`), when reaching that state through a
+  service would make the test depend on another service.
+- A test whose behaviour depends on the exception hierarchy, such as most-specific
+  matching, may declare a throwaway subclass in its own module, named
+  `<What>Exception`.
 
 ```python
 # tests/factories/users.py

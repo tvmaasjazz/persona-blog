@@ -130,4 +130,5 @@ exact wording you'd propose adding and to which rules file. Write "None" if none
 
 **Follow-up needed** — work outside your scope that this change requires (migrations,
 tests, app setup changes, anything the rules don't give a home to), plus a reminder
-that `ruff check` and `pytest` have not been run.
+that `ruff check` and `pytest` have not been run. A route open by design needs an entry
+on the `OPEN_ROUTES` allowlist in `tests/api/test_app_factory.py`; say so here.
