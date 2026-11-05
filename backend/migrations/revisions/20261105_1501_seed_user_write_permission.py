@@ -12,5 +12,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    MIGRATION_RUNNER.run_transactional("pb_role_permission/0004_grant_user_write_permission.down.sql")
+    MIGRATION_RUNNER.run_transactional(
+        "pb_role_permission/0004_grant_user_write_permission.down.sql"
+    )
     MIGRATION_RUNNER.run_transactional("pb_permission/0008_insert_user_write_permission.down.sql")
