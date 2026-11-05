@@ -70,6 +70,7 @@ async def _seed_state(
         prompt_text="Write about sourdough starters.", persona_id=persona_record.id
     )
     create_run_result = await run_service.create_run(create_generate_text_run_input, auth_user)
+    await run_service.start_run(create_run_result.id)
     return build_generate_text_state(
         auth_user_id=auth_user.id,
         auth_user_identity=auth_user.identity,

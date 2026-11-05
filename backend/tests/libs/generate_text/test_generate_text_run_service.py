@@ -105,14 +105,45 @@ async def test_start_run_sets_running_status_and_started_at(
         build_create_generate_text_run_input(persona_id=persona_id), auth_user
     )
 
-    await generate_text_run_service.start_run(create_run_result.id)
+    is_started = await generate_text_run_service.start_run(create_run_result.id)
 
     database_utc_now = await fetch_database_utc_now(db_session)
     run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
     run_record = await db_session.scalar(run_query)
+    assert is_started is True
     assert run_record is not None
     assert run_record.status == GenerateTextRunStatusType.RUNNING
     assert run_record.started_at == database_utc_now
+
+
+@pytest.mark.parametrize(
+    "run_status",
+    [
+        pytest.param(GenerateTextRunStatusType.RUNNING, id="running"),
+        pytest.param(GenerateTextRunStatusType.AWAITING_REVIEW, id="awaiting_review"),
+        pytest.param(GenerateTextRunStatusType.COMPLETED, id="completed"),
+        pytest.param(GenerateTextRunStatusType.FAILED, id="failed"),
+        pytest.param(GenerateTextRunStatusType.CANCELLED, id="cancelled"),
+    ],
+)
+async def test_start_run_not_pending_returns_false_and_keeps_status(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    run_status: GenerateTextRunStatusType,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=run_status
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    is_started = await generate_text_run_service.start_run(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert is_started is False
+    assert run_record.status == run_status
+    assert run_record.started_at is None
 
 
 async def test_start_run_unknown_run_raises_not_found_exception(
@@ -137,18 +168,16 @@ async def test_complete_run_sets_completed_status_and_zero_rollup_when_no_calls(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
-    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    create_run_result = await generate_text_run_service.create_run(
-        build_create_generate_text_run_input(persona_id=persona_id), auth_user
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.RUNNING
     )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
 
-    await generate_text_run_service.complete_run(create_run_result.id)
+    await generate_text_run_service.complete_run(run_record.id)
 
     database_utc_now = await fetch_database_utc_now(db_session)
-    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
-    run_record = await db_session.scalar(run_query)
-    assert run_record is not None
+    await db_session.refresh(run_record)
     assert run_record.status == GenerateTextRunStatusType.COMPLETED
     assert run_record.finished_at == database_utc_now
     assert run_record.llm_call_count == 0
@@ -161,15 +190,15 @@ async def test_complete_run_sums_llm_calls_coalescing_null_tokens_and_cost(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
-    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    create_run_result = await generate_text_run_service.create_run(
-        build_create_generate_text_run_input(persona_id=persona_id), auth_user
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.RUNNING
     )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     await insert_llm_call_row(
         db_session,
         created_by_id=auth_user.id,
-        run_id=create_run_result.id,
+        run_id=run_record.id,
         input_tokens=100,
         output_tokens=50,
         cost_usd=Decimal("0.01"),
@@ -177,18 +206,16 @@ async def test_complete_run_sums_llm_calls_coalescing_null_tokens_and_cost(
     await insert_llm_call_row(
         db_session,
         created_by_id=auth_user.id,
-        run_id=create_run_result.id,
+        run_id=run_record.id,
         input_tokens=None,
         output_tokens=None,
         cost_usd=None,
     )
     await db_session.commit()
 
-    await generate_text_run_service.complete_run(create_run_result.id)
+    await generate_text_run_service.complete_run(run_record.id)
 
-    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
-    run_record = await db_session.scalar(run_query)
-    assert run_record is not None
+    await db_session.refresh(run_record)
     assert run_record.llm_call_count == 2
     assert run_record.input_tokens == 100
     assert run_record.output_tokens == 50
@@ -199,26 +226,24 @@ async def test_record_awaiting_review_sets_awaiting_review_status_and_rolls_up_c
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_id = await _insert_persona_id(db_session, created_by_id=auth_user.id)
-    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
-    create_run_result = await generate_text_run_service.create_run(
-        build_create_generate_text_run_input(persona_id=persona_id), auth_user
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.RUNNING
     )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
     await insert_llm_call_row(
         db_session,
         created_by_id=auth_user.id,
-        run_id=create_run_result.id,
+        run_id=run_record.id,
         input_tokens=100,
         output_tokens=50,
         cost_usd=Decimal("0.01"),
     )
     await db_session.commit()
 
-    await generate_text_run_service.record_awaiting_review(create_run_result.id)
+    await generate_text_run_service.record_awaiting_review(run_record.id)
 
-    run_query = select(GenerateTextRunOrm).where(GenerateTextRunOrm.id == create_run_result.id)
-    run_record = await db_session.scalar(run_query)
-    assert run_record is not None
+    await db_session.refresh(run_record)
     assert run_record.status == GenerateTextRunStatusType.AWAITING_REVIEW
     assert run_record.llm_call_count == 1
     assert run_record.input_tokens == 100
@@ -1115,3 +1140,229 @@ async def test_claim_expired_run_run_id_unknown_run_returns_none(
     )
 
     assert claim_expired_run_result is None
+
+
+@pytest.mark.parametrize(
+    "run_status",
+    [
+        pytest.param(GenerateTextRunStatusType.PENDING, id="pending"),
+        pytest.param(GenerateTextRunStatusType.AWAITING_REVIEW, id="awaiting_review"),
+        pytest.param(GenerateTextRunStatusType.COMPLETED, id="completed"),
+        pytest.param(GenerateTextRunStatusType.FAILED, id="failed"),
+        pytest.param(GenerateTextRunStatusType.CANCELLED, id="cancelled"),
+    ],
+)
+async def test_complete_run_not_running_keeps_status(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    run_status: GenerateTextRunStatusType,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=run_status
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.complete_run(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert run_record.status == run_status
+    assert run_record.finished_at is None
+
+
+@pytest.mark.parametrize(
+    "run_status",
+    [
+        pytest.param(GenerateTextRunStatusType.PENDING, id="pending"),
+        pytest.param(GenerateTextRunStatusType.AWAITING_REVIEW, id="awaiting_review"),
+        pytest.param(GenerateTextRunStatusType.COMPLETED, id="completed"),
+        pytest.param(GenerateTextRunStatusType.FAILED, id="failed"),
+        pytest.param(GenerateTextRunStatusType.CANCELLED, id="cancelled"),
+    ],
+)
+async def test_record_awaiting_review_not_running_keeps_status(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    run_status: GenerateTextRunStatusType,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=run_status
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.record_awaiting_review(run_record.id)
+
+    await db_session.refresh(run_record)
+    assert run_record.status == run_status
+
+
+@pytest.mark.parametrize(
+    "run_status",
+    [
+        pytest.param(GenerateTextRunStatusType.PENDING, id="pending"),
+        pytest.param(GenerateTextRunStatusType.RUNNING, id="running"),
+        pytest.param(GenerateTextRunStatusType.AWAITING_REVIEW, id="awaiting_review"),
+    ],
+)
+async def test_fail_run_unfinished_run_sets_failed_status_and_error(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    run_status: GenerateTextRunStatusType,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=run_status
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.fail_run(run_record.id, "ValueError", "boom")
+
+    await db_session.refresh(run_record)
+    assert run_record.status == GenerateTextRunStatusType.FAILED
+    assert run_record.error_code == "ValueError"
+    assert run_record.error_message == "boom"
+
+
+@pytest.mark.parametrize(
+    "run_status",
+    [
+        pytest.param(GenerateTextRunStatusType.COMPLETED, id="completed"),
+        pytest.param(GenerateTextRunStatusType.CANCELLED, id="cancelled"),
+    ],
+)
+async def test_fail_run_finished_run_keeps_status_and_refunds_nothing(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    run_status: GenerateTextRunStatusType,
+) -> None:
+    user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("4.80"))
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=user_record.id,
+        status=run_status,
+        charge_usd=Decimal("0.20"),
+    )
+    step_record = await insert_generate_text_step_row(
+        db_session,
+        run_id=run_record.id,
+        created_by_id=user_record.id,
+        status=GenerateTextStepStatusType.SUCCEEDED,
+        charge_usd=Decimal("0.20"),
+    )
+    await insert_credit_ledger_row(
+        db_session,
+        user_id=user_record.id,
+        amount_usd=Decimal("-0.20"),
+        entry_type=CreditLedgerEntryType.CHARGE,
+        generate_text_run_id=run_record.id,
+        generate_text_step_id=step_record.id,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.fail_run(run_record.id, "ValueError", "boom")
+
+    await db_session.refresh(user_record)
+    await db_session.refresh(run_record)
+    refund_count_query = select(func.count(CreditLedgerOrm.id)).where(
+        CreditLedgerOrm.entry_type == CreditLedgerEntryType.REFUND,
+        CreditLedgerOrm.user_id == user_record.id,
+    )
+    refund_count = await db_session.scalar(refund_count_query)
+    assert run_record.status == run_status
+    assert run_record.error_code is None
+    assert refund_count == 0
+    assert user_record.credit_balance_usd == Decimal("4.80")
+
+
+async def test_fail_run_failed_run_keeps_error_and_leaves_running_step(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session,
+        created_by_id=auth_user.id,
+        status=GenerateTextRunStatusType.FAILED,
+        error_code="ValueError",
+        error_message="first failure",
+    )
+    step_record = await insert_generate_text_step_row(
+        db_session,
+        run_id=run_record.id,
+        created_by_id=auth_user.id,
+        status=GenerateTextStepStatusType.RUNNING,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.fail_run(run_record.id, "RuntimeError", "second failure")
+
+    await db_session.refresh(run_record)
+    await db_session.refresh(step_record)
+    assert run_record.error_code == "ValueError"
+    assert run_record.error_message == "first failure"
+    assert step_record.status == GenerateTextStepStatusType.RUNNING
+    assert step_record.error_code is None
+
+
+async def test_fail_run_running_step_fails_with_run_error_and_finished_at(
+    db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.RUNNING
+    )
+    running_step_record = await insert_generate_text_step_row(
+        db_session,
+        run_id=run_record.id,
+        created_by_id=auth_user.id,
+        step_number=1,
+        status=GenerateTextStepStatusType.RUNNING,
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.fail_run(run_record.id, "ValueError", "boom")
+
+    database_utc_now = await fetch_database_utc_now(db_session)
+    await db_session.refresh(running_step_record)
+    assert running_step_record.status == GenerateTextStepStatusType.FAILED
+    assert running_step_record.error_code == "ValueError"
+    assert running_step_record.error_message == "boom"
+    assert running_step_record.finished_at == database_utc_now
+
+
+@pytest.mark.parametrize(
+    "step_status",
+    [
+        pytest.param(GenerateTextStepStatusType.SUCCEEDED, id="succeeded"),
+        pytest.param(GenerateTextStepStatusType.AWAITING_REVIEW, id="awaiting_review"),
+        pytest.param(GenerateTextStepStatusType.FAILED, id="failed"),
+    ],
+)
+async def test_fail_run_step_not_running_leaves_step_untouched(
+    db_session: AsyncSession,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    step_status: GenerateTextStepStatusType,
+) -> None:
+    auth_user = await _insert_auth_user(db_session)
+    run_record = await insert_generate_text_run_row(
+        db_session, created_by_id=auth_user.id, status=GenerateTextRunStatusType.RUNNING
+    )
+    step_record = await insert_generate_text_step_row(
+        db_session, run_id=run_record.id, created_by_id=auth_user.id, status=step_status
+    )
+    await db_session.commit()
+    generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
+
+    await generate_text_run_service.fail_run(run_record.id, "ValueError", "boom")
+
+    await db_session.refresh(step_record)
+    assert step_record.status == step_status
+    assert step_record.error_code is None
+    assert step_record.error_message is None
+    assert step_record.finished_at is None

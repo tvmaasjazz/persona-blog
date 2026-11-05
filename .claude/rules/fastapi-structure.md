@@ -816,22 +816,36 @@ when the app soft-deletes rows of that table, as it does personas, blog posts an
 content items, that `WHERE` adds `<Orm>.deleted_at.is_(None)`:
 
 ```python
-        run_start_update = (
-            update(GenerateTextRunOrm)
-            .where(GenerateTextRunOrm.id == run_id)
+        step_decision_update = (
+            update(GenerateTextStepOrm)
+            .where(GenerateTextStepOrm.id == step_id)
             .values(
-                status=GenerateTextRunStatusType.RUNNING,
-                started_at=DatabaseClockUtils.build_utc_now_sql(),
+                human_decision=human_decision,
+                human_feedback=human_feedback,
+                decided_by_id=auth_user.id,
+                decided_at=DatabaseClockUtils.build_utc_now_sql(),
+                updated_by_id=auth_user.id,
             )
         )
-        run_start_update_result = await db_session.execute(run_start_update)
-        if run_start_update_result.rowcount == 0:
-            raise NotFoundException(f"Generate text run {run_id} not found")
+        step_decision_update_result = await db_session.execute(step_decision_update)
+        if step_decision_update_result.rowcount == 0:
+            raise NotFoundException(f"Generate text step {step_id} not found")
 ```
 
 An atomic claim works the same way, with its condition in the `WHERE`:
 `claim_paused_run` sets `RUNNING` only where the status is still `AWAITING_REVIEW`, and
-reports whether it changed a row. Deletes are updates too: set `deleted_at` from the
+reports whether it changed a row.
+
+**A write that moves a row to a new status names the statuses it moves from in its
+`WHERE`**, so a late write from a job that's being stopped can't undo a newer one:
+`start_run` moves only a `PENDING` run, `complete_run` only a `RUNNING` one, and
+`fail_run` only an unfinished one. A row count of 0 then means the row moved on, which
+is not an error; when an unknown row must still raise, a read of its id tells the two
+apart (`_raise_if_run_missing`, `_raise_if_step_missing`). Writes from different sessions that touch a run and
+its steps lock the run first, as `fail_run`, `create_step` and `complete_step` do with
+`with_for_update()`, so two transactions never wait on each other's rows.
+
+Deletes are updates too: set `deleted_at` from the
 database clock and `deleted_by_id`. `updated_at` needs nothing (`database.md` ›
 Timestamps).
 

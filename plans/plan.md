@@ -15,7 +15,7 @@ before.
 What a user may do comes from their role's permissions. What a creator may spend comes
 from their credit balance. There are no payments yet, but both are the shapes payments
 will use. The backend is done: roles and permissions in #36, credits in #37. The
-frontend comes in item 7.
+frontend comes in item 8.
 
 **Roles:**
 
@@ -100,21 +100,21 @@ frontend comes in item 7.
 ### 2. Admin panel (backend)
 
 One PR. Admin-only endpoints under `/admin`, in their own router, for the admin panel's
-pages (item 7): a table of users, each linking to a user page with the account, a
+pages (item 8): a table of users, each linking to a user page with the account, a
 grant form and the ledger.
 
 - **Permissions,** held by the admin only and checked per route: `USER_READ` (any
   user's account: email, role, balance), `CREDIT_READ` (any user's ledger) and
-  `CREDIT_WRITE` (granting). `USER_WRITE` comes with item 3. A user's public profile,
+  `CREDIT_WRITE` (granting). `USER_WRITE` comes with item 4. A user's public profile,
   when there is one, gets its own `PROFILE_READ`.
 - **Admin services:** `AdminUserService` and `AdminCreditService` in `libs/admin/`
   (`fastapi-structure.md` › Services). A balance still only changes through
   `CreditLedgerService`.
 - **Users:** `GET /admin/users`, every user but the system user, newest first, with
-  their role and balance. No search or pagination yet; the list takes on item 6's after
+  their role and balance. No search or pagination yet; the list takes on item 7's after
   it lands. `GET /admin/users/{user_identity}` for the user page.
 - **A user's ledger:** `GET /admin/users/{user_identity}/credit-ledger`, every row,
-  newest first, until item 6 pages it.
+  newest first, until item 7 pages it.
 - **Grant credits:** `POST /admin/users/{user_identity}/credit-grants`, an amount up to
   $100 and a required note, written as a `GRANT` on the ledger. A reader becomes a
   creator, and their sessions are deleted after the response, so they sign in with the
@@ -123,45 +123,111 @@ grant form and the ledger.
   `backend/scripts/grant_credits.py` stays for granting without the panel, through the
   same service.
 
-### 3. Set a role and suspend (backend)
+### 3. Run status guards (backend)
 
-One PR, after the admin panel. Two admin actions, each deleting the user's sessions so
-the change takes effect at once:
+One PR, before item 4, which fails runs that are still going. Each write that moves a
+generate-text run or step to a new status applies only from the statuses it's meant to
+leave, so a late write from a job that's being stopped can't undo a newer one:
 
-- **Set a role:** `PUT /admin/users/{user_identity}/role`, such as turning a creator
-  back into a reader, who can still read but no longer create.
-- **Suspend:** `PUT /admin/users/{user_identity}/active`. An inactive user can't sign in,
-  which is checked today, but a session they already hold keeps working until it
-  expires; deleting their sessions closes that. Suspending also fails their active runs.
-  Signing in shows that the account is suspended, rather than a generic error.
+| Write | Applies only when | Otherwise |
+| --- | --- | --- |
+| `start_run` | The run is `PENDING` | Returns `False`, and the job ends without running the graph; an unknown run still raises `NotFoundException` |
+| `create_step` | The run is `RUNNING` | Raises, and the job ends |
+| `complete_step` | The run and the step are `RUNNING` | Does nothing; the step is charged only when this write completed it, and an unknown step still raises `NotFoundException` |
+| `record_awaiting_review` and `fail_step` (step) | The step is `RUNNING` | Does nothing; an unknown step still raises `NotFoundException` |
+| `complete_run` and `record_awaiting_review` (run) | The run is `RUNNING` | Does nothing; an unknown run still raises `NotFoundException` |
+| `fail_run` | The run is `PENDING`, `RUNNING` or `AWAITING_REVIEW` | Does nothing. Today it skips only a `FAILED` run, so it would fail a `COMPLETED` one |
 
-**To decide:**
+- `fail_run` also fails the run's `RUNNING` step, in the same transaction.
+- Claiming a paused or an expired run already checks the status.
+- **How a failed run's job stops:** failing the run clears its lease. The job stops at
+  whichever comes first: its LLM call returns, `complete_step` finds the step already
+  failed and charges nothing, and the next `create_step` raises; or the next lease
+  renewal (every 15 seconds) fails and cancels the job mid-call. At most the call in
+  flight is lost, and it's never charged.
+- This also closes the same gap when a lease is lost today.
+- The rule is in `fastapi-structure.md` › Querying and writing: a write that moves a
+  row to a new status names the statuses it moves from.
 
-- Whether a suspended user's public personas and posts stay up
-- Whether reactivating restores everything as it was
+### 4. Set a role and suspend (backend)
 
-### 4. Invite links (backend)
+One PR, on item 3's branch. Two admin actions under `/admin`, held to the admin by a new
+`USER_WRITE`:
 
-One PR. The admin creates an invite carrying a name, a credit amount, a note and an
-expiry, and gets back its link. There's no email in the app: the admin copies the link
-and sends it by email or text. The name is required and says who it's for, since the
-invite isn't tied to an email, so the list shows who each link went to.
+- **Set a role:** `PUT /admin/users/{user_identity}/role` with `{"role": "READER"}` or
+  `"CREATOR"`. Only a reader or a creator can be changed, and only to one of those two:
+  making an admin stays SQL, so a stolen admin session can't make more, and an admin,
+  yourself included, can't be demoted or locked out. An admin target returns 409; the
+  system user returns 404, as on the other admin routes.
+- **Suspend:** `PUT /admin/users/{user_identity}/active` with `{"is_active": false}`, or
+  `true` to reactivate. The same admin and system user rules apply.
+- **Setting the value the user already has** returns 200 and does nothing.
+- **After the change commits,** as after-response tasks:
+  - the user's sessions are deleted, so the change applies at once;
+  - suspending, or demoting a creator to a reader, fails the user's `PENDING`, `RUNNING`
+    and `AWAITING_REVIEW` runs through `fail_run`, with `USER_SUSPENDED` or
+    `USER_ROLE_CHANGED`. A reader can't resume a run, so it would only cost LLM calls.
+    Failing runs after the commit means a suspension that rolls back never killed a
+    run; a failure there is only logged, and the user is still suspended and signed out.
+- **A suspended user's content is hidden** where it's read: their personas and posts
+  are treated as private, the way a private persona's posts are (item 7). Nothing is
+  changed on the rows, so reactivating shows them again at once.
+- **Reactivating** restores the account as it was (role, credits, content); the user
+  signs in again. Failed runs stay failed.
+- **Sign-in errors redirect to the frontend** with a code, rather than leaving the
+  browser on the API's JSON: `{frontend_url}/sign-in?error=ACCOUNT_SUSPENDED`, and
+  likewise `EMAIL_TAKEN`, `SIGN_IN_EXPIRED` and `SIGN_IN_FAILED`.
+- **Placement:** `AdminUserService.set_user_role()` and `set_user_active()` write the
+  user row themselves, since only an admin makes these writes (the rule change below).
+  Failing runs goes through `GenerateTextRunService.fail_run()`, from a
+  `fail_user_active_runs` task in `libs/generate_text/after_response_tasks.py`.
+- **Rule change** in `fastapi-structure.md` › Services: an admin service writes through
+  the owning domain's service when that service already makes the same write; a write
+  only an admin makes is the admin service's own.
 
-- The link holds a one-time code. Only its hash is stored, so the link is shown once,
-  when it's created.
-- The code is carried through Google sign-in in the OAuth state. Signing in with it,
-  with any Google account, uses it up: the user becomes a creator and gets the credits
-  as a `GRANT` on the ledger, with the invite on the row.
-- The admin lists invites with their name and status (unused, used and by which account,
-  expired) and can revoke an unused one.
+### 5. Invite links (backend)
 
-**To decide:**
+One PR, on item 4's branch. The admin creates an invite carrying a name, a credit amount,
+an optional note and an expiry, and gets back its link. There's no email in the app:
+the admin copies the link and sends it by email or text. The name is required and says
+who it's for, since the invite isn't tied to an email, so the list shows who each link
+went to.
 
-- What an invite does for someone who already has an account: the same upgrade and
-  grant, or refused
-- The default expiry
+- **Permissions:** `INVITE_READ` and `INVITE_WRITE`, held by the admin only.
+- **Table `pb_invite`:** the name, `credit_amount_usd` (over $0, up to $100, as grants),
+  the note, `code_hash` (unique), `expires_at`, `used_at`, `used_by_user_id` and
+  `revoked_at`. `pb_credit_ledger` gets a nullable `invite_id`, so the invite's grant is
+  found by key rather than by its note.
+- **The code** is 16 random bytes, about 22 characters in the link. Only its SHA-256 is
+  stored; a slow hash only matters for a guessable secret. The link is
+  `{frontend_url}/invite/{code}`, built from `AuthSettings.frontend_url`, and is shown
+  once, when it's created. A lost link is revoked and replaced.
+- **Admin routes:** `POST /admin/invites` (expires in 7 days unless
+  `expires_in_days`, up to 30, says otherwise) returns the identity and the link;
+  `GET /admin/invites` lists every invite, newest first, with its status (unused, used,
+  expired, revoked) and who used it; `POST /admin/invites/{invite_identity}/revoke`
+  sets `revoked_at` on an unused invite, and a used one returns 409.
+- **Checking a code:** `POST /invites/check` with `{"code": ...}`, an open route,
+  returns the status and the credit amount, not the name or note. It's a `POST` so the
+  code stays out of API URLs and logs before it's used. The invite page calls it first
+  and shows Google sign-in only for a valid code.
+- **Using it:** `/auth/google/login?invite_code=...` checks the code again, redirecting
+  back with `invite_error` if it's no longer valid, then carries it in the OAuth state.
+  At the callback, once the user is found or created, whether they just signed up or
+  already had an account, one update marks the invite used, guarded on unused,
+  unexpired and unrevoked, so it's used once. In the same transaction a reader becomes a
+  creator (an admin keeps their role) and the credits are a `GRANT` on the ledger, with
+  `invite_id`, the invite's note or "Invite: <name>", and the admin who made the invite
+  as its author. The session is created after, with the new role.
+- **Redirects:** `?invite=ACCEPTED` on success; a code that fails at the callback still
+  signs the user in, with `?invite_error=INVITE_EXPIRED`, `INVITE_USED` or
+  `INVITE_REVOKED`.
+- **Placement:** `AdminInviteService` in `libs/admin/` creates, lists and revokes, since
+  only an admin does; `InviteService` in `libs/invites/` checks and uses a code. Making a
+  reader a creator now has two callers, a grant and an invite, so it moves to one
+  method both call.
 
-### 5. Post views and the feed's order (backend)
+### 6. Post views and the feed's order (backend)
 
 One PR. Simple counts of how posts are read, and a score to order the homepage by.
 
@@ -184,7 +250,7 @@ One PR. Simple counts of how posts are read, and a score to order the homepage b
   stay small
 - Whether a view by the post's own author counts
 
-### 6. Pagination, search and the homepage feed (backend)
+### 7. Pagination, search and the homepage feed (backend)
 
 One PR. One way of paging and searching every list in the app, used first by the
 homepage feed. The admin's user list and the other lists take it on after.
@@ -194,7 +260,7 @@ homepage feed. The admin's user list and the other lists take it on after.
 - **Search:** one search box per list, matching the fields that list chooses (a post's
   title and body, a user's email and name). Filters can be fixed by the page at first,
   with no filter menu yet.
-- **The homepage feed:** every public post, ordered by the score (item 5), paged, with
+- **The homepage feed:** every public post, ordered by the score (item 6), paged, with
   a search.
 - **A persona's page:** a public persona's public posts, so anyone can read a persona
   and what it's written. Today's lists show only the signed-in user's own.
@@ -216,7 +282,7 @@ homepage feed. The admin's user list and the other lists take it on after.
   still can't make a post public, as today. The frontend warns when a persona with
   public posts is made private: "Its 4 public posts will be hidden until the persona is
   public again."
-- The frontend's table, search box and pager, built once in item 7 and used by every
+- The frontend's table, search box and pager, built once in item 8 and used by every
   list.
 
 **To decide:**
@@ -225,7 +291,7 @@ homepage feed. The admin's user list and the other lists take it on after.
   can't jump to a page number
 - Search with Postgres full-text search, or a simple `ILIKE` to start
 
-### 7. Frontend
+### 8. Frontend
 
 Everything the backend-only PRs added, before the deploy:
 
@@ -234,20 +300,23 @@ Everything the backend-only PRs added, before the deploy:
 - **Credits:** the balance on the profile, the low balance banner, and the 402 message
   when a run is refused.
 - **Admin panel:** users with their role and balance, a user page with granting credits
-  with a note, setting the role and suspending (item 3), the user's ledger, and creating, listing and revoking invites, with the new link shown
+  with a note, setting the role and suspending (item 4), the user's ledger, and creating, listing and revoking invites, with the new link shown
   once to copy.
-- **Invite sign-up:** the link's page signs the user in with Google, carrying the code,
-  and says what they got.
+- **Invite sign-up:** the link's page checks the code, then signs the user in with
+  Google, carrying the code (item 5).
+- **One sign-in result page** reads `error`, `invite_error` and `invite` from the
+  sign-in redirect and shows a message for each code: a suspended account, an email
+  already in use, an expired or used invite, or the credits an invite gave.
 - **Homepage:** the feed, replacing My personas as the start page, with search and
   paging, and recording views and how far a post is read.
 - **A persona's page:** its public posts, reached from a post or the feed. Making a
-  persona with public posts private warns that they'll be hidden (item 6).
+  persona with public posts private warns that they'll be hidden (item 7).
 - The table, search box and pager the lists share.
 
 Probably more than one PR, split by area: the shared pieces and roles and credits first,
 then the admin panel and invites, then the homepage and persona pages.
 
-### 8. Deploy readiness
+### 9. Deploy readiness
 
 Assume any worker can restart mid-run and any request can land on any replica. The
 lease, handoff and drain work in the archive covers runs a redeploy stops.
@@ -276,7 +345,7 @@ lease, handoff and drain work in the archive covers runs a redeploy stops.
 
 - A subdomain of an existing domain first, or a dedicated domain from the start
 
-### 9. Initial deploy
+### 10. Initial deploy
 
 - [ ] Deploy the frontend, the backend, Postgres and Redis on Railway
 - [ ] Run the `backend/scripts/e2e/` scripts against the deployed API
