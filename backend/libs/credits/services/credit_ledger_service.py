@@ -7,7 +7,11 @@ from sqlalchemy.orm import aliased
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.credits.inputs import ChargeCreditsInput, GrantCreditsInput
-from libs.credits.results import FindCreditBalanceResult, RefundChargesResult
+from libs.credits.results import (
+    FindCreditBalanceResult,
+    GrantCreditsResult,
+    RefundChargesResult,
+)
 from libs.credits.types import CreditLedgerEntryType
 from libs.database.orm.credit_ledger import CreditLedgerOrm
 from libs.database.orm.user import UserOrm
@@ -96,25 +100,33 @@ class CreditLedgerService:
 
     async def grant_credits(
         self, grant_credits_input: GrantCreditsInput, auth_user: AuthUser
-    ) -> None:
-        """Grants credits to a user; NotFoundException if the user doesn't exist."""
+    ) -> GrantCreditsResult:
+        """Grants credits to a user and returns the grant's identity; NotFoundException if the
+        user doesn't exist."""
         # Add to the balance first, so an unknown user fails before a ledger row is written
         await self._add_to_credit_balance(
             grant_credits_input.user_id, grant_credits_input.amount_usd
         )
 
         # Record the grant
-        grant_insert = insert(CreditLedgerOrm).values(
-            user_id=grant_credits_input.user_id,
-            amount_usd=grant_credits_input.amount_usd,
-            entry_type=CreditLedgerEntryType.GRANT,
-            generate_text_run_id=None,
-            generate_text_step_id=None,
-            note=grant_credits_input.note,
-            created_by_id=auth_user.id,
-            updated_by_id=auth_user.id,
+        grant_insert = (
+            insert(CreditLedgerOrm)
+            .values(
+                user_id=grant_credits_input.user_id,
+                amount_usd=grant_credits_input.amount_usd,
+                entry_type=CreditLedgerEntryType.GRANT,
+                generate_text_run_id=None,
+                generate_text_step_id=None,
+                note=grant_credits_input.note,
+                created_by_id=auth_user.id,
+                updated_by_id=auth_user.id,
+            )
+            .returning(CreditLedgerOrm.identity)
         )
-        await self._db_session.execute(grant_insert)
+        grant_insert_result = await self._db_session.execute(grant_insert)
+        grant_identity = grant_insert_result.scalar_one()
+
+        return GrantCreditsResult(identity=grant_identity)
 
     async def find_credit_balance(self, user_id: int) -> FindCreditBalanceResult:
         """Returns the user's cached credit balance; NotFoundException if there is no user."""

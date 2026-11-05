@@ -77,6 +77,25 @@ async def signed_in_reader(
 
 
 @pytest.fixture
+async def signed_in_admin(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    redis_client: Redis,
+    app_settings: AppSettings,
+) -> UserOrm:
+    admin_record = await insert_user_row(db_session, role=RoleType.ADMIN)
+    auth_session_service = AuthSessionService(
+        redis_client=redis_client, auth_settings=app_settings.auth
+    )
+    admin_auth_user = build_auth_user(
+        user_id=admin_record.id, user_identity=admin_record.identity, role=RoleType.ADMIN
+    )
+    session_id = await auth_session_service.create_session(admin_auth_user)
+    api_client.cookies.set("sid", session_id)
+    return admin_record
+
+
+@pytest.fixture
 async def other_user_client(
     fastapi_app: FastAPI,
     db_session: AsyncSession,

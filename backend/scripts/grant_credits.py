@@ -2,7 +2,6 @@
 
 Run from backend/ against the database in .env:
 
-    uv run python -m scripts.grant_credits --email someone@example.com --amount 1.00
     uv run python -m scripts.grant_credits --email someone@example.com --amount 1.00 --note "Beta"
 """
 
@@ -11,14 +10,15 @@ import asyncio
 import sys
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from apps.api.core.config import AppSettings
+from libs.admin.inputs import AdminGrantUserCreditsInput
+from libs.admin.services import AdminCreditService
 from libs.auth.results import AuthUser
-from libs.credits.inputs import GrantCreditsInput
 from libs.credits.services import CreditLedgerService
-from libs.database.orm import RoleOrm, UserOrm
+from libs.database.orm import UserOrm
 from libs.database.session import create_db_session_factory
 from libs.permissions.types import RoleType
 
@@ -27,7 +27,7 @@ def _parse_arguments() -> argparse.Namespace:
     argument_parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     argument_parser.add_argument("--email", required=True, help="the user's sign-in email")
     argument_parser.add_argument("--amount", required=True, help="USD to grant, e.g. 1.00")
-    argument_parser.add_argument("--note", default=None, help="why, kept on the ledger row")
+    argument_parser.add_argument("--note", required=True, help="why, kept on the ledger row")
     return argument_parser.parse_args()
 
 
@@ -41,7 +41,7 @@ def _parse_amount_usd(amount_text: str) -> Decimal:
     return amount_usd
 
 
-async def _grant_credits(email: str, amount_usd: Decimal, note: str | None) -> None:
+async def _grant_credits(email: str, amount_usd: Decimal, note: str) -> None:
     app_settings = AppSettings()
     db_engine = create_async_engine(app_settings.database_url)
     db_session_factory = create_db_session_factory(db_engine)
@@ -61,29 +61,16 @@ async def _grant_credits(email: str, amount_usd: Decimal, note: str | None) -> N
                 permissions=frozenset(),
             )
 
-            # Grant the credits
+            # Grant the credits, making a reader a creator, as the admin panel does
             credit_ledger_service = CreditLedgerService(db_session=db_session)
-            grant_credits_input = GrantCreditsInput(
-                user_id=user_record.id, amount_usd=amount_usd, note=note
+            admin_credit_service = AdminCreditService(
+                db_session=db_session, credit_ledger_service=credit_ledger_service
             )
-            await credit_ledger_service.grant_credits(grant_credits_input, system_auth_user)
-
-            # Make a reader a creator; any other role is left alone
-            reader_role_id = select(RoleOrm.id).where(RoleOrm.code == RoleType.READER)
-            creator_role_id = select(RoleOrm.id).where(RoleOrm.code == RoleType.CREATOR)
-            user_role_update = (
-                update(UserOrm)
-                .where(
-                    UserOrm.id == user_record.id,
-                    UserOrm.role_id == reader_role_id.scalar_subquery(),
-                )
-                .values(
-                    role_id=creator_role_id.scalar_subquery(),
-                    updated_by_id=system_user_record.id,
-                )
+            grant_user_credits_input = AdminGrantUserCreditsInput(amount_usd=amount_usd, note=note)
+            grant_user_credits_result = await admin_credit_service.grant_user_credits(
+                user_record.identity, grant_user_credits_input, system_auth_user
             )
-            user_role_update_result = await db_session.execute(user_role_update)
-            is_made_creator = user_role_update_result.rowcount == 1
+            is_made_creator = grant_user_credits_result.is_made_creator
 
             # Read the new balance back
             find_credit_balance_result = await credit_ledger_service.find_credit_balance(

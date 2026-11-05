@@ -6,7 +6,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.core.exceptions import NotFoundException
-from libs.credits.results import FindCreditBalanceResult, RefundChargesResult
+from libs.credits.results import (
+    FindCreditBalanceResult,
+    GrantCreditsResult,
+    RefundChargesResult,
+)
 from libs.credits.services import CreditLedgerService
 from libs.credits.types import CreditLedgerEntryType
 from libs.database.orm.credit_ledger import CreditLedgerOrm
@@ -302,6 +306,26 @@ async def test_grant_credits_writes_grant_row_and_raises_balance(
     assert grant_record.created_by_id == admin_record.id
     assert grant_record.updated_by_id == admin_record.id
     assert user_record.credit_balance_usd == Decimal("6.00")
+
+
+async def test_grant_credits_returns_identity_of_new_ledger_row(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session)
+    admin_record = await insert_user_row(db_session)
+    admin_auth_user = build_auth_user(user_id=admin_record.id, user_identity=admin_record.identity)
+    grant_credits_input = build_grant_credits_input(user_id=user_record.id)
+    credit_ledger_service = CreditLedgerService(db_session=db_session)
+
+    grant_credits_result = await credit_ledger_service.grant_credits(
+        grant_credits_input, admin_auth_user
+    )
+
+    grant_identity_query = select(CreditLedgerOrm.identity).where(
+        CreditLedgerOrm.user_id == user_record.id
+    )
+    grant_identity = await db_session.scalar(grant_identity_query)
+    assert grant_credits_result == GrantCreditsResult(identity=grant_identity)
 
 
 async def test_grant_credits_unknown_user_raises_not_found_exception_and_writes_no_row(

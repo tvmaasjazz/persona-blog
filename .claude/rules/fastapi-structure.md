@@ -21,6 +21,7 @@ backend/
 │       │   ├── logging.py     # configure_logging(), called once from lifespan
 │       │   └── types.py       # app-wide enums: EnvironmentType
 │       ├── domains/
+│       │   ├── admin/                # every admin-only route, under /admin
 │       │   └── users/
 │       │       ├── dependencies.py   # factories + Annotated aliases
 │       │       ├── router.py
@@ -48,6 +49,8 @@ backend/
 │   │       ├── user.py        # UserOrm
 │   │       ├── role.py        # RoleOrm, with permission.py and role_permission.py
 │   │       └── persona.py     # PersonaOrm
+│   ├── admin/
+│   │   └── services/          # AdminUserService, AdminCreditService: any user's rows
 │   ├── auth/
 │   │   └── services/          # a lib with more than one service
 │   │       ├── __init__.py    # re-exports both
@@ -126,6 +129,16 @@ by job:
   through a `build_<service>(app_state)` in the domain's `dependencies.py` and runs the
   loop as a task. `apps/api/core/` holds only loops that belong to no domain, like the
   event loop monitor.
+- **A method that acts on any user's rows is an admin service's.** Other services
+  check ownership: the caller's own rows, or public ones. A method that skips that
+  check, such as listing every user or reading anyone's ledger, lives in `libs/admin/`
+  as `Admin<Entity>Service`, so a non-admin route can't call it by mistake. Every class
+  in `libs/admin/` takes the `Admin` prefix, so its inputs and results never share a
+  name with the owning domain's: `AdminGrantUserCreditsInput` beside
+  `GrantCreditsInput`. An admin service reads directly and writes through the owning
+  domain's service, so that domain's rules stay in one place: `AdminCreditService.grant_user_credits()` calls
+  `CreditLedgerService.grant_credits()`. Its routes are in `apps/api/domains/admin/`,
+  one router under `/admin`.
 
 ### Validation guards
 
@@ -310,9 +323,12 @@ they're never confused:
   its lease, is a service of its own (Services).
 
 An after-response task is a function in `libs/<domain>/after_response_tasks.py`,
-scheduled from the dependency or route that knows it's needed. It takes a session
-factory and opens its own session and transaction, because the request's session is
-closed by the time it runs. That's also why it's a function rather than a service.
+scheduled from the dependency or route that knows it's needed. It runs once the
+response is sent and the request's session has committed and closed, so it never uses
+that session. A task that writes the database takes a session factory and opens its own
+session and transaction. A task that only touches Redis takes the Redis client and
+builds the service it needs, like `libs/auth/after_response_tasks.py`. It's a function
+rather than a service because it's scheduled per request with the values it acts on.
 
 A background job outlives the request's session too, so every service it calls takes
 the session factory and opens a short session per write, like `GenerateTextRunService`.
@@ -324,8 +340,9 @@ transaction on its `db_session` and never commits:
 collaborators arrive through `__init__`, and request-scoped services share the
 request's session through their dependency factories.
 
-A lib creates a session in only three places: an after-response task, the services a
-background job calls, and a record that must survive the caller's rollback (below).
+A lib creates a session in only three places: an after-response task that writes the
+database, the services a background job calls, and a record that must survive the
+caller's rollback (below).
 
 Everything else a task needs — the Redis client, the domain's settings, the values it
 acts on — is passed in, so `libs/` still never imports `AppSettings`. A time the task

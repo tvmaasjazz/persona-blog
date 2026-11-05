@@ -1,3 +1,4 @@
 SESSION_COOKIE_NAME = "sid"
-SESSION_KEY_PREFIX = "session:"
+USER_SESSION_KEY_PREFIX = "session:"
 OAUTH_STATE_KEY_PREFIX = "oauth-state:"
+USER_SESSION_LIST_KEY_PREFIX = "user-sessions:"

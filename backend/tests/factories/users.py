@@ -22,6 +22,7 @@ async def insert_user_row(
     is_active: bool = True,
     role: RoleType = RoleType.CREATOR,
     credit_balance_usd: Decimal = Decimal(0),
+    created_at: datetime | None = None,
 ) -> UserOrm:
     role_query = select(RoleOrm.id).where(RoleOrm.code == role)
     role_id = await db_session.scalar(role_query)
@@ -35,9 +36,19 @@ async def insert_user_row(
         role_id=role_id,
         credit_balance_usd=credit_balance_usd,
     )
+    # Left unset, the column's default fills it in
+    if created_at is not None:
+        user_record.created_at = created_at
     db_session.add(user_record)
     await db_session.flush()
     return user_record
+
+
+async def find_system_user_row(db_session: AsyncSession) -> UserOrm:
+    system_user_query = select(UserOrm).where(UserOrm.is_system_user.is_(True))
+    system_user_record = await db_session.scalar(system_user_query)
+    assert system_user_record is not None
+    return system_user_record
 
 
 async def insert_user_auth_provider_row(

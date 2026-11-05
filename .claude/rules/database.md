@@ -163,9 +163,14 @@ CREATE TYPE pb_auth_provider_type AS ENUM ('GOOGLE');
 
 - The Orm column names the type: `mapped_column(Enum(AuthProviderType, name="pb_auth_provider_type"))`.
   The `StrEnum` lives in the owning domain's `libs/<domain>/types.py`.
-- Adding a member goes in its own revision:
-  `ALTER TYPE pb_auth_provider_type ADD VALUE 'GITHUB'`, in the same commit as the
-  Python change.
+- Adding members goes in its own revision, apart from any other change:
+  `ALTER TYPE pb_auth_provider_type ADD VALUE IF NOT EXISTS 'GITHUB'`, in the same
+  commit as the Python change.
+  - `IF NOT EXISTS`, because the `.down.sql` can't remove the value (a comment says
+    so), and the stairway test upgrades the revision a second time.
+  - Each `ADD VALUE` is its own file, run with `run_non_transactional` (› Transactional vs
+    non-transactional), so the value is committed before a later revision uses it.
+  - Rows that use the new value, such as a seed, go in the next revision.
 - Removing a member isn't supported by Postgres. It takes a new type, a column
   migration, and dropping the old type.
 - The `.down.sql` for a table using a type drops the type after the table.
@@ -344,9 +349,12 @@ Each revision runs in its own transaction (`transaction_per_migration=True`).
   statement, because a partial failure outside a transaction leaves the schema
   half-changed. Use it only for statements Postgres
   refuses to run in a transaction: `CREATE INDEX CONCURRENTLY`,
-  `DROP INDEX CONCURRENTLY`, `REINDEX CONCURRENTLY`, `VACUUM`.
-  - A non-transactional statement gets its own file and its own revision. Never
-    bundle a concurrent index with other changes.
+  `DROP INDEX CONCURRENTLY`, `REINDEX CONCURRENTLY`, `VACUUM`. The one other use is
+  `ALTER TYPE ... ADD VALUE`, whose new value can't be used until it commits
+  (› Enums).
+  - A non-transactional statement gets its own file and its own revision, except
+    `ADD VALUE`. Never bundle a concurrent index with other changes. Several `ADD VALUE`s to one type
+    may share a revision, since `IF NOT EXISTS` makes each one safe to run again.
   - Name those files for what they are: `0003_add_email_index_concurrently.up.sql`.
   - The `.down.sql` for a concurrent index is also concurrent, and also alone.
 

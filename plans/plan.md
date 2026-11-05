@@ -15,7 +15,7 @@ before.
 What a user may do comes from their role's permissions. What a creator may spend comes
 from their credit balance. There are no payments yet, but both are the shapes payments
 will use. The backend is done: roles and permissions in #36, credits in #37. The
-frontend comes in item 6.
+frontend comes in item 7.
 
 **Roles:**
 
@@ -99,25 +99,48 @@ frontend comes in item 6.
 
 ### 2. Admin panel (backend)
 
-One PR. Admin-only endpoints for the admin panel's pages (item 6):
+One PR. Admin-only endpoints under `/admin`, in their own router, for the admin panel's
+pages (item 7): a table of users, each linking to a user page with the account, a
+grant form and the ledger.
 
-- **Users:** every user with their role and balance. No search or pagination yet; the
-  list takes on item 5's after it lands.
-- **Grant credits:** an amount and a note, written as a `GRANT` on the ledger. A reader
-  becomes a creator, and their sessions are deleted so they sign in with the new role.
-  This needs the per-user set of session ids (item 1 › Permissions).
-  `backend/scripts/grant_credits.py` stays for granting without the panel.
-- **A user's ledger:** their ledger rows, newest first.
+- **Permissions,** held by the admin only and checked per route: `USER_READ` (any
+  user's account: email, role, balance), `CREDIT_READ` (any user's ledger) and
+  `CREDIT_WRITE` (granting). `USER_WRITE` comes with item 3. A user's public profile,
+  when there is one, gets its own `PROFILE_READ`.
+- **Admin services:** `AdminUserService` and `AdminCreditService` in `libs/admin/`
+  (`fastapi-structure.md` › Services). A balance still only changes through
+  `CreditLedgerService`.
+- **Users:** `GET /admin/users`, every user but the system user, newest first, with
+  their role and balance. No search or pagination yet; the list takes on item 6's after
+  it lands. `GET /admin/users/{user_identity}` for the user page.
+- **A user's ledger:** `GET /admin/users/{user_identity}/credit-ledger`, every row,
+  newest first, until item 6 pages it.
+- **Grant credits:** `POST /admin/users/{user_identity}/credit-grants`, an amount up to
+  $100 and a required note, written as a `GRANT` on the ledger. A reader becomes a
+  creator, and their sessions are deleted after the response, so they sign in with the
+  new role. Sessions are found through a per-user set of session ids in Redis. The
+  system user is refused with a 409; an inactive user can be granted.
+  `backend/scripts/grant_credits.py` stays for granting without the panel, through the
+  same service.
+
+### 3. Set a role and suspend (backend)
+
+One PR, after the admin panel. Two admin actions, each deleting the user's sessions so
+the change takes effect at once:
+
+- **Set a role:** `PUT /admin/users/{user_identity}/role`, such as turning a creator
+  back into a reader, who can still read but no longer create.
+- **Suspend:** `PUT /admin/users/{user_identity}/active`. An inactive user can't sign in,
+  which is checked today, but a session they already hold keeps working until it
+  expires; deleting their sessions closes that. Suspending also fails their active runs.
+  Signing in shows that the account is suspended, rather than a generic error.
 
 **To decide:**
 
-- The new permissions, held by the admin only: one read and one write (`USER_READ` and
-  `USER_WRITE`, say), or one per action
-- The route prefix, `/admin/...` or under each resource
-- Whether the admin can also set a role directly, such as turning a creator back into a
-  reader
+- Whether a suspended user's public personas and posts stay up
+- Whether reactivating restores everything as it was
 
-### 3. Invite links (backend)
+### 4. Invite links (backend)
 
 One PR. The admin creates an invite carrying a name, a credit amount, a note and an
 expiry, and gets back its link. There's no email in the app: the admin copies the link
@@ -138,7 +161,7 @@ invite isn't tied to an email, so the list shows who each link went to.
   grant, or refused
 - The default expiry
 
-### 4. Post views and the feed's order (backend)
+### 5. Post views and the feed's order (backend)
 
 One PR. Simple counts of how posts are read, and a score to order the homepage by.
 
@@ -161,7 +184,7 @@ One PR. Simple counts of how posts are read, and a score to order the homepage b
   stay small
 - Whether a view by the post's own author counts
 
-### 5. Pagination, search and the homepage feed (backend)
+### 6. Pagination, search and the homepage feed (backend)
 
 One PR. One way of paging and searching every list in the app, used first by the
 homepage feed. The admin's user list and the other lists take it on after.
@@ -171,7 +194,7 @@ homepage feed. The admin's user list and the other lists take it on after.
 - **Search:** one search box per list, matching the fields that list chooses (a post's
   title and body, a user's email and name). Filters can be fixed by the page at first,
   with no filter menu yet.
-- **The homepage feed:** every public post, ordered by the score (item 4), paged, with
+- **The homepage feed:** every public post, ordered by the score (item 5), paged, with
   a search.
 - **A persona's page:** a public persona's public posts, so anyone can read a persona
   and what it's written. Today's lists show only the signed-in user's own.
@@ -193,7 +216,7 @@ homepage feed. The admin's user list and the other lists take it on after.
   still can't make a post public, as today. The frontend warns when a persona with
   public posts is made private: "Its 4 public posts will be hidden until the persona is
   public again."
-- The frontend's table, search box and pager, built once in item 6 and used by every
+- The frontend's table, search box and pager, built once in item 7 and used by every
   list.
 
 **To decide:**
@@ -202,7 +225,7 @@ homepage feed. The admin's user list and the other lists take it on after.
   can't jump to a page number
 - Search with Postgres full-text search, or a simple `ILIKE` to start
 
-### 6. Frontend
+### 7. Frontend
 
 Everything the backend-only PRs added, before the deploy:
 
@@ -210,21 +233,21 @@ Everything the backend-only PRs added, before the deploy:
   message rather than an error.
 - **Credits:** the balance on the profile, the low balance banner, and the 402 message
   when a run is refused.
-- **Admin panel:** users with their role and balance, granting credits with a note, a
-  user's ledger, and creating, listing and revoking invites, with the new link shown
+- **Admin panel:** users with their role and balance, a user page with granting credits
+  with a note, setting the role and suspending (item 3), the user's ledger, and creating, listing and revoking invites, with the new link shown
   once to copy.
 - **Invite sign-up:** the link's page signs the user in with Google, carrying the code,
   and says what they got.
 - **Homepage:** the feed, replacing My personas as the start page, with search and
   paging, and recording views and how far a post is read.
 - **A persona's page:** its public posts, reached from a post or the feed. Making a
-  persona with public posts private warns that they'll be hidden (item 5).
+  persona with public posts private warns that they'll be hidden (item 6).
 - The table, search box and pager the lists share.
 
 Probably more than one PR, split by area: the shared pieces and roles and credits first,
 then the admin panel and invites, then the homepage and persona pages.
 
-### 7. Deploy readiness
+### 8. Deploy readiness
 
 Assume any worker can restart mid-run and any request can land on any replica. The
 lease, handoff and drain work in the archive covers runs a redeploy stops.
@@ -253,7 +276,7 @@ lease, handoff and drain work in the archive covers runs a redeploy stops.
 
 - A subdomain of an existing domain first, or a dedicated domain from the start
 
-### 8. Initial deploy
+### 9. Initial deploy
 
 - [ ] Deploy the frontend, the backend, Postgres and Redis on Railway
 - [ ] Run the `backend/scripts/e2e/` scripts against the deployed API

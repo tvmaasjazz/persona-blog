@@ -35,14 +35,15 @@ The rules files say where each of these lives and how it is shaped.
   Result models, domain settings,
   constants, enums (`types.py`), after-response tasks (`after_response_tasks.py`), prompts, exceptions,
   `Utils` classes in `libs/<domain>/utils/` (and `libs/core/utils/` for ones with no
-  domain)
+  domain), and admin services in `libs/admin/` (`fastapi-structure.md` › Services)
 - **LangGraph workflow files**, for a domain whose work is a graph: the layout and what
   belongs in each file are `fastapi-structure.md` › LangGraph workflows. A new graph for
   a domain that already has one is a folder under its `graphs/`, not a domain of its own
 - **HTTP layer** — DTOs, including request field limits as `StringConstraints`
   aliases (`fastapi-structure.md` › DTOs › Inbound), dependency factories with their
   `Annotated` aliases,
-  `validate_<what>` guard dependencies, thin routers, and the
+  `validate_<what>` guard dependencies, thin routers (the admin routes' in
+  `apps/api/domains/admin/`), and the
   `Depends(require_permissions(...))` that comes first in each route's
   `dependencies` (`fastapi-structure.md` › The acting user)
 - **Background jobs** — a service whose work runs for minutes takes

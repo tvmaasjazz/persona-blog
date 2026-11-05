@@ -1,0 +1,85 @@
+from uuid import UUID
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
+
+from apps.api.core.config import AppSettings
+from apps.api.core.dependencies import AuthUserDep, require_permissions
+from apps.api.core.dtos import IdentityResponseDto
+from apps.api.domains.admin.dependencies import AdminCreditServiceDep, AdminUserServiceDep
+from apps.api.domains.admin.dtos import (
+    AdminUserListResponseDto,
+    AdminUserResponseDto,
+    CreditGrantDto,
+    CreditLedgerResponseDto,
+)
+from libs.auth.after_response_tasks import delete_user_sessions
+from libs.permissions.types import PermissionType
+
+admin_router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@admin_router.get(
+    "/users",
+    dependencies=[Depends(require_permissions(PermissionType.USER_READ))],
+)
+async def find_user_list(admin_user_service: AdminUserServiceDep) -> AdminUserListResponseDto:
+    """Lists every user, newest first, with their role and balance."""
+    find_user_list_result = await admin_user_service.find_user_list()
+    return AdminUserListResponseDto.from_result(find_user_list_result)
+
+
+@admin_router.get(
+    "/users/{user_identity}",
+    dependencies=[Depends(require_permissions(PermissionType.USER_READ))],
+)
+async def find_user(
+    user_identity: UUID, admin_user_service: AdminUserServiceDep
+) -> AdminUserResponseDto:
+    """Returns one user with their role and balance; 404 for an unknown user."""
+    admin_user_detail_result = await admin_user_service.find_user(user_identity)
+    return AdminUserResponseDto.from_result(admin_user_detail_result)
+
+
+@admin_router.get(
+    "/users/{user_identity}/credit-ledger",
+    dependencies=[Depends(require_permissions(PermissionType.CREDIT_READ))],
+)
+async def find_user_credit_ledger(
+    user_identity: UUID, admin_credit_service: AdminCreditServiceDep
+) -> CreditLedgerResponseDto:
+    """Lists the user's credit ledger, newest first; 404 for an unknown user."""
+    find_user_credit_ledger_result = await admin_credit_service.find_user_credit_ledger(
+        user_identity
+    )
+    return CreditLedgerResponseDto.from_result(find_user_credit_ledger_result)
+
+
+@admin_router.post(
+    "/users/{user_identity}/credit-grants",
+    status_code=201,
+    dependencies=[Depends(require_permissions(PermissionType.CREDIT_WRITE))],
+)
+async def grant_user_credits(
+    user_identity: UUID,
+    dto: CreditGrantDto,
+    request: Request,
+    after_response_tasks: BackgroundTasks,
+    auth_user: AuthUserDep,
+    admin_credit_service: AdminCreditServiceDep,
+) -> IdentityResponseDto:
+    """Grants the user credits and makes a reader a creator, signing them out everywhere so
+    they sign in with the new role; 404 for an unknown user, 409 for the system user."""
+    grant_user_credits_result = await admin_credit_service.grant_user_credits(
+        user_identity, dto.to_input(), auth_user
+    )
+
+    # Sign a new creator out after the response, once the role change has committed
+    if grant_user_credits_result.is_made_creator:
+        app_settings: AppSettings = request.app.state.settings
+        after_response_tasks.add_task(
+            delete_user_sessions,
+            redis_client=request.app.state.redis_client,
+            auth_settings=app_settings.auth,
+            user_id=grant_user_credits_result.user_id,
+        )
+    return IdentityResponseDto(identity=grant_user_credits_result.identity)

@@ -3,7 +3,8 @@ from uuid import UUID, uuid4
 from libs.auth.results import AuthUser
 from libs.permissions.types import PermissionType, RoleType
 
-ALL_PERMISSIONS = frozenset(
+ALL_PERMISSIONS = frozenset(PermissionType)
+CREATOR_PERMISSIONS = frozenset(
     {
         PermissionType.PERSONA_READ,
         PermissionType.PERSONA_WRITE,
@@ -15,7 +16,7 @@ ALL_PERMISSIONS = frozenset(
 )
 PERMISSIONS_BY_ROLE = {
     RoleType.ADMIN: ALL_PERMISSIONS,
-    RoleType.CREATOR: ALL_PERMISSIONS,
+    RoleType.CREATOR: CREATOR_PERMISSIONS,
     RoleType.READER: frozenset({PermissionType.PERSONA_READ, PermissionType.BLOG_POST_READ}),
     RoleType.SYSTEM: frozenset[PermissionType](),
 }
