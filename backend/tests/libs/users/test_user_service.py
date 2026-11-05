@@ -371,3 +371,52 @@ async def test_find_user_by_identity_soft_deleted_raises_not_found_exception(
 
     with pytest.raises(NotFoundException):
         await user_service.find_user_by_identity(user_record.identity)
+
+
+async def test_make_reader_creator_reader_returns_true_and_becomes_creator(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session, role=RoleType.READER)
+    admin_record = await insert_user_row(db_session, role=RoleType.ADMIN)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
+
+    is_made_creator = await user_service.make_reader_creator(user_record.id, admin_record.id)
+
+    role_code_query = (
+        select(RoleOrm.code)
+        .join(UserOrm, UserOrm.role_id == RoleOrm.id)
+        .where(UserOrm.id == user_record.id)
+    )
+    updated_by_id_query = select(UserOrm.updated_by_id).where(UserOrm.id == user_record.id)
+    role_code = await db_session.scalar(role_code_query)
+    updated_by_id = await db_session.scalar(updated_by_id_query)
+    assert is_made_creator is True
+    assert role_code == RoleType.CREATOR
+    assert updated_by_id == admin_record.id
+
+
+@pytest.mark.parametrize("role", [RoleType.CREATOR, RoleType.ADMIN])
+async def test_make_reader_creator_creator_or_admin_returns_false_and_keeps_role(
+    db_session: AsyncSession, role: RoleType
+) -> None:
+    user_record = await insert_user_row(db_session, role=role)
+    admin_record = await insert_user_row(db_session, role=RoleType.ADMIN)
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
+
+    is_made_creator = await user_service.make_reader_creator(user_record.id, admin_record.id)
+
+    role_code_query = (
+        select(RoleOrm.code)
+        .join(UserOrm, UserOrm.role_id == RoleOrm.id)
+        .where(UserOrm.id == user_record.id)
+    )
+    updated_by_id_query = select(UserOrm.updated_by_id).where(UserOrm.id == user_record.id)
+    role_code = await db_session.scalar(role_code_query)
+    updated_by_id = await db_session.scalar(updated_by_id_query)
+    assert is_made_creator is False
+    assert role_code == role
+    assert updated_by_id != admin_record.id

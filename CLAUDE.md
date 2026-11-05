@@ -45,7 +45,7 @@ npm run build                # type-check and build to dist/
 npx shadcn@latest add <name> # add a shadcn/ui component to src/components/ui/
 ```
 
-Before committing, run `ruff check` for backend changes, and `npm run fmt:check`,
+Before committing, run `ruff check` and `ruff format --check` for backend changes, and `npm run fmt:check`,
 `npm run lint` and `npm run build` for frontend changes. `pytest` must pass before
 the PR is ready to merge (see Pull requests).
 

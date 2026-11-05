@@ -19,6 +19,7 @@ from libs.credits.services import CreditLedgerService
 from libs.credits.types import CreditLedgerEntryType
 from libs.database.orm import CreditLedgerOrm, RoleOrm, UserOrm
 from libs.permissions.types import RoleType
+from libs.users.services import UserService
 from tests.factories.auth import build_auth_user
 from tests.factories.credits import insert_credit_ledger_row
 from tests.factories.generate_text import insert_generate_text_run_row
@@ -29,6 +30,9 @@ def _build_admin_credit_service(db_session: AsyncSession) -> AdminCreditService:
     return AdminCreditService(
         db_session=db_session,
         credit_ledger_service=CreditLedgerService(db_session=db_session),
+        user_service=UserService(
+            db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+        ),
     )
 
 

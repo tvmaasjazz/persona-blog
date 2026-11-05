@@ -8,17 +8,23 @@ from pydantic import BaseModel, Field, StringConstraints
 from apps.api.core.dtos import UsdDecimal
 from libs.admin.constants import MAX_CREDIT_GRANT_USD
 from libs.admin.inputs import (
+    AdminCreateInviteInput,
     AdminGrantUserCreditsInput,
     AdminSetUserActiveInput,
     AdminSetUserRoleInput,
 )
 from libs.admin.results import (
+    AdminCreateInviteResult,
     AdminCreditLedgerEntryResult,
+    AdminFindInviteListResult,
     AdminFindUserCreditLedgerResult,
     AdminFindUserListResult,
+    AdminInviteDetailResult,
     AdminUserDetailResult,
 )
 from libs.credits.types import CreditLedgerEntryType
+from libs.invites.constants import DEFAULT_INVITE_EXPIRES_IN_DAYS, MAX_INVITE_EXPIRES_IN_DAYS
+from libs.invites.types import InviteStatusType
 from libs.permissions.types import RoleType
 
 # Above zero, at most the grant limit, and no finer than the ledger's 10 decimal places
@@ -28,6 +34,10 @@ CreditGrantAmountUsdDecimal = Annotated[
 CreditGrantNoteStr = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
 ]
+InviteNameStr = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+]
+InviteNoteStr = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 
 
 class AdminCreditGrantDto(BaseModel):
@@ -36,6 +46,24 @@ class AdminCreditGrantDto(BaseModel):
 
     def to_input(self) -> AdminGrantUserCreditsInput:
         return AdminGrantUserCreditsInput(amount_usd=self.amount_usd, note=self.note)
+
+
+class AdminInviteDto(BaseModel):
+    name: InviteNameStr
+    credit_amount_usd: CreditGrantAmountUsdDecimal
+    note: InviteNoteStr | None = None
+    expires_in_days: Annotated[int, Field(ge=1, le=MAX_INVITE_EXPIRES_IN_DAYS)] = (
+        DEFAULT_INVITE_EXPIRES_IN_DAYS
+    )
+
+    def to_input(self) -> AdminCreateInviteInput:
+        # A blank note is no note
+        return AdminCreateInviteInput(
+            name=self.name,
+            credit_amount_usd=self.credit_amount_usd,
+            note=self.note or None,
+            expires_in_days=self.expires_in_days,
+        )
 
 
 class AdminUserRoleDto(BaseModel):
@@ -87,6 +115,67 @@ class AdminUserListResponseDto(BaseModel):
             users=[
                 AdminUserResponseDto.from_result(admin_user_detail_result)
                 for admin_user_detail_result in find_user_list_result.users
+            ]
+        )
+
+
+class AdminInviteCreateResponseDto(BaseModel):
+    identity: UUID
+    invite_url: str
+
+    @classmethod
+    def from_result(
+        cls, admin_create_invite_result: AdminCreateInviteResult
+    ) -> AdminInviteCreateResponseDto:
+        return cls(
+            identity=admin_create_invite_result.identity,
+            invite_url=admin_create_invite_result.invite_url,
+        )
+
+
+class AdminInviteResponseDto(BaseModel):
+    identity: UUID
+    name: str
+    credit_amount_usd: UsdDecimal
+    note: str | None
+    status: InviteStatusType
+    expires_at: datetime
+    used_at: datetime | None
+    used_by_email: str | None
+    revoked_at: datetime | None
+    created_at: datetime
+    created_by_email: str
+
+    @classmethod
+    def from_result(
+        cls, admin_invite_detail_result: AdminInviteDetailResult
+    ) -> AdminInviteResponseDto:
+        return cls(
+            identity=admin_invite_detail_result.identity,
+            name=admin_invite_detail_result.name,
+            credit_amount_usd=admin_invite_detail_result.credit_amount_usd,
+            note=admin_invite_detail_result.note,
+            status=admin_invite_detail_result.status,
+            expires_at=admin_invite_detail_result.expires_at,
+            used_at=admin_invite_detail_result.used_at,
+            used_by_email=admin_invite_detail_result.used_by_email,
+            revoked_at=admin_invite_detail_result.revoked_at,
+            created_at=admin_invite_detail_result.created_at,
+            created_by_email=admin_invite_detail_result.created_by_email,
+        )
+
+
+class AdminInviteListResponseDto(BaseModel):
+    invites: list[AdminInviteResponseDto]
+
+    @classmethod
+    def from_result(
+        cls, find_invite_list_result: AdminFindInviteListResult
+    ) -> AdminInviteListResponseDto:
+        return cls(
+            invites=[
+                AdminInviteResponseDto.from_result(admin_invite_detail_result)
+                for admin_invite_detail_result in find_invite_list_result.invites
             ]
         )
 

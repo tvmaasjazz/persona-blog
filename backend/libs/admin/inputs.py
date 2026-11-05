@@ -16,3 +16,10 @@ class AdminSetUserRoleInput(BaseModel):
 
 class AdminSetUserActiveInput(BaseModel):
     is_active: bool
+
+
+class AdminCreateInviteInput(BaseModel):
+    name: str
+    credit_amount_usd: Decimal
+    note: str | None
+    expires_in_days: int

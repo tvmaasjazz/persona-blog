@@ -8,3 +8,6 @@ class AdminCreditGrantSystemUserException(AdminException, ConflictException): ..
 
 
 class AdminUserNotChangeableException(AdminException, ConflictException): ...
+
+
+class AdminInviteUsedException(AdminException, ConflictException): ...

@@ -5,10 +5,17 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from apps.api.core.config import AppSettings
 from apps.api.core.dependencies import AuthUserDep, require_permissions
 from apps.api.core.dtos import EmptyResponseDto, IdentityResponseDto
-from apps.api.domains.admin.dependencies import AdminCreditServiceDep, AdminUserServiceDep
+from apps.api.domains.admin.dependencies import (
+    AdminCreditServiceDep,
+    AdminInviteServiceDep,
+    AdminUserServiceDep,
+)
 from apps.api.domains.admin.dtos import (
     AdminCreditGrantDto,
     AdminCreditLedgerResponseDto,
+    AdminInviteCreateResponseDto,
+    AdminInviteDto,
+    AdminInviteListResponseDto,
     AdminUserActiveDto,
     AdminUserListResponseDto,
     AdminUserResponseDto,
@@ -92,6 +99,44 @@ async def grant_user_credits(
             user_id=grant_user_credits_result.user_id,
         )
     return IdentityResponseDto(identity=grant_user_credits_result.identity)
+
+
+@admin_router.get(
+    "/invites",
+    dependencies=[Depends(require_permissions(PermissionType.INVITE_READ))],
+)
+async def find_invite_list(
+    admin_invite_service: AdminInviteServiceDep,
+) -> AdminInviteListResponseDto:
+    """Lists every invite, newest first, with its status and who used it."""
+    find_invite_list_result = await admin_invite_service.find_invite_list()
+    return AdminInviteListResponseDto.from_result(find_invite_list_result)
+
+
+@admin_router.post(
+    "/invites",
+    status_code=201,
+    dependencies=[Depends(require_permissions(PermissionType.INVITE_WRITE))],
+)
+async def create_invite(
+    dto: AdminInviteDto, auth_user: AuthUserDep, admin_invite_service: AdminInviteServiceDep
+) -> AdminInviteCreateResponseDto:
+    """Creates an invite and returns its identity and link; the link is the only time the
+    code is shown."""
+    create_invite_result = await admin_invite_service.create_invite(dto.to_input(), auth_user)
+    return AdminInviteCreateResponseDto.from_result(create_invite_result)
+
+
+@admin_router.post(
+    "/invites/{invite_identity}/revoke",
+    dependencies=[Depends(require_permissions(PermissionType.INVITE_WRITE))],
+)
+async def revoke_invite(
+    invite_identity: UUID, auth_user: AuthUserDep, admin_invite_service: AdminInviteServiceDep
+) -> EmptyResponseDto:
+    """Revokes an unused invite; 404 for an unknown invite, 409 for a used one."""
+    await admin_invite_service.revoke_invite(invite_identity, auth_user)
+    return EmptyResponseDto()
 
 
 @admin_router.put(

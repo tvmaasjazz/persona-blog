@@ -10,6 +10,7 @@ from apps.api.domains.dev_llm.router import dev_llm_router
 from apps.api.domains.generate_text.router import generate_text_router
 from apps.api.domains.google_auth.router import google_auth_router
 from apps.api.domains.health.router import health_router
+from apps.api.domains.invites.router import invite_router
 from apps.api.domains.personas.router import persona_router
 from apps.api.domains.users.router import user_router
 from apps.api.lifespan import lifespan
@@ -25,6 +26,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(health_router)
     fastapi_app.include_router(auth_router)
     fastapi_app.include_router(google_auth_router)
+    fastapi_app.include_router(invite_router)
     fastapi_app.include_router(user_router)
     fastapi_app.include_router(persona_router)
     fastapi_app.include_router(blog_post_router)

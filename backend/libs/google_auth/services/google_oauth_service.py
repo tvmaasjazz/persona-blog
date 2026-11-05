@@ -37,9 +37,10 @@ class GoogleOAuthService:
         self._google_client_id = google_client_id
         self._google_client_secret = google_client_secret
 
-    async def build_authorization_url(self) -> str:
-        """Stores a new sign-in state and returns the Google URL to send the user to."""
-        oauth_state_result = await self._oauth_state_service.create_state()
+    async def build_authorization_url(self, invite_code: str | None = None) -> str:
+        """Stores a new sign-in state carrying the invite code, if any, and returns the Google
+        URL to send the user to."""
+        oauth_state_result = await self._oauth_state_service.create_state(invite_code)
         authorization_query = urlencode(
             {
                 "client_id": self._google_client_id,
@@ -57,7 +58,8 @@ class GoogleOAuthService:
         return f"{GOOGLE_AUTHORIZATION_URL}?{authorization_query}"
 
     async def exchange_code_for_identity(self, code: str, oauth_state: str) -> GoogleIdentityResult:
-        """Consumes the state and trades the code for the verified identity; UnauthorizedException
+        """Consumes the state and trades the code for the verified identity and the state's invite
+        code; UnauthorizedException
         on a bad state, code or token, ServiceUnavailableException if Google can't be reached."""
         oauth_state_result = await self._oauth_state_service.consume_state(oauth_state)
         id_token = await self._exchange_code_for_id_token(code, oauth_state_result)
@@ -70,6 +72,7 @@ class GoogleOAuthService:
             is_email_verified=id_token_claims.get("email_verified", False),
             display_name=id_token_claims.get("name"),
             avatar_url=id_token_claims.get("picture"),
+            invite_code=oauth_state_result.invite_code,
         )
 
     async def _exchange_code_for_id_token(

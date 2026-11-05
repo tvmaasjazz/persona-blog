@@ -14,3 +14,8 @@ class GoogleAuthUtils:
             if isinstance(exception, exception_class):
                 return sign_in_error_type
         raise exception
+
+    @staticmethod
+    def build_sign_in_error_url(frontend_url: str, sign_in_error_type: SignInErrorType) -> str:
+        """Returns the frontend's sign-in page carrying the error code it shows."""
+        return f"{frontend_url}/sign-in?error={sign_in_error_type}"

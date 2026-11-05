@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -15,8 +15,8 @@ from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.credits.inputs import GrantCreditsInput
 from libs.credits.services import CreditLedgerService
-from libs.database.orm import CreditLedgerOrm, GenerateTextRunOrm, RoleOrm, UserOrm
-from libs.permissions.types import RoleType
+from libs.database.orm import CreditLedgerOrm, GenerateTextRunOrm, UserOrm
+from libs.users.services import UserService
 
 
 class AdminCreditService:
@@ -24,10 +24,14 @@ class AdminCreditService:
     balance are written through CreditLedgerService."""
 
     def __init__(
-        self, db_session: AsyncSession, credit_ledger_service: CreditLedgerService
+        self,
+        db_session: AsyncSession,
+        credit_ledger_service: CreditLedgerService,
+        user_service: UserService,
     ) -> None:
         self._db_session = db_session
         self._credit_ledger_service = credit_ledger_service
+        self._user_service = user_service
 
     async def find_user_credit_ledger(self, user_identity: UUID) -> AdminFindUserCreditLedgerResult:
         """The user's ledger rows, newest first, empty when they have none; NotFoundException
@@ -91,29 +95,16 @@ class AdminCreditService:
             note=grant_user_credits_input.note,
         )
         grant_credits_result = await self._credit_ledger_service.grant_credits(
-            grant_credits_input, auth_user
+            grant_credits_input, auth_user.id
         )
 
         # Make a reader a creator; any other role is left alone
-        reader_role_id_query = select(RoleOrm.id).where(RoleOrm.code == RoleType.READER)
-        creator_role_id_query = select(RoleOrm.id).where(RoleOrm.code == RoleType.CREATOR)
-        user_role_update = (
-            update(UserOrm)
-            .where(
-                UserOrm.id == user_id,
-                UserOrm.role_id == reader_role_id_query.scalar_subquery(),
-            )
-            .values(
-                role_id=creator_role_id_query.scalar_subquery(),
-                updated_by_id=auth_user.id,
-            )
-        )
-        user_role_update_result = await self._db_session.execute(user_role_update)
+        is_made_creator = await self._user_service.make_reader_creator(user_id, auth_user.id)
 
         return AdminGrantUserCreditsResult(
             identity=grant_credits_result.identity,
             user_id=user_id,
-            is_made_creator=user_role_update_result.rowcount == 1,
+            is_made_creator=is_made_creator,
         )
 
     async def _find_user_id(self, user_identity: UUID) -> int:

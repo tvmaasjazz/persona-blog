@@ -4,7 +4,6 @@ from sqlalchemy import exists, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.credits.inputs import ChargeCreditsInput, GrantCreditsInput
 from libs.credits.results import (
@@ -99,10 +98,10 @@ class CreditLedgerService:
         return RefundChargesResult(refund_usd=sum(refund_usd_by_user_id.values(), Decimal(0)))
 
     async def grant_credits(
-        self, grant_credits_input: GrantCreditsInput, auth_user: AuthUser
+        self, grant_credits_input: GrantCreditsInput, granted_by_id: int
     ) -> GrantCreditsResult:
-        """Grants credits to a user and returns the grant's identity; NotFoundException if the
-        user doesn't exist."""
+        """Grants credits to a user, recorded as made by the given user, and returns the grant's
+        identity; NotFoundException if the user doesn't exist."""
         # Add to the balance first, so an unknown user fails before a ledger row is written
         await self._add_to_credit_balance(
             grant_credits_input.user_id, grant_credits_input.amount_usd
@@ -117,9 +116,10 @@ class CreditLedgerService:
                 entry_type=CreditLedgerEntryType.GRANT,
                 generate_text_run_id=None,
                 generate_text_step_id=None,
+                invite_id=grant_credits_input.invite_id,
                 note=grant_credits_input.note,
-                created_by_id=auth_user.id,
-                updated_by_id=auth_user.id,
+                created_by_id=granted_by_id,
+                updated_by_id=granted_by_id,
             )
             .returning(CreditLedgerOrm.identity)
         )

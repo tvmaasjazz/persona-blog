@@ -22,6 +22,7 @@ backend/
 │       │   └── types.py       # app-wide enums: EnvironmentType
 │       ├── domains/
 │       │   ├── admin/                # every admin-only route, under /admin
+│       │   ├── invites/              # POST /invites/check, an open route
 │       │   └── users/
 │       │       ├── dependencies.py   # factories + Annotated aliases
 │       │       ├── router.py
@@ -50,7 +51,7 @@ backend/
 │   │       ├── role.py        # RoleOrm, with permission.py and role_permission.py
 │   │       └── persona.py     # PersonaOrm
 │   ├── admin/
-│   │   └── services/          # AdminUserService, AdminCreditService: any user's rows
+│   │   └── services/          # AdminUserService, AdminCreditService, AdminInviteService
 │   ├── auth/
 │   │   └── services/          # a lib with more than one service
 │   │       ├── __init__.py    # re-exports both
@@ -58,6 +59,7 @@ backend/
 │   │       └── oauth_state_service.py
 │   ├── credits/
 │   │   └── services/          # CreditLedgerService, CreditValidationService
+│   ├── invites/               # InviteService: checks and redeems an invite code
 │   ├── permissions/
 │   │   ├── services.py        # PermissionService: which permissions a role holds
 │   │   └── types.py           # RoleType, PermissionType
@@ -133,9 +135,9 @@ by job:
   check ownership: the caller's own rows, or public ones. A method that skips that
   check, such as listing every user or reading anyone's ledger, lives in `libs/admin/`
   as `Admin<Entity>Service`, so a non-admin route can't call it by mistake. Every class
-  in `libs/admin/` takes the `Admin` prefix, so its inputs and results never share a
-  name with the owning domain's: `AdminGrantUserCreditsInput` beside
-  `GrantCreditsInput`. An admin service reads directly. It writes through the owning
+  in `libs/admin/` and `apps/api/domains/admin/` takes the `Admin` prefix, so its
+  inputs, results and DTOs never share a name with the owning domain's:
+  `AdminGrantUserCreditsInput` beside `GrantCreditsInput`, `AdminCreditGrantDto`. An admin service reads directly. It writes through the owning
   domain's service when that service already makes the same write, so that domain's
   rules stay in one place: `AdminCreditService.grant_user_credits()` calls
   `CreditLedgerService.grant_credits()`. A write only an admin makes, such as setting a
@@ -329,7 +331,10 @@ scheduled from the dependency or route that knows it's needed. It runs once the
 response is sent and the request's session has committed and closed, so it never uses
 that session. A task that writes the database takes a session factory and opens its own
 session and transaction. A task that only touches Redis takes the Redis client and
-builds the service it needs, like `libs/auth/after_response_tasks.py`. It's a function
+builds the service it needs, like `libs/auth/after_response_tasks.py`. A task may
+instead hand the session factory to a service that opens its own sessions, as
+`fail_user_unfinished_runs` does with `GenerateTextRunService`. A task that acts on
+several rows logs a failure on one and carries on with the rest. It's a function
 rather than a service because it's scheduled per request with the values it acts on.
 
 A background job outlives the request's session too, so every service it calls takes
@@ -343,8 +348,8 @@ collaborators arrive through `__init__`, and request-scoped services share the
 request's session through their dependency factories.
 
 A lib creates a session in only three places: an after-response task that writes the
-database, the services a background job calls, and a record that must survive the
-caller's rollback (below).
+database, or the service it hands the session factory to; the services a background job
+calls; and a record that must survive the caller's rollback (below).
 
 Everything else a task needs — the Redis client, the domain's settings, the values it
 acts on — is passed in, so `libs/` still never imports `AppSettings`. A time the task
@@ -378,7 +383,10 @@ Names that escape the package stay fully explicit: `user_router`, `UserService`,
   as another sign-in provider, it becomes its own domain and its own lib, rather than a
   second router file.
 - **Cross-domain imports go through `libs/`.** `domains/posts/` may import
-  `libs.users.services`, never `domains.users.*`. When a route needs two domains'
+  `libs.users.services`, never `domains.users.*`. The one exception is a domain's
+  `dependencies.py`, which may import another domain's `...ServiceDep` rather than
+  building the same service twice: `google_auth` takes `AuthSessionServiceDep` and
+  `InviteServiceDep`. When a route needs two domains'
   services to do one thing, compose them in a lib service that takes both through
   `__init__` — libs may depend on libs — so the route keeps one dependency.
 - **`core/` is for what spans every domain**: db session dependency, current-user
@@ -493,7 +501,10 @@ The auth guard, `AuthUserDep` in `core/dependencies.py`, resolves the session to
 and `permissions`, all stored in the session at sign-in. A
 route that needs the acting user takes `AuthUserDep` and passes the `AuthUser` to the
 service. Any service method that writes takes it as its last parameter and fills the
-audit columns from `auth_user.id`. Services never read the current user from
+audit columns from `auth_user.id`. A write whose author isn't the signed-in user takes
+the author's user id instead: an invite redeemed at sign-in grants credits authored by
+the admin who made the invite (`grant_credits(grant_credits_input, granted_by_id)`),
+since no one is signed in yet. Services never read the current user from
 anywhere else.
 
 A route lists the permission it needs first in its `dependencies`, before any
@@ -513,7 +524,8 @@ validation guard, so a caller without it is refused before anything is read:
 `require_permissions(...)` in `core/dependencies.py` raises `ForbiddenException` unless
 the user holds every permission named. Code checks permissions, never roles. Every
 route names a permission, reads included, unless it's open by design: health, Google
-sign-in, logout, the development-only LLM route, and `GET /users/me`, which any
+sign-in, logout, the development-only LLM route, `POST /invites/check`, which someone
+opening an invite link calls before they have an account, and `GET /users/me`, which any
 signed-in user may call for their own profile. A read permission sits in front of the
 service's own access check, such as ownership or a public flag, and doesn't replace it.
 `tests/api/test_app_factory.py` walks the app's routes and fails on one that does
@@ -695,8 +707,9 @@ application code uses the database.
   `create_db_session_factory(db_engine)`. Never build an `async_sessionmaker` by hand;
   the factory carries the session options and the soft-delete rule. Db sessions are
   per-request. The exceptions are a row a long-running route needs (Services › Rows
-  a long-running route needs) and a validation guard on a route that starts a
-  background job (Services › Validation guards).
+  a long-running route needs), a validation guard on a route that starts a
+  background job (Services › Validation guards), and the places a lib creates a session
+  (Services › After-response tasks and background jobs).
 - A service may import any Orm it needs; the domain boundary applies to services, not
   tables.
 - Python code handles aware UTC datetimes only, and every "now" a query compares with
@@ -767,8 +780,9 @@ renamed field can't write to the wrong column. A time it writes is
 `JSONB` column is cleared with `null()`, never `None`, which stores JSON `null` and
 passes `IS NOT NULL`. A service doesn't commit a session it was handed; one that opens
 its own session commits it (Services › Records that must survive a rollback). This
-governs application code. Test factories (`pytest-testing.md` › Test data) and e2e
-seed scripts still create rows through the Orm with `add()` and `flush()`.
+governs application code. Test factories and tests (`pytest-testing.md` › Test data)
+and e2e seed scripts still create and change rows through the Orm with `add()`,
+attributes and `flush()`.
 
 A create returns what its caller needs with `.returning(...)`:
 
@@ -959,6 +973,11 @@ CACHE_KEY_PREFIX = "users:"
 Timeouts, operational limits (rate limits, batch sizes, retry counts), model names,
 and feature flags are settings, not constants. A request field's limit is neither; it
 belongs on the DTO (DTOs › Inbound). Never use an `Enum` to group unrelated constants.
+
+A lookup map between a lib's own types is a constant named `<VALUE>_BY_<KEY>`:
+`INVITE_SIGN_IN_RESULT_TYPE_BY_STATUS_TYPE`. When a subclass has to match before its
+parent, it's a tuple of pairs in that order rather than a dict, like
+`SIGN_IN_ERROR_TYPE_BY_EXCEPTION`. The `Utils` class that reads it does the matching.
 
 ### Prompts
 
@@ -1151,3 +1170,14 @@ def create_app() -> FastAPI:
 - Catch a third-party exception at the lib boundary and raise a standard or lib
   exception from it (`raise LlmUnavailableException(...) from timeout_exception`).
   A third-party exception never reaches `apps/`.
+- **A route the browser navigates to answers a failure with a redirect**, since JSON
+  would leave the user on the API's URL. The Google callback catches the lib exceptions
+  its flow raises and redirects to `{frontend_url}/sign-in?error=<CODE>`. The lib owns
+  the map from exception to code and the tuple the route catches
+  (`libs/google_auth/constants.py`), and its `Utils` does the matching
+  (`GoogleAuthUtils.find_sign_in_error_type`, `build_sign_in_error_url`); the route
+  only catches and redirects.
+  An exception not in the map still reaches the standard handlers.
+- A lib may build a frontend URL to redirect to in its own `Utils`, from a
+  `frontend_url` passed in: `InviteUtils.build_sign_in_redirect_url`. The values of its
+  enum are the query values the frontend reads (`?invite_error=INVITE_EXPIRED`).

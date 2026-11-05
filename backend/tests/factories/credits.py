@@ -38,9 +38,13 @@ def build_charge_credits_input(
 
 
 def build_grant_credits_input(
-    *, user_id: int, amount_usd: Decimal = Decimal("5.00"), note: str | None = None
+    *,
+    user_id: int,
+    amount_usd: Decimal = Decimal("5.00"),
+    note: str | None = None,
+    invite_id: int | None = None,
 ) -> GrantCreditsInput:
-    return GrantCreditsInput(user_id=user_id, amount_usd=amount_usd, note=note)
+    return GrantCreditsInput(user_id=user_id, amount_usd=amount_usd, note=note, invite_id=invite_id)
 
 
 async def insert_credit_ledger_row(
@@ -51,6 +55,7 @@ async def insert_credit_ledger_row(
     entry_type: CreditLedgerEntryType = CreditLedgerEntryType.GRANT,
     generate_text_run_id: int | None = None,
     generate_text_step_id: int | None = None,
+    invite_id: int | None = None,
     note: str | None = None,
     created_by_id: int | None = None,
     created_at: datetime | None = None,
@@ -63,6 +68,7 @@ async def insert_credit_ledger_row(
         entry_type=entry_type,
         generate_text_run_id=generate_text_run_id,
         generate_text_step_id=generate_text_step_id,
+        invite_id=invite_id,
         note=note,
         created_by_id=author_id,
         updated_by_id=author_id,

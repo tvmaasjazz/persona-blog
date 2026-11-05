@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from libs.credits.types import CreditLedgerEntryType
+from libs.invites.types import InviteStatusType
 from libs.permissions.types import RoleType
 
 
@@ -52,3 +53,26 @@ class AdminSetUserRoleResult(BaseModel):
 class AdminSetUserActiveResult(BaseModel):
     user_id: int
     is_changed: bool
+
+
+class AdminCreateInviteResult(BaseModel):
+    identity: UUID
+    invite_url: str
+
+
+class AdminInviteDetailResult(BaseModel):
+    identity: UUID
+    name: str
+    credit_amount_usd: Decimal
+    note: str | None
+    status: InviteStatusType
+    expires_at: datetime
+    used_at: datetime | None
+    used_by_email: str | None
+    revoked_at: datetime | None
+    created_at: datetime
+    created_by_email: str
+
+
+class AdminFindInviteListResult(BaseModel):
+    invites: list[AdminInviteDetailResult]

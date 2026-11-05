@@ -1,7 +1,7 @@
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.core.exceptions import ForbiddenException, NotFoundException
@@ -14,7 +14,8 @@ from libs.users.results import FindOrCreateUserFromAuthProviderResult, FindUserB
 
 
 class UserService:
-    """Finds users and creates them on first sign-in through an auth provider."""
+    """Finds users, creates them on first sign-in through an auth provider, and makes
+    readers creators."""
 
     def __init__(
         self, db_session: AsyncSession, *, low_credit_balance_threshold_usd: Decimal
@@ -60,6 +61,24 @@ class UserService:
             credit_balance_usd=user_record.credit_balance_usd,
             is_credit_balance_low=is_credit_balance_low,
         )
+
+    async def make_reader_creator(self, user_id: int, updated_by_id: int) -> bool:
+        """Makes a reader a creator and returns whether it did; any other role is left alone."""
+        reader_role_id_query = select(RoleOrm.id).where(RoleOrm.code == RoleType.READER)
+        creator_role_id_query = select(RoleOrm.id).where(RoleOrm.code == RoleType.CREATOR)
+        user_role_update = (
+            update(UserOrm)
+            .where(
+                UserOrm.id == user_id,
+                UserOrm.role_id == reader_role_id_query.scalar_subquery(),
+            )
+            .values(
+                role_id=creator_role_id_query.scalar_subquery(),
+                updated_by_id=updated_by_id,
+            )
+        )
+        user_role_update_result = await self._db_session.execute(user_role_update)
+        return user_role_update_result.rowcount == 1
 
     async def _find_user_from_auth_provider(
         self,

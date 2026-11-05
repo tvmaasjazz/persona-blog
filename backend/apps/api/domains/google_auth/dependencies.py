@@ -5,10 +5,12 @@ from fastapi import Depends, Request
 from apps.api.core.config import AppSettings
 from apps.api.core.dependencies import DbSessionDep
 from apps.api.domains.auth.dependencies import AuthSessionServiceDep
+from apps.api.domains.invites.dependencies import InviteServiceDep
+from apps.api.domains.users.dependencies import UserServiceDep
 from libs.auth.services import OAuthStateService
 from libs.google_auth.services import GoogleOAuthService, GoogleSignInService
 from libs.permissions.services import PermissionService
-from libs.users.services import UserActivityService, UserService
+from libs.users.services import UserActivityService
 
 
 def get_oauth_state_service(request: Request) -> OAuthStateService:
@@ -43,6 +45,8 @@ def get_google_sign_in_service(
     google_oauth_service: GoogleOAuthServiceDep,
     auth_session_service: AuthSessionServiceDep,
     db_session: DbSessionDep,
+    user_service: UserServiceDep,
+    invite_service: InviteServiceDep,
 ) -> GoogleSignInService:
     app_settings: AppSettings = request.app.state.settings
     user_activity_service = UserActivityService(
@@ -52,13 +56,12 @@ def get_google_sign_in_service(
     )
     return GoogleSignInService(
         google_oauth_service=google_oauth_service,
-        user_service=UserService(
-            db_session=db_session,
-            low_credit_balance_threshold_usd=app_settings.credits.low_balance_threshold_usd,
-        ),
+        user_service=user_service,
         user_activity_service=user_activity_service,
         auth_session_service=auth_session_service,
         permission_service=PermissionService(db_session=db_session),
+        invite_service=invite_service,
+        frontend_url=app_settings.auth.frontend_url,
     )
 
 

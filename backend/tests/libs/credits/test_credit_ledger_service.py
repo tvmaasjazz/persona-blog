@@ -14,7 +14,6 @@ from libs.credits.results import (
 from libs.credits.services import CreditLedgerService
 from libs.credits.types import CreditLedgerEntryType
 from libs.database.orm.credit_ledger import CreditLedgerOrm
-from tests.factories.auth import build_auth_user
 from tests.factories.credits import (
     build_charge_credits_input,
     build_grant_credits_input,
@@ -24,6 +23,7 @@ from tests.factories.generate_text import (
     insert_generate_text_run_row,
     insert_generate_text_step_row,
 )
+from tests.factories.invites import insert_invite_row
 from tests.factories.users import insert_user_row
 
 
@@ -286,13 +286,12 @@ async def test_grant_credits_writes_grant_row_and_raises_balance(
 ) -> None:
     user_record = await insert_user_row(db_session, credit_balance_usd=Decimal("1.00"))
     admin_record = await insert_user_row(db_session)
-    admin_auth_user = build_auth_user(user_id=admin_record.id, user_identity=admin_record.identity)
     grant_credits_input = build_grant_credits_input(
         user_id=user_record.id, amount_usd=Decimal("5.00"), note="Welcome credit"
     )
     credit_ledger_service = CreditLedgerService(db_session=db_session)
 
-    await credit_ledger_service.grant_credits(grant_credits_input, admin_auth_user)
+    await credit_ledger_service.grant_credits(grant_credits_input, admin_record.id)
 
     await db_session.refresh(user_record)
     grant_query = select(CreditLedgerOrm).where(CreditLedgerOrm.user_id == user_record.id)
@@ -308,17 +307,53 @@ async def test_grant_credits_writes_grant_row_and_raises_balance(
     assert user_record.credit_balance_usd == Decimal("6.00")
 
 
+async def test_grant_credits_invite_id_is_written_to_the_ledger_row(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session)
+    admin_record = await insert_user_row(db_session)
+    invite_record = await insert_invite_row(db_session, created_by_id=admin_record.id)
+    grant_credits_input = build_grant_credits_input(
+        user_id=user_record.id, invite_id=invite_record.id
+    )
+    credit_ledger_service = CreditLedgerService(db_session=db_session)
+
+    await credit_ledger_service.grant_credits(grant_credits_input, admin_record.id)
+
+    invite_id_query = select(CreditLedgerOrm.invite_id).where(
+        CreditLedgerOrm.user_id == user_record.id
+    )
+    ledger_invite_id = await db_session.scalar(invite_id_query)
+    assert ledger_invite_id == invite_record.id
+
+
+async def test_grant_credits_without_invite_id_leaves_it_empty(
+    db_session: AsyncSession,
+) -> None:
+    user_record = await insert_user_row(db_session)
+    admin_record = await insert_user_row(db_session)
+    grant_credits_input = build_grant_credits_input(user_id=user_record.id)
+    credit_ledger_service = CreditLedgerService(db_session=db_session)
+
+    await credit_ledger_service.grant_credits(grant_credits_input, admin_record.id)
+
+    invite_id_query = select(CreditLedgerOrm.invite_id).where(
+        CreditLedgerOrm.user_id == user_record.id
+    )
+    ledger_invite_id = await db_session.scalar(invite_id_query)
+    assert ledger_invite_id is None
+
+
 async def test_grant_credits_returns_identity_of_new_ledger_row(
     db_session: AsyncSession,
 ) -> None:
     user_record = await insert_user_row(db_session)
     admin_record = await insert_user_row(db_session)
-    admin_auth_user = build_auth_user(user_id=admin_record.id, user_identity=admin_record.identity)
     grant_credits_input = build_grant_credits_input(user_id=user_record.id)
     credit_ledger_service = CreditLedgerService(db_session=db_session)
 
     grant_credits_result = await credit_ledger_service.grant_credits(
-        grant_credits_input, admin_auth_user
+        grant_credits_input, admin_record.id
     )
 
     grant_identity_query = select(CreditLedgerOrm.identity).where(
@@ -332,12 +367,11 @@ async def test_grant_credits_unknown_user_raises_not_found_exception_and_writes_
     db_session: AsyncSession,
 ) -> None:
     admin_record = await insert_user_row(db_session)
-    admin_auth_user = build_auth_user(user_id=admin_record.id, user_identity=admin_record.identity)
     grant_credits_input = build_grant_credits_input(user_id=999999, note="Orphan grant")
     credit_ledger_service = CreditLedgerService(db_session=db_session)
 
     with pytest.raises(NotFoundException):
-        await credit_ledger_service.grant_credits(grant_credits_input, admin_auth_user)
+        await credit_ledger_service.grant_credits(grant_credits_input, admin_record.id)
 
     orphan_grant_count_query = select(func.count(CreditLedgerOrm.id)).where(
         CreditLedgerOrm.note == "Orphan grant"

@@ -177,7 +177,8 @@ default.
   behaviour under test is that one message lists several problems, check each problem
   with `in`, never the exact full string.
 - Compare floats with `pytest.approx`.
-- Don't assert on log wording, exception messages, or FastAPI's validation `msg`.
+- Don't assert on log wording, exception messages, or FastAPI's validation `msg`. A log
+  event's name and keys aren't wording (§9).
 
 ### Parametrize
 
@@ -241,6 +242,9 @@ calls.
 - A test that must act while a job is mid-step uses the stub's blocking hooks, never a
   sleep: set `<method>_is_blocked`, wait on `<method>_started_event` to know the job
   got there, then set `<method>_unblock_event` to let it carry on.
+- A background job's failure is only logged, as `background_job_failed`, since
+  `drain` never re-raises. A test that has to prove a job ended quietly wraps the drain
+  in `structlog.testing.capture_logs()` and asserts that event is absent.
 - A test that starts a background job waits for it with
   `await background_job_service.drain(...)` before asserting or touching the database
   again. The job and the test share one test connection, which can't serve two
@@ -280,7 +284,13 @@ How to write a stub:
 - Never call `super().__init__()`. A method that isn't overridden then fails loudly
   instead of doing real work.
 - A stub may wrap a real instance of the class and pass calls through to it, when the
-  test needs the real effect plus a hook, such as an event to wait on.
+  test needs the real effect plus a hook, such as an event to wait on. It then passes
+  through every method its consumer calls, since an un-`__init__`'d subclass has no
+  state of its own.
+- A stub of a third-party boundary may hold the real collaborator that writes to Redis
+  or the database, set by the test, so a route test can assert what was stored while
+  the outside call stays stubbed: `WeatherServiceStub` passes `fetch_forecast`'s
+  forecast to a real `ForecastCacheService` in `fetch_forecast_forecast_cache_service`.
 - Name the stub's attributes `<method>_` plus what they hold:
   - `<method>_inputs`: every input received, in order
   - `<method>_result`: the value to return
@@ -289,6 +299,8 @@ How to write a stub:
     raises, so a test that makes more calls than it scripted fails. An exception in
     the list is raised instead of returned, for "fails, then succeeds"
   - `<method>_error`: an exception to raise instead
+  - `<method>_<collaborator>`: a real collaborator the method passes its work to, set by
+    the test (above)
 
 ```python
 # tests/stubs/weather.py
@@ -325,6 +337,14 @@ Test data comes from `tests/factories/<domain>.py`, one module per lib domain:
   same timestamp. A factory leaves the column unset when it's `None`, so the default
   fills it in.
 - Write out keyword parameters, never `**overrides`, so a typo fails.
+- A test may change a column on a row it inserted, then flush, to move the database to
+  the next state it needs partway through, such as reactivating a user after asserting
+  what's hidden while they're suspended (`owner_record.is_active = True`). The starting
+  state comes from the factory's parameters, and reaching either through a service
+  would make the test depend on another service.
+- A test whose behaviour depends on the exception hierarchy, such as most-specific
+  matching, may declare a throwaway subclass in its own module, named
+  `<What>Exception`.
 
 ```python
 # tests/factories/users.py
@@ -896,6 +916,7 @@ def test_app_settings_env_var_overrides_toml(
 | Situation                         | Pattern |
 | --------------------------------- | ------- |
 | A log event is a requirement (token counts per LLM call, see §12) | Wrap the act in `structlog.testing.capture_logs()`; find the event by name and assert its keys |
+| A failure event must be absent, such as `background_job_failed` (see Async) | Wrap the act in `capture_logs()` and assert no event has that name |
 | Request-id middleware             | A route test on any route: the response carries the header, and a header sent in is echoed back |
 | Not tested                        | Log formatting, renderer output, Logfire export |
 

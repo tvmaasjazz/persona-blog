@@ -50,3 +50,33 @@ async def test_consume_state_unknown_state_raises_sign_in_state_expired_exceptio
 
     with pytest.raises(AuthSignInStateExpiredException):
         await oauth_state_service.consume_state("unknown-state")
+
+
+async def test_create_state_invite_code_is_stored_in_the_state(redis_client: Redis) -> None:
+    oauth_state_service = OAuthStateService(redis_client=redis_client, auth_settings=AuthSettings())
+
+    oauth_state_result = await oauth_state_service.create_state("invite-code-1")
+
+    stored_state = await redis_client.get(f"oauth-state:{oauth_state_result.oauth_state}")
+    assert stored_state is not None
+    assert OAuthStateResult.model_validate_json(stored_state).invite_code == "invite-code-1"
+    assert oauth_state_result.invite_code == "invite-code-1"
+
+
+async def test_create_state_without_invite_code_stores_none(redis_client: Redis) -> None:
+    oauth_state_service = OAuthStateService(redis_client=redis_client, auth_settings=AuthSettings())
+
+    oauth_state_result = await oauth_state_service.create_state()
+
+    assert oauth_state_result.invite_code is None
+
+
+async def test_consume_state_returns_the_invite_code_the_state_was_created_with(
+    redis_client: Redis,
+) -> None:
+    oauth_state_service = OAuthStateService(redis_client=redis_client, auth_settings=AuthSettings())
+    oauth_state_result = await oauth_state_service.create_state("invite-code-1")
+
+    consume_state_result = await oauth_state_service.consume_state(oauth_state_result.oauth_state)
+
+    assert consume_state_result.invite_code == "invite-code-1"

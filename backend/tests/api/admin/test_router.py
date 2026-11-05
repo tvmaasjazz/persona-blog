@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import ANY
 from uuid import UUID
@@ -12,12 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.core.config import AppSettings
 from libs.auth.services import AuthSessionService
 from libs.credits.types import CreditLedgerEntryType
-from libs.database.orm import CreditLedgerOrm, RoleOrm, UserOrm
+from libs.database.orm import CreditLedgerOrm, InviteOrm, RoleOrm, UserOrm
 from libs.generate_text.types import GenerateTextRunStatusType
+from libs.invites.utils import InviteUtils
 from libs.permissions.types import RoleType
 from tests.factories.auth import build_auth_user
 from tests.factories.credits import insert_credit_ledger_row
+from tests.factories.database import fetch_database_utc_now
 from tests.factories.generate_text import insert_generate_text_run_row
+from tests.factories.invites import insert_invite_row
 from tests.factories.users import find_system_user_row, insert_user_row
 
 UNKNOWN_USER_IDENTITY = "7b0f3c1e-5d2a-4e8b-9a61-0c4d2f8e1a53"
@@ -1059,3 +1062,377 @@ async def test_set_user_active_signed_out_returns_401(api_client: AsyncClient) -
     )
 
     assert set_user_active_response.status_code == 401
+
+
+# POST /admin/invites
+
+INVITE_URL_PREFIX = "http://localhost:5173/invite/"
+
+
+async def _count_invite_rows(db_session: AsyncSession) -> int | None:
+    invite_count_query = select(func.count(InviteOrm.id))
+    return await db_session.scalar(invite_count_query)
+
+
+async def test_create_invite_returns_identity_and_link_and_stores_only_the_code_hash(
+    api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
+) -> None:
+    create_invite_response = await api_client.post(
+        "/admin/invites",
+        json={
+            "name": "Ada's friends",
+            "credit_amount_usd": "7.50",
+            "note": "Welcome to the beta",
+            "expires_in_days": 3,
+        },
+    )
+
+    response_body = create_invite_response.json()
+    invite_identity = UUID(response_body["identity"])
+    invite_query = select(InviteOrm).where(InviteOrm.identity == invite_identity)
+    invite_record = await db_session.scalar(invite_query)
+    assert create_invite_response.status_code == 201
+    assert response_body == {"identity": str(invite_identity), "invite_url": ANY}
+    assert response_body["invite_url"].startswith(INVITE_URL_PREFIX)
+    invite_code = response_body["invite_url"].removeprefix(INVITE_URL_PREFIX)
+    assert invite_record is not None
+    stored_column_values = [
+        str(getattr(invite_record, column.key)) for column in InviteOrm.__table__.columns
+    ]
+    assert invite_record.code_hash == InviteUtils.hash_code(invite_code)
+    assert all(invite_code not in stored_value for stored_value in stored_column_values)
+    assert invite_record.name == "Ada's friends"
+    assert invite_record.credit_amount_usd == Decimal("7.50")
+    assert invite_record.note == "Welcome to the beta"
+    assert invite_record.created_by_id == signed_in_admin.id
+    assert invite_record.used_at is None
+    assert invite_record.revoked_at is None
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_create_invite_without_expires_in_days_expires_in_seven_days(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    create_invite_response = await api_client.post(
+        "/admin/invites", json={"name": "Ada's friends", "credit_amount_usd": "5"}
+    )
+
+    invite_identity = UUID(create_invite_response.json()["identity"])
+    expires_at_query = select(InviteOrm.expires_at).where(InviteOrm.identity == invite_identity)
+    expires_at = await db_session.scalar(expires_at_query)
+    database_utc_now = await fetch_database_utc_now(db_session)
+    assert create_invite_response.status_code == 201
+    assert expires_at == database_utc_now + timedelta(days=7)
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize("expires_in_days", [1, 30])
+async def test_create_invite_expires_in_days_limits_set_the_expiry(
+    api_client: AsyncClient, db_session: AsyncSession, expires_in_days: int
+) -> None:
+    create_invite_response = await api_client.post(
+        "/admin/invites",
+        json={
+            "name": "Ada's friends",
+            "credit_amount_usd": "5",
+            "expires_in_days": expires_in_days,
+        },
+    )
+
+    invite_identity = UUID(create_invite_response.json()["identity"])
+    expires_at_query = select(InviteOrm.expires_at).where(InviteOrm.identity == invite_identity)
+    expires_at = await db_session.scalar(expires_at_query)
+    database_utc_now = await fetch_database_utc_now(db_session)
+    assert create_invite_response.status_code == 201
+    assert expires_at == database_utc_now + timedelta(days=expires_in_days)
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_create_invite_blank_note_is_stored_as_no_note(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    create_invite_response = await api_client.post(
+        "/admin/invites",
+        json={"name": "Ada's friends", "credit_amount_usd": "5", "note": "   "},
+    )
+
+    invite_identity = UUID(create_invite_response.json()["identity"])
+    invite_note_query = select(InviteOrm.note).where(InviteOrm.identity == invite_identity)
+    invite_note = await db_session.scalar(invite_note_query)
+    assert create_invite_response.status_code == 201
+    assert invite_note is None
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("request_body", "expected_error_location"),
+    [
+        pytest.param({"credit_amount_usd": "5"}, ["body", "name"], id="missing_name"),
+        pytest.param({"name": "   ", "credit_amount_usd": "5"}, ["body", "name"], id="blank_name"),
+        pytest.param(
+            {"name": "a" * 201, "credit_amount_usd": "5"}, ["body", "name"], id="name_too_long"
+        ),
+        pytest.param({"name": "Ada"}, ["body", "credit_amount_usd"], id="missing_amount"),
+        pytest.param(
+            {"name": "Ada", "credit_amount_usd": "0"}, ["body", "credit_amount_usd"], id="zero"
+        ),
+        pytest.param(
+            {"name": "Ada", "credit_amount_usd": "100.01"},
+            ["body", "credit_amount_usd"],
+            id="above_limit",
+        ),
+        pytest.param(
+            {"name": "Ada", "credit_amount_usd": "5", "expires_in_days": 0},
+            ["body", "expires_in_days"],
+            id="expires_in_days_zero",
+        ),
+        pytest.param(
+            {"name": "Ada", "credit_amount_usd": "5", "expires_in_days": 31},
+            ["body", "expires_in_days"],
+            id="expires_in_days_above_limit",
+        ),
+        pytest.param(
+            {"name": "Ada", "credit_amount_usd": "5", "note": "a" * 501},
+            ["body", "note"],
+            id="note_too_long",
+        ),
+    ],
+)
+async def test_create_invite_invalid_body_returns_422(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    request_body: dict[str, str | int],
+    expected_error_location: list[str],
+) -> None:
+    create_invite_response = await api_client.post("/admin/invites", json=request_body)
+
+    response_body = create_invite_response.json()
+    invite_row_count = await _count_invite_rows(db_session)
+    assert create_invite_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == expected_error_location
+    assert invite_row_count == 0
+
+
+async def test_create_invite_signed_out_returns_401(api_client: AsyncClient) -> None:
+    create_invite_response = await api_client.post(
+        "/admin/invites", json={"name": "Ada", "credit_amount_usd": "5"}
+    )
+
+    assert create_invite_response.status_code == 401
+
+
+@pytest.mark.usefixtures("signed_in_user")
+async def test_create_invite_creator_returns_403_and_writes_nothing(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    create_invite_response = await api_client.post(
+        "/admin/invites", json={"name": "Ada", "credit_amount_usd": "5"}
+    )
+
+    invite_row_count = await _count_invite_rows(db_session)
+    assert create_invite_response.status_code == 403
+    assert invite_row_count == 0
+
+
+# GET /admin/invites
+
+
+async def test_find_invite_list_returns_invites_newest_first_with_status_and_emails(
+    api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
+) -> None:
+    user_record = await insert_user_row(db_session, email="ada@example.com")
+    older_invite_record = await insert_invite_row(
+        db_session,
+        name="Used",
+        credit_amount_usd=Decimal("2.50"),
+        note="Hello",
+        used_at=datetime(2026, 1, 5, tzinfo=UTC),
+        used_by_user_id=user_record.id,
+        created_by_id=signed_in_admin.id,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    newer_invite_record = await insert_invite_row(
+        db_session,
+        name="Expired",
+        expires_at=datetime(2026, 1, 3, tzinfo=UTC),
+        created_by_id=signed_in_admin.id,
+        created_at=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+
+    find_invite_list_response = await api_client.get("/admin/invites")
+
+    assert find_invite_list_response.status_code == 200
+    assert find_invite_list_response.json() == {
+        "invites": [
+            {
+                "identity": str(newer_invite_record.identity),
+                "name": "Expired",
+                "credit_amount_usd": "5.0000000000",
+                "note": None,
+                "status": "EXPIRED",
+                "expires_at": "2026-01-03T00:00:00Z",
+                "used_at": None,
+                "used_by_email": None,
+                "revoked_at": None,
+                "created_at": "2026-01-02T00:00:00Z",
+                "created_by_email": signed_in_admin.email,
+            },
+            {
+                "identity": str(older_invite_record.identity),
+                "name": "Used",
+                "credit_amount_usd": "2.5000000000",
+                "note": "Hello",
+                "status": "USED",
+                "expires_at": "2099-01-01T00:00:00Z",
+                "used_at": "2026-01-05T00:00:00Z",
+                "used_by_email": "ada@example.com",
+                "revoked_at": None,
+                "created_at": "2026-01-01T00:00:00Z",
+                "created_by_email": signed_in_admin.email,
+            },
+        ]
+    }
+
+
+async def test_find_invite_list_unused_and_revoked_invites_return_their_status(
+    api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
+) -> None:
+    await insert_invite_row(
+        db_session,
+        name="Revoked",
+        revoked_at=datetime(2026, 1, 6, tzinfo=UTC),
+        created_by_id=signed_in_admin.id,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    await insert_invite_row(
+        db_session,
+        name="Unused",
+        created_by_id=signed_in_admin.id,
+        created_at=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+
+    find_invite_list_response = await api_client.get("/admin/invites")
+
+    invite_statuses = {
+        invite["name"]: invite["status"] for invite in find_invite_list_response.json()["invites"]
+    }
+    assert invite_statuses == {"Unused": "UNUSED", "Revoked": "REVOKED"}
+
+
+async def test_find_invite_list_signed_out_returns_401(api_client: AsyncClient) -> None:
+    find_invite_list_response = await api_client.get("/admin/invites")
+
+    assert find_invite_list_response.status_code == 401
+
+
+@pytest.mark.usefixtures("signed_in_user")
+async def test_find_invite_list_creator_returns_403(api_client: AsyncClient) -> None:
+    find_invite_list_response = await api_client.get("/admin/invites")
+
+    assert find_invite_list_response.status_code == 403
+
+
+# POST /admin/invites/{invite_identity}/revoke
+
+
+async def test_revoke_invite_returns_empty_and_sets_revoked_at(
+    api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
+) -> None:
+    invite_record = await insert_invite_row(db_session, created_by_id=signed_in_admin.id)
+
+    revoke_invite_response = await api_client.post(
+        f"/admin/invites/{invite_record.identity}/revoke"
+    )
+
+    await db_session.refresh(invite_record)
+    database_utc_now = await fetch_database_utc_now(db_session)
+    assert revoke_invite_response.status_code == 200
+    assert revoke_invite_response.json() == {}
+    assert invite_record.revoked_at == database_utc_now
+    assert invite_record.updated_by_id == signed_in_admin.id
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_revoke_invite_expired_invite_is_revoked(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    invite_record = await insert_invite_row(db_session, expires_at=datetime(2026, 1, 2, tzinfo=UTC))
+
+    revoke_invite_response = await api_client.post(
+        f"/admin/invites/{invite_record.identity}/revoke"
+    )
+
+    await db_session.refresh(invite_record)
+    assert revoke_invite_response.status_code == 200
+    assert invite_record.revoked_at is not None
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_revoke_invite_already_revoked_returns_empty_and_changes_nothing(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    invite_record = await insert_invite_row(db_session, revoked_at=datetime(2026, 1, 2, tzinfo=UTC))
+
+    revoke_invite_response = await api_client.post(
+        f"/admin/invites/{invite_record.identity}/revoke"
+    )
+
+    await db_session.refresh(invite_record)
+    assert revoke_invite_response.status_code == 200
+    assert revoke_invite_response.json() == {}
+    assert invite_record.revoked_at == datetime(2026, 1, 2, tzinfo=UTC)
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_revoke_invite_used_invite_returns_409_and_stays_unrevoked(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user_record = await insert_user_row(db_session)
+    invite_record = await insert_invite_row(
+        db_session, used_at=datetime(2026, 1, 2, tzinfo=UTC), used_by_user_id=user_record.id
+    )
+
+    revoke_invite_response = await api_client.post(
+        f"/admin/invites/{invite_record.identity}/revoke"
+    )
+
+    await db_session.refresh(invite_record)
+    assert revoke_invite_response.status_code == 409
+    assert invite_record.revoked_at is None
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_revoke_invite_unknown_invite_returns_404(api_client: AsyncClient) -> None:
+    revoke_invite_response = await api_client.post(f"/admin/invites/{UNKNOWN_USER_IDENTITY}/revoke")
+
+    assert revoke_invite_response.status_code == 404
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_revoke_invite_malformed_invite_identity_returns_422(api_client: AsyncClient) -> None:
+    revoke_invite_response = await api_client.post("/admin/invites/not-a-uuid/revoke")
+
+    response_body = revoke_invite_response.json()
+    assert revoke_invite_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == ["path", "invite_identity"]
+
+
+@pytest.mark.usefixtures("signed_in_user")
+async def test_revoke_invite_creator_returns_403_and_changes_nothing(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    invite_record = await insert_invite_row(db_session)
+
+    revoke_invite_response = await api_client.post(
+        f"/admin/invites/{invite_record.identity}/revoke"
+    )
+
+    await db_session.refresh(invite_record)
+    assert revoke_invite_response.status_code == 403
+    assert invite_record.revoked_at is None
+
+
+async def test_revoke_invite_signed_out_returns_401(api_client: AsyncClient) -> None:
+    revoke_invite_response = await api_client.post(f"/admin/invites/{UNKNOWN_USER_IDENTITY}/revoke")
+
+    assert revoke_invite_response.status_code == 401
