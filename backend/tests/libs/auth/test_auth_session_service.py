@@ -114,10 +114,40 @@ async def test_find_session_deleted_key_raises_unauthorized_exception(
         redis_client=redis_client, auth_settings=AuthSettings()
     )
     session_id = await auth_session_service.create_session(build_auth_user(user_id=42))
-    await auth_session_service.delete_session(session_id)
+    await auth_session_service.delete_session(session_id, 42)
 
     with pytest.raises(UnauthorizedException):
         await auth_session_service.find_session(session_id)
+
+
+async def test_create_session_adds_session_id_to_user_set_with_ttl(
+    redis_client: Redis,
+) -> None:
+    auth_session_service = AuthSessionService(
+        redis_client=redis_client, auth_settings=AuthSettings(session_ttl_seconds=600)
+    )
+
+    session_id = await auth_session_service.create_session(build_auth_user(user_id=42))
+
+    user_session_ids = await redis_client.smembers("user-sessions:42")
+    user_sessions_ttl_seconds = await redis_client.ttl("user-sessions:42")
+    assert user_session_ids == {session_id.encode()}
+    assert 0 < user_sessions_ttl_seconds <= 600
+
+
+async def test_create_session_second_session_joins_the_same_user_set(
+    redis_client: Redis,
+) -> None:
+    auth_session_service = AuthSessionService(
+        redis_client=redis_client, auth_settings=AuthSettings()
+    )
+    auth_user = build_auth_user(user_id=42)
+
+    first_session_id = await auth_session_service.create_session(auth_user)
+    second_session_id = await auth_session_service.create_session(auth_user)
+
+    user_session_ids = await redis_client.smembers("user-sessions:42")
+    assert user_session_ids == {first_session_id.encode(), second_session_id.encode()}
 
 
 async def test_delete_session_removes_key(redis_client: Redis) -> None:
@@ -126,7 +156,93 @@ async def test_delete_session_removes_key(redis_client: Redis) -> None:
     )
     session_id = await auth_session_service.create_session(build_auth_user(user_id=42))
 
-    await auth_session_service.delete_session(session_id)
+    await auth_session_service.delete_session(session_id, 42)
 
     session_exists = await redis_client.exists(f"session:{session_id}")
     assert session_exists == 0
+
+
+async def test_delete_session_removes_id_from_user_set_and_keeps_other_sessions(
+    redis_client: Redis,
+) -> None:
+    auth_session_service = AuthSessionService(
+        redis_client=redis_client, auth_settings=AuthSettings()
+    )
+    auth_user = build_auth_user(user_id=42)
+    deleted_session_id = await auth_session_service.create_session(auth_user)
+    other_session_id = await auth_session_service.create_session(auth_user)
+
+    await auth_session_service.delete_session(deleted_session_id, 42)
+
+    user_session_ids = await redis_client.smembers("user-sessions:42")
+    other_session_exists = await redis_client.exists(f"session:{other_session_id}")
+    assert user_session_ids == {other_session_id.encode()}
+    assert other_session_exists == 1
+
+
+async def test_delete_user_sessions_deletes_every_session_and_the_set(
+    redis_client: Redis,
+) -> None:
+    auth_session_service = AuthSessionService(
+        redis_client=redis_client, auth_settings=AuthSettings()
+    )
+    auth_user = build_auth_user(user_id=42)
+    first_session_id = await auth_session_service.create_session(auth_user)
+    second_session_id = await auth_session_service.create_session(auth_user)
+
+    await auth_session_service.delete_user_sessions(42)
+
+    remaining_key_count = await redis_client.exists(
+        f"session:{first_session_id}", f"session:{second_session_id}", "user-sessions:42"
+    )
+    assert remaining_key_count == 0
+
+
+async def test_delete_user_sessions_leaves_another_users_sessions(
+    redis_client: Redis,
+) -> None:
+    auth_session_service = AuthSessionService(
+        redis_client=redis_client, auth_settings=AuthSettings()
+    )
+    await auth_session_service.create_session(build_auth_user(user_id=42))
+    other_session_id = await auth_session_service.create_session(build_auth_user(user_id=43))
+
+    await auth_session_service.delete_user_sessions(42)
+
+    other_session_exists = await redis_client.exists(f"session:{other_session_id}")
+    other_user_session_ids = await redis_client.smembers("user-sessions:43")
+    assert other_session_exists == 1
+    assert other_user_session_ids == {other_session_id.encode()}
+
+
+async def test_delete_user_sessions_user_without_set_deletes_nothing(
+    redis_client: Redis,
+) -> None:
+    auth_session_service = AuthSessionService(
+        redis_client=redis_client, auth_settings=AuthSettings()
+    )
+    other_session_id = await auth_session_service.create_session(build_auth_user(user_id=43))
+
+    await auth_session_service.delete_user_sessions(42)
+
+    other_session_exists = await redis_client.exists(f"session:{other_session_id}")
+    assert other_session_exists == 1
+
+
+async def test_delete_user_sessions_expired_session_still_clears_the_set(
+    redis_client: Redis,
+) -> None:
+    auth_session_service = AuthSessionService(
+        redis_client=redis_client, auth_settings=AuthSettings()
+    )
+    auth_user = build_auth_user(user_id=42)
+    expired_session_id = await auth_session_service.create_session(auth_user)
+    live_session_id = await auth_session_service.create_session(auth_user)
+    await redis_client.delete(f"session:{expired_session_id}")
+
+    await auth_session_service.delete_user_sessions(42)
+
+    remaining_key_count = await redis_client.exists(
+        f"session:{live_session_id}", "user-sessions:42"
+    )
+    assert remaining_key_count == 0
