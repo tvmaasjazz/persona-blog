@@ -41,7 +41,7 @@ backend/tests/
 ├── conftest.py              # shared by every app and lib: environment, settings, db, redis
 ├── factories/
 │   ├── auth.py              # build_auth_user: an AuthUser with a role's permissions
-│   └── users.py             # build_* and insert_*_row for one lib domain
+│   └── users.py             # build_*, insert_*_row and find_*_row for one lib domain
 ├── stubs/
 │   ├── http.py              # HttpHandlerStub
 │   └── weather.py           # WeatherServiceStub
@@ -57,7 +57,7 @@ backend/tests/
 │       ├── test_services.py
 │       └── test_prompts.py
 ├── api/
-│   ├── conftest.py          # app fixtures: fastapi_app, api_client, signed_in_user, signed_in_reader
+│   ├── conftest.py          # app fixtures: fastapi_app, api_client, signed_in_user, signed_in_reader, signed_in_admin
 │   ├── core/
 │   │   ├── test_config.py
 │   │   ├── test_exception_handlers.py
@@ -103,7 +103,7 @@ backend/tests/
 | `libs/<d>/inputs.py`, `results.py`   | `tests/libs/<d>/test_inputs.py`, `test_results.py` | Only models with a validator or declared constraint: accepted and rejected values (§1) |
 | `libs/<d>/states.py`                 | `tests/libs/<d>/test_states.py`        | Only a method that does more than group stored fields; otherwise the graph and service tests cover it |
 | Class with an enum dispatch map      | That class's test file                 | Every enum member has a handler (§1) |
-| `apps/api/domains/<d>/router.py`     | `tests/api/<d>/test_router.py`         | For each route: happy path, 422 per declared constraint, each exception the service raises, 401 if protected, 403 if a reader lacks its permission, persisted state for writes (§6) |
+| `apps/api/domains/<d>/router.py`     | `tests/api/<d>/test_router.py`         | For each route: happy path, 422 per declared constraint, each exception the service raises, 401 if protected, 403 with `signed_in_reader` (or `signed_in_user` on an admin route) if it lacks the permission, persisted state for writes (§6) |
 | `apps/api/domains/<d>/dtos.py`       | None, unless a mapper has logic        | Route tests cover plain field copying |
 | `apps/api/core/dtos.py`              | `tests/api/core/test_dtos.py`          | Each field type with a serializer: what it writes in JSON, that it parses back to the same value, and that it is unchanged outside JSON |
 | `apps/api/domains/<d>/dependencies.py` | None                                 | Route tests run the real factories |
@@ -113,7 +113,7 @@ backend/tests/
 | `apps/api/core/exception_handlers.py` | `tests/api/core/test_exception_handlers.py` | Each standard exception maps to its status; a lib exception gets its parent's; unhandled errors return 500 without internals (§7) |
 | `libs/core/exceptions.py`, `libs/<d>/exceptions.py` | None                   | The app factory tests and the service tests that raise them cover these |
 | `apps/api/lifespan.py`               | `tests/api/test_lifespan.py`           | Resources created at startup and closed at shutdown (§7) |
-| `libs/<d>/after_response_tasks.py`   | `tests/libs/<d>/test_after_response_tasks.py` | Call the task directly with the `db_session_factory` and `redis_client` fixtures, and assert the persisted effect |
+| `libs/<d>/after_response_tasks.py`   | `tests/libs/<d>/test_after_response_tasks.py` | Call the task directly with the fixtures it takes (`db_session_factory`, `redis_client`), and assert the persisted effect |
 | A service method that starts a background job | That service's test file, and the route's | Drain the job before asserting (see Async) |
 | `apps/api/core/event_loop_monitor.py` | `tests/api/core/test_event_loop_monitor.py` | A blocked loop logs `event_loop_lag`; an idle one logs nothing. Pass a short sample and a generous threshold. The one test allowed to block the loop and sleep (see Async) |
 | Middleware                           | `tests/api/test_<module>.py`           | Observable effect on a real route (§9) |
@@ -221,8 +221,9 @@ calls.
 - When a fixture is only needed for its side effect, request it with
   `@pytest.mark.usefixtures("signed_in_user")`, not as an unused argument.
 - Test data is not a fixture. Build any value a test asserts on inside that test,
-  with a `factories/` function. The shared data fixtures are `signed_in_user` and
-  `signed_in_reader` (§6), because signing in is setup, not the thing under test.
+  with a `factories/` function. The shared data fixtures are `signed_in_user`,
+  `signed_in_reader` and `signed_in_admin` (§6), because signing in is setup, not the
+  thing under test.
 
 ### Async
 
@@ -313,10 +314,16 @@ Test data comes from `tests/factories/<domain>.py`, one module per lib domain:
 - `insert_<entity>_row(db_session, ...)` adds and flushes an `Orm` and returns it.
   Async. It bypasses services, so a test of one service never depends on another
   service working.
+- `find_<entity>_row(db_session)` returns a row the migrations seed, such as the
+  system user. Async.
 - Every parameter is keyword-only with a valid default, so a test passes only the
   values it asserts on. Unique columns default to a fresh value.
 - Datetimes are aware UTC literals: `datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)`. A
   naive datetime fails at flush.
+- A test that needs an exact `created_at` order passes `created_at` to the
+  `insert_*_row` factory, since every row in a test's transaction otherwise gets the
+  same timestamp. A factory leaves the column unset when it's `None`, so the default
+  fills it in.
 - Write out keyword parameters, never `**overrides`, so a typo fails.
 
 ```python
@@ -400,7 +407,7 @@ asyncio_default_test_loop_scope = "session"
 `environment_variables` fixture that points the suite at `pb_test` and Redis index 15,
 `app_settings`, `db_engine`, `db_connection`, `db_session_factory`, `db_session` and
 `redis_client`. `tests/api/conftest.py` holds the app fixtures — `fastapi_app`,
-`api_client`, `signed_in_user` and `signed_in_reader` — so only tests under `tests/api/` can see them, and
+`api_client`, `signed_in_user`, `signed_in_reader` and `signed_in_admin` — so only tests under `tests/api/` can see them, and
 lib tests can't reach the app. Read those two files rather than copying them from here.
 
 What these fixtures guarantee:
@@ -651,9 +658,10 @@ def weather_service_stub(fastapi_app: FastAPI) -> WeatherServiceStub:
 (`AuthUserDep`). A session holds an `AuthUser` with a role and its permissions, built
 with `build_auth_user` (`tests/factories/auth.py`), which gives a role its seeded
 permissions unless the test passes others. `signed_in_user` is a creator, so it holds
-every route's permission, and starts with $5.00 of credit, enough to start a run;
+every route's permission but the admin routes', and starts with $5.00 of credit, enough to start a run;
 `signed_in_reader` is a reader, which holds only the persona and blog post reads, and
-starts at $0.
+starts at $0. `signed_in_admin` is an admin, which holds every permission, and starts at
+$0.
 
 ```python
 # tests/api/conftest.py
@@ -689,9 +697,10 @@ async def signed_in_user(
 | Response hides internals      | Whole-body equality already covers it: an extra field like `google_subject_id` fails |
 | Protected route, signed out   | One test per protected route using plain `api_client`; assert 401 |
 | Protected route, signed in    | `@pytest.mark.usefixtures("signed_in_user")`, or request it to use the user's values |
-| Signed in without the route's permission | One test per route whose permission a reader lacks, with `signed_in_reader`; assert 403, and for a write, select to prove nothing was written or changed. A read every role holds needs none: `test_dependencies.py` covers refusal |
+| Signed in without the route's permission | Except on admin routes (see Admin route), one test per route whose permission a reader lacks, with `signed_in_reader`; assert 403, and for a write, select to prove nothing was written or changed. A read every role holds needs none: `test_dependencies.py` covers refusal |
 | Invalid or expired session    | Covered once by `find_session`'s tests in `tests/libs/auth/test_auth_session_service.py` (missing, expired, old shape), not per route |
-| Another user's rows           | Create them through a second signed-in client, the way a real second user would. Never insert them with a factory in a route test |
+| Another user's rows           | Create them through a second signed-in client, the way a real second user would. Never insert them with a factory in a route test, except on an admin route (next row) |
+| Admin route                   | `signed_in_admin` for the happy path, `signed_in_user` (a creator) for the 403. Insert the target users with `insert_user_row`: an admin route acts on specific users with chosen values, such as a role, a balance or a `created_at`, which signing in through a second client can't set |
 | Not found → 404               | Use an id that was never inserted |
 | Redirect                      | httpx doesn't follow redirects by default. Assert the status, then check `Location` with `urllib.parse` |
 | Set-Cookie attributes         | Read `response.headers.get_list("set-cookie")`; assert `HttpOnly`, `Secure` for the environment, and `SameSite` |
