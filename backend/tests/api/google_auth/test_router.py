@@ -12,7 +12,7 @@ from libs.auth.results import AuthUser, OAuthStateResult
 from libs.auth.types import AuthProviderType
 from libs.core.exceptions import UnauthorizedException
 from libs.credits.types import CreditLedgerEntryType
-from libs.database.orm import CreditLedgerOrm, UserAuthProviderOrm, UserOrm
+from libs.database.orm import CreditLedgerOrm, RoleOrm, UserAuthProviderOrm, UserOrm
 from libs.invites.utils import InviteUtils
 from libs.permissions.types import PermissionType, RoleType
 from tests.factories.google_auth import build_google_identity_result
@@ -234,7 +234,7 @@ async def test_get_google_login_unknown_invite_redirects_to_sign_in_and_stores_n
 
     redirect_location = urlparse(get_google_login_response.headers["location"])
     stored_oauth_states = await _find_stored_oauth_states(redis_client)
-    assert get_google_login_response.status_code == 303
+    assert get_google_login_response.status_code == 307
     assert redirect_location.path == "/sign-in"
     assert parse_qs(redirect_location.query) == {"invite_error": ["INVITE_NOT_FOUND"]}
     assert stored_oauth_states == []
@@ -257,7 +257,7 @@ async def test_get_google_login_used_invite_redirects_to_sign_in_and_stores_no_s
 
     redirect_location = urlparse(get_google_login_response.headers["location"])
     stored_oauth_states = await _find_stored_oauth_states(redis_client)
-    assert get_google_login_response.status_code == 303
+    assert get_google_login_response.status_code == 307
     assert redirect_location.path == "/sign-in"
     assert parse_qs(redirect_location.query) == {"invite_error": ["INVITE_USED"]}
     assert stored_oauth_states == []
@@ -278,7 +278,7 @@ async def test_get_google_login_expired_invite_redirects_to_sign_in_and_stores_n
 
     redirect_location = urlparse(get_google_login_response.headers["location"])
     stored_oauth_states = await _find_stored_oauth_states(redis_client)
-    assert get_google_login_response.status_code == 303
+    assert get_google_login_response.status_code == 307
     assert redirect_location.path == "/sign-in"
     assert parse_qs(redirect_location.query) == {"invite_error": ["INVITE_EXPIRED"]}
     assert stored_oauth_states == []
@@ -299,7 +299,7 @@ async def test_get_google_login_revoked_invite_redirects_to_sign_in_and_stores_n
 
     redirect_location = urlparse(get_google_login_response.headers["location"])
     stored_oauth_states = await _find_stored_oauth_states(redis_client)
-    assert get_google_login_response.status_code == 303
+    assert get_google_login_response.status_code == 307
     assert redirect_location.path == "/sign-in"
     assert parse_qs(redirect_location.query) == {"invite_error": ["INVITE_REVOKED"]}
     assert stored_oauth_states == []
@@ -331,6 +331,12 @@ async def test_get_google_callback_new_user_with_invite_signs_in_as_creator_and_
     user_record = await db_session.scalar(user_query)
     assert user_record is not None
     await db_session.refresh(invite_record)
+    role_code_query = (
+        select(RoleOrm.code)
+        .join(UserOrm, UserOrm.role_id == RoleOrm.id)
+        .where(UserOrm.id == user_record.id)
+    )
+    saved_role_code = await db_session.scalar(role_code_query)
     ledger_query = select(CreditLedgerOrm).where(CreditLedgerOrm.user_id == user_record.id)
     ledger_record = await db_session.scalar(ledger_query)
     session_id = get_google_callback_response.cookies.get("sid")
@@ -342,6 +348,7 @@ async def test_get_google_callback_new_user_with_invite_signs_in_as_creator_and_
     assert redirect_location.path == "/sign-in"
     assert parse_qs(redirect_location.query) == {"invite": ["ACCEPTED"]}
     assert AuthUser.model_validate_json(stored_session).role == RoleType.CREATOR
+    assert saved_role_code == RoleType.CREATOR
     assert invite_record.used_by_user_id == user_record.id
     assert ledger_record is not None
     assert ledger_record.entry_type == CreditLedgerEntryType.GRANT
@@ -372,6 +379,12 @@ async def test_get_google_callback_known_reader_with_invite_becomes_creator(
         follow_redirects=False,
     )
 
+    role_code_query = (
+        select(RoleOrm.code)
+        .join(UserOrm, UserOrm.role_id == RoleOrm.id)
+        .where(UserOrm.id == user_record.id)
+    )
+    saved_role_code = await db_session.scalar(role_code_query)
     session_id = get_google_callback_response.cookies.get("sid")
     assert session_id is not None
     stored_session = await redis_client.get(f"session:{session_id}")
@@ -379,6 +392,7 @@ async def test_get_google_callback_known_reader_with_invite_becomes_creator(
     redirect_location = urlparse(get_google_callback_response.headers["location"])
     assert parse_qs(redirect_location.query) == {"invite": ["ACCEPTED"]}
     assert AuthUser.model_validate_json(stored_session).role == RoleType.CREATOR
+    assert saved_role_code == RoleType.CREATOR
 
 
 async def test_get_google_callback_invite_used_since_login_redirects_with_invite_used_error(

@@ -115,67 +115,6 @@ async def test_find_invite_status_unknown_code_raises_invite_not_found_exception
         await invite_service.find_invite_status("another-code")
 
 
-# find_invite_sign_in_refusal
-
-
-async def test_find_invite_sign_in_refusal_unused_invite_returns_none(
-    db_session: AsyncSession, invite_service: InviteService
-) -> None:
-    await insert_invite_row(db_session, code_hash=InviteUtils.hash_code("known-code"))
-
-    invite_sign_in_refusal = await invite_service.find_invite_sign_in_refusal("known-code")
-
-    assert invite_sign_in_refusal is None
-
-
-async def test_find_invite_sign_in_refusal_used_invite_returns_invite_used(
-    db_session: AsyncSession, invite_service: InviteService
-) -> None:
-    user_record = await insert_user_row(db_session)
-    await insert_invite_row(
-        db_session,
-        code_hash=InviteUtils.hash_code("known-code"),
-        used_at=PAST,
-        used_by_user_id=user_record.id,
-    )
-
-    invite_sign_in_refusal = await invite_service.find_invite_sign_in_refusal("known-code")
-
-    assert invite_sign_in_refusal == InviteSignInResultType.INVITE_USED
-
-
-async def test_find_invite_sign_in_refusal_expired_invite_returns_invite_expired(
-    db_session: AsyncSession, invite_service: InviteService
-) -> None:
-    await insert_invite_row(
-        db_session, code_hash=InviteUtils.hash_code("known-code"), expires_at=PAST
-    )
-
-    invite_sign_in_refusal = await invite_service.find_invite_sign_in_refusal("known-code")
-
-    assert invite_sign_in_refusal == InviteSignInResultType.INVITE_EXPIRED
-
-
-async def test_find_invite_sign_in_refusal_revoked_invite_returns_invite_revoked(
-    db_session: AsyncSession, invite_service: InviteService
-) -> None:
-    await insert_invite_row(
-        db_session, code_hash=InviteUtils.hash_code("known-code"), revoked_at=PAST
-    )
-
-    invite_sign_in_refusal = await invite_service.find_invite_sign_in_refusal("known-code")
-
-    assert invite_sign_in_refusal == InviteSignInResultType.INVITE_REVOKED
-
-
-async def test_find_invite_sign_in_refusal_unknown_code_returns_invite_not_found(
-    invite_service: InviteService,
-) -> None:
-    invite_sign_in_refusal = await invite_service.find_invite_sign_in_refusal("unknown-code")
-
-    assert invite_sign_in_refusal == InviteSignInResultType.INVITE_NOT_FOUND
-
-
 # redeem_invite
 
 

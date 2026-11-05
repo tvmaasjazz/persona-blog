@@ -26,6 +26,113 @@ from tests.factories.users import insert_user_auth_provider_row, insert_user_row
 from tests.stubs.google_auth import GoogleOAuthServiceStub
 
 
+async def test_build_sign_in_url_without_invite_code_returns_google_authorization_url(
+    db_session: AsyncSession, redis_client: Redis
+) -> None:
+    google_oauth_service_stub = GoogleOAuthServiceStub()
+    google_oauth_service_stub.build_authorization_url_result = "https://google.example/auth?s=1"
+    google_sign_in_service = _build_google_sign_in_service(
+        db_session, redis_client, google_oauth_service_stub=google_oauth_service_stub
+    )
+
+    sign_in_url = await google_sign_in_service.build_sign_in_url(None)
+
+    assert sign_in_url == "https://google.example/auth?s=1"
+    assert google_oauth_service_stub.build_authorization_url_inputs == [None]
+
+
+async def test_build_sign_in_url_usable_invite_returns_google_url_carrying_code(
+    db_session: AsyncSession, redis_client: Redis
+) -> None:
+    await insert_invite_row(db_session, code_hash=InviteUtils.hash_code("known-code"))
+    google_oauth_service_stub = GoogleOAuthServiceStub()
+    google_oauth_service_stub.build_authorization_url_result = "https://google.example/auth?s=1"
+    google_sign_in_service = _build_google_sign_in_service(
+        db_session, redis_client, google_oauth_service_stub=google_oauth_service_stub
+    )
+
+    sign_in_url = await google_sign_in_service.build_sign_in_url("known-code")
+
+    assert sign_in_url == "https://google.example/auth?s=1"
+    assert google_oauth_service_stub.build_authorization_url_inputs == ["known-code"]
+
+
+async def test_build_sign_in_url_unknown_invite_returns_sign_in_url_with_not_found_error(
+    db_session: AsyncSession, redis_client: Redis
+) -> None:
+    google_oauth_service_stub = GoogleOAuthServiceStub()
+    google_sign_in_service = _build_google_sign_in_service(
+        db_session, redis_client, google_oauth_service_stub=google_oauth_service_stub
+    )
+
+    sign_in_url = await google_sign_in_service.build_sign_in_url("unknown-code")
+
+    assert sign_in_url == "https://app.example.com/sign-in?invite_error=INVITE_NOT_FOUND"
+    assert google_oauth_service_stub.build_authorization_url_inputs == []
+
+
+async def test_build_sign_in_url_used_invite_returns_sign_in_url_with_used_error(
+    db_session: AsyncSession, redis_client: Redis
+) -> None:
+    earlier_user_record = await insert_user_row(db_session)
+    await insert_invite_row(
+        db_session,
+        code_hash=InviteUtils.hash_code("known-code"),
+        used_at=datetime(2026, 1, 2, tzinfo=UTC),
+        used_by_user_id=earlier_user_record.id,
+    )
+    google_oauth_service_stub = GoogleOAuthServiceStub()
+    google_sign_in_service = _build_google_sign_in_service(
+        db_session, redis_client, google_oauth_service_stub=google_oauth_service_stub
+    )
+
+    sign_in_url = await google_sign_in_service.build_sign_in_url("known-code")
+
+    assert sign_in_url == "https://app.example.com/sign-in?invite_error=INVITE_USED"
+    assert google_oauth_service_stub.build_authorization_url_inputs == []
+
+
+@pytest.mark.parametrize(
+    ("expires_at", "revoked_at", "expected_sign_in_url"),
+    [
+        pytest.param(
+            datetime(2026, 1, 2, tzinfo=UTC),
+            None,
+            "https://app.example.com/sign-in?invite_error=INVITE_EXPIRED",
+            id="expired",
+        ),
+        pytest.param(
+            datetime(2099, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 2, tzinfo=UTC),
+            "https://app.example.com/sign-in?invite_error=INVITE_REVOKED",
+            id="revoked",
+        ),
+    ],
+)
+async def test_build_sign_in_url_expired_or_revoked_invite_returns_sign_in_url_with_reason(
+    db_session: AsyncSession,
+    redis_client: Redis,
+    expires_at: datetime,
+    revoked_at: datetime | None,
+    expected_sign_in_url: str,
+) -> None:
+    await insert_invite_row(
+        db_session,
+        code_hash=InviteUtils.hash_code("known-code"),
+        expires_at=expires_at,
+        revoked_at=revoked_at,
+    )
+    google_oauth_service_stub = GoogleOAuthServiceStub()
+    google_sign_in_service = _build_google_sign_in_service(
+        db_session, redis_client, google_oauth_service_stub=google_oauth_service_stub
+    )
+
+    sign_in_url = await google_sign_in_service.build_sign_in_url("known-code")
+
+    assert sign_in_url == expected_sign_in_url
+    assert google_oauth_service_stub.build_authorization_url_inputs == []
+
+
 async def test_sign_in_with_google_new_identity_creates_user_and_session(
     db_session: AsyncSession, redis_client: Redis
 ) -> None:
@@ -267,4 +374,5 @@ def _build_google_sign_in_service(
         auth_session_service=auth_session_service,
         permission_service=PermissionService(db_session=db_session),
         invite_service=invite_service,
+        frontend_url="https://app.example.com",
     )
