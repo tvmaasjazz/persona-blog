@@ -10,102 +10,45 @@ folder. `apps/` imports `libs/`, never the reverse.
 
 ```
 backend/
-├── apps/
-│   └── api/
-│       ├── core/
-│       │   ├── config.py      # root AppSettings
-│       │   ├── dependencies.py# global deps: db session, AuthUserDep, require_permissions
-│       │   ├── dtos.py        # IdentityResponseDto, EmptyResponseDto, UsdDecimal
-│       │   ├── event_loop_monitor.py # development-only event loop lag monitor
-│       │   ├── exception_handlers.py # standard exception → status code map
-│       │   ├── logging.py     # configure_logging(), called once from lifespan
-│       │   └── types.py       # app-wide enums: EnvironmentType
-│       ├── domains/
-│       │   ├── admin/                # every admin-only route, under /admin
-│       │   ├── invites/              # POST /invites/check, an open route
-│       │   └── users/
-│       │       ├── dependencies.py   # factories + Annotated aliases
-│       │       ├── router.py
-│       │       └── dtos.py
-│       ├── lifespan.py        # app-scoped resources on app.state
-│       ├── app_factory.py     # create_app()
-│       └── main.py            # app = create_app()
+├── apps/api/
+│   ├── core/            # spans every domain: AppSettings, DbSessionDep, AuthUserDep,
+│   │                    #   require_permissions, shared DTOs, exception map, logging
+│   ├── domains/<name>/  # HTTP only: router.py, dtos.py, dependencies.py
+│   ├── lifespan.py      # app-scoped resources on app.state, app-lifetime loops
+│   └── app_factory.py   # create_app(): the only file that lists every domain
 ├── libs/
-│   ├── core/
-│   │   ├── exceptions.py      # standard exceptions: NotFoundException, ...
-│   │   ├── results.py         # Results returned by the domain-free Utils below
-│   │   ├── settings.py        # BackgroundJobSettings
-│   │   ├── services/          # domain-free services that live as long as the app
-│   │   │   ├── __init__.py
-│   │   │   └── background_job_service.py # BackgroundJobService
-│   │   └── utils/             # domain-free Utils: DateTimeUtils, MarkdownUtils
-│   ├── database/              # tables, Orm classes: see database.md
-│   │   ├── base.py            # BaseOrm: shared columns every table inherits
-│   │   ├── column_types.py    # UtcDateTime
-│   │   ├── constants.py       # naming convention, UTC_NOW_SQL
-│   │   ├── session.py         # create_db_session_factory(), soft-delete rule
-│   │   ├── utils/             # DatabaseClockUtils: the database clock as SQL
-│   │   └── orm/               # every table, one module per entity
-│   │       ├── __init__.py    # imports all modules below
-│   │       ├── user.py        # UserOrm
-│   │       ├── role.py        # RoleOrm, with permission.py and role_permission.py
-│   │       └── persona.py     # PersonaOrm
-│   ├── admin/
-│   │   └── services/          # AdminUserService, AdminCreditService, AdminInviteService
-│   ├── auth/
-│   │   └── services/          # a lib with more than one service
-│   │       ├── __init__.py    # re-exports both
-│   │       ├── auth_session_service.py
-│   │       └── oauth_state_service.py
-│   ├── credits/
-│   │   └── services/          # CreditLedgerService, CreditValidationService
-│   ├── invites/               # InviteService: checks and redeems an invite code
-│   ├── permissions/
-│   │   ├── services.py        # PermissionService: which permissions a role holds
-│   │   └── types.py           # RoleType, PermissionType
-│   └── users/
-│       ├── services.py        # UserService
-│       ├── utils/             # UserUtils: static builders and mappers, if any
-│       ├── states.py          # UserState, if the domain has a graph
-│       ├── graphs.py          # build_user_graph(), and its routing functions
-│       ├── inputs.py          # CreateUserInput, ...
-│       ├── results.py         # CreateUserResult, ...
-│       ├── settings.py        # UserSettings (BaseModel)
-│       ├── prompts.py         # ...Prompt classes, if the domain uses an LLM
-│       ├── exceptions.py      # UserEmailTakenException, if the domain needs its own
-│       ├── types.py           # every StrEnum the domain owns
-│       ├── after_response_tasks.py # after-response task functions, if any
-│       └── constants.py
-├── migrations/                # raw SQL; see database.md
-├── scripts/                   # db/check_schema_drift.py, grant_credits.py, e2e/ API walkthroughs
-├── alembic.ini
-└── pyproject.toml
+│   ├── core/            # domain-free: exceptions.py, results.py, services/, utils/
+│   ├── database/        # BaseOrm, session factory, DatabaseClockUtils, orm/: see database.md
+│   └── <domain>/        # services.py or services/, inputs.py, results.py, settings.py,
+│                        #   types.py, constants.py; as needed: exceptions.py, utils/,
+│                        #   after_response_tasks.py; LLM work: see langgraph.md
+├── migrations/          # raw SQL: see database.md
+└── scripts/             # e2e/ API walkthroughs
 ```
 
-A second service (worker, scheduler) lands as `apps/<name>/` beside `api/` and
-reuses the same `libs/` domains.
+A second service (worker, scheduler) lands as `apps/<name>/` beside `api/` and reuses
+the same `libs/`.
+
+A LangGraph workflow, an LLM prompt or an `OutputFormat` follows `langgraph.md`; read
+it before writing one.
 
 ## Packages
 
 Every package under `apps/` and `libs/` has an `__init__.py`. It stays empty unless it
-does work, like `libs/database/orm/__init__.py` registering every mapper. The tree
-above lists only the ones that do work. No namespace packages. `tests/` is the
-exception and has no `__init__.py` at all (see `pytest-testing.md`).
+does work, like `libs/database/orm/__init__.py` registering every mapper. No namespace
+packages.
 
 ## Enums
 
-All of a domain's enums live in one module, `types.py`: `libs/generate_text/types.py`
-holds `TextType`. A domain with no lib, like `health`, keeps its enums in
-`apps/api/domains/<name>/types.py`. Enums the whole app uses, like
-`EnvironmentType`, live in `apps/api/core/types.py`. Never put an enum in `inputs.py`,
-`constants.py`, or `dtos.py`, even when only one of them uses it.
+All of a domain's enums live in one module, `types.py`: `libs/<domain>/types.py`, or
+`apps/api/domains/<name>/types.py` for a domain with no lib. Enums the whole app uses
+live in `apps/api/core/types.py`. Never put an enum in `inputs.py`, `constants.py`, or
+`dtos.py`, even when only one of them uses it.
 
 ## Logging
 
-`apps/api/core/logging.py` configures structlog once, through
-`configure_logging(app_settings)`, called at the start of `lifespan` before anything
-logs. Everything else only calls `structlog.get_logger(__name__)`. `libs/` never
-configures logging.
+Code only calls `structlog.get_logger(__name__)`. Logging is configured once, in
+`apps/api/core/logging.py`; `libs/` never configures it.
 
 ## Services
 
@@ -114,262 +57,113 @@ A lib with one service keeps it in `services.py`. A lib with more than one has a
 snake_case, with `__init__.py` re-exporting every class so callers import from
 `libs.<domain>.services`. Never both.
 
-Split a lib by what it is about, not by how big it gets. Inside a lib, split services
-by job:
+Split a lib by what it is about, not by how big it gets. A provider gets its own lib
+when it has its own HTTP surface, such as routes and a callback (`libs/google_auth/`
+beside `libs/auth/`). A provider that only implements another lib's contract stays
+inside that lib as one more module in its `services/` package
+(`libs/llm/services/openai_llm_service.py`).
+
+Inside a lib, split services by job:
 
 - **A service does one job, and its name says what.** Its one-sentence docstring is
   the test: if describing it needs an "and" joining unrelated jobs, the new work gets
   its own service.
 - **Machinery around a flow gets its own service.** Work that runs alongside a flow
   rather than being the flow, such as a lease, a heartbeat, or a retry or polling loop,
-  is a `<Domain><Thing>Service` of its own, even when only one service calls it:
-  `GenerateTextRunLeaseService` holds a run's lease while `GenerateTextService` runs
-  the graph.
+  is a `<Domain><Thing>Service` of its own, even when only one service calls it
+  (`GenerateTextRunLeaseService`).
 - **A loop that runs for the app's lifetime lives with what it acts on.** A pickup
-  loop or a queue listener is a method on the lib service it acts on, such as
-  `GenerateTextRunPickupService.pick_up_expired_runs()`. `lifespan` builds that service
-  through a `build_<service>(app_state)` in the domain's `dependencies.py` and runs the
-  loop as a task. `apps/api/core/` holds only loops that belong to no domain, like the
-  event loop monitor.
-- **A method that acts on any user's rows is an admin service's.** Other services
-  check ownership: the caller's own rows, or public ones. A method that skips that
-  check, such as listing every user or reading anyone's ledger, lives in `libs/admin/`
-  as `Admin<Entity>Service`, so a non-admin route can't call it by mistake. Every class
-  in `libs/admin/` and `apps/api/domains/admin/` takes the `Admin` prefix, so its
-  inputs, results and DTOs never share a name with the owning domain's:
-  `AdminGrantUserCreditsInput` beside `GrantCreditsInput`, `AdminCreditGrantDto`. An admin service reads directly. It writes through the owning
-  domain's service when that service already makes the same write, so that domain's
-  rules stay in one place: `AdminCreditService.grant_user_credits()` calls
-  `CreditLedgerService.grant_credits()`. A write only an admin makes, such as setting a
-  role or suspending a user, is the admin service's own. Admin routes are in
-  `apps/api/domains/admin/`, one router under `/admin`.
+  loop or a queue listener is a method on the lib service it acts on
+  (`GenerateTextRunPickupService.pick_up_expired_runs()`). Wiring: App-scoped vs
+  request-scoped. `apps/api/core/` holds only loops that belong to no domain.
+- **A method that acts on any user's rows lives in `libs/admin/`** as
+  `Admin<Entity>Service`, so a non-admin route can't call it by mistake; other services
+  check ownership (the caller's own rows, or public ones). Every class in `libs/admin/`
+  and `apps/api/domains/admin/` takes the `Admin` prefix, so its inputs, results and
+  DTOs never share a name with the owning domain's. Admin routes share one router under
+  `/admin`. An admin service reads directly, but writes through the owning domain's
+  service when that service already makes the same write, so the domain's rules stay
+  in one place; a write only an admin makes is the admin service's own.
 
 ### Validation guards
 
 A check that needs only a field's own value, however involved, is a DTO
 `field_validator` that calls a pure `<Domain>ValidationUtils` in the lib and raises
-`ValueError` with the problems it returns. FastAPI turns that into a 422 that names
-the field. `BlogPostValidationUtils.find_body_problems(body)` checks a post's Markdown
-this way. The name says what it validates, never `Dto`: `libs/` doesn't know DTOs exist,
-and a service may run the same check.
+`ValueError` with the problems it returns (reference: `BlogPostValidationUtils`). The
+name says what it validates, never `Dto`: a service may run the same check.
 
-When checking an incoming payload needs a database read or compares more than one
-field (DTOs › Inbound), the route gets a validation guard: a dependency in the domain's
-`dependencies.py`, named `validate_<what>` and attached with
-`dependencies=[Depends(...)]`, after the route's permission (The acting user). The
-guard calls a method on the lib's `<Domain>ValidationService`, named
-`validate_<condition>()`, which returns nothing and raises a lib exception when the
-payload is invalid.
-
-```python
-# apps/api/domains/personas/dependencies.py
-async def validate_new_persona_name(
-    dto: PersonaDto,
-    auth_user: AuthUserDep,
-    persona_validation_service: PersonaValidationServiceDep,
-) -> None:
-    await persona_validation_service.validate_persona_name_available(dto.name, auth_user)
-```
-
-```python
-# apps/api/domains/personas/router.py
-@persona_router.post(
-    "",
-    status_code=201,
-    dependencies=[
-        Depends(require_permissions(PermissionType.PERSONA_WRITE)),
-        Depends(validate_new_persona_name),
-    ],
-)
-```
-
-A guard reads on the request's session, except on a route that starts a background job.
-There it opens its own short session from `request.app.state.db_session_factory`, closed
-before the route runs, like a row a long-running route needs (below). The check is
-independent of the route's own work, and a request session held open while the job
-starts would leave its transaction idle, and in tests clash with the job's session.
-The guard builds the validation service itself on that session, so it takes no
-`<Domain>ValidationServiceDep`.
-
-```python
-# apps/api/domains/generate_text/dependencies.py
-async def validate_active_run_limit(
-    request: Request, auth_user: AuthUserDep, app_settings: AppSettingsDep
-) -> None:
-    db_session_factory = request.app.state.db_session_factory
-    async with db_session_factory() as db_session:
-        generate_text_validation_service = GenerateTextValidationService(db_session=db_session)
-        await generate_text_validation_service.validate_active_run_count_below_limit(
-            auth_user, app_settings.generate_text.max_active_runs_per_user
-        )
-```
+A check that needs a database read or compares more than one field is a validation
+guard: a dependency in the domain's `dependencies.py`, named `validate_<what>` and
+attached with `dependencies=[Depends(...)]` after the route's permission (DTOs › The
+acting user). It calls a `validate_<condition>()` method on the lib's
+`<Domain>ValidationService`, which returns nothing and raises a lib exception when the
+payload is invalid. Reference: `apps/api/domains/personas/dependencies.py`.
 
 The validation service holds only the methods a guard calls. Business services never
 validate payloads this way, and access control, such as whether the caller may change
 a row, stays in the business service that loads the row.
 
-### Rows a long-running route needs
+### Dependencies that open their own session
 
-A row that a long-running route needs, such as the persona a generation writes as, is
-loaded by a dependency on its own short session, closed before the route runs. The
-route passes the loaded `Result` to the service. Never load it on the request's
-session: that session would sit idle inside an open transaction while the route waits
-on the LLM.
-
-```python
-# apps/api/domains/generate_text/dependencies.py
-async def get_generate_text_persona(
-    request: Request,
-    dto: GenerateBlogPostDto,
-    auth_user: AuthUserDep,
-) -> FindUserPersonaResult:
-    db_session_factory = request.app.state.db_session_factory
-    async with db_session_factory() as db_session:
-        persona_service = PersonaService(db_session=db_session)
-        return await persona_service.find_user_persona(dto.persona_identity, auth_user)
-```
-
-A provider gets its own lib when it has its own HTTP surface: `libs/google_auth/` sits
-beside `libs/auth/` because signing in with Google has routes, a domain and a callback
-of its own. A provider that is only an implementation of another lib's contract has no
-surface of its own and stays inside that lib, as one more module in its `services/`
-package: `libs/llm/services/openai_llm_service.py` implements
-`BaseLlmProviderService`, and the next provider lands beside it.
+On a route that waits on an LLM or starts a background job, a dependency that reads
+the database — a validation guard, or a row the route needs — opens its own short
+session from `request.app.state.db_session_factory`, closed before the route runs. It
+builds the service it calls on that session, so it takes no `...ServiceDep`, and
+returns a row as a `Result` the route passes to its service. A request session held
+open there would sit idle inside an open transaction, and in tests clash with the
+job's session. Reference: `get_generate_text_persona` and `validate_active_run_limit`
+in `apps/api/domains/generate_text/dependencies.py`.
 
 ### Utils
 
-Functions that build or map values — no db session, no client, no state — live in a
-`Utils` class in `libs/<domain>/utils/`, one module per class, with `__init__.py`
-re-exporting each one (`python-naming.md` › Class suffixes). A service keeps
-orchestration; the shaping of what it passes and returns moves out. Utilities with no
-domain at all, like `DateTimeUtils`, live in `libs/core/utils/`, and a `Result` one of
-them returns lives in `libs/core/results.py`.
+A `Utils` class lives in `libs/<domain>/utils/`, one module per class, with
+`__init__.py` re-exporting each one (`python-naming.md` › Class suffixes). A service
+keeps orchestration; the shaping of what it passes and returns moves out. Utils with
+no domain live in `libs/core/utils/`, and a `Result` one of them returns in
+`libs/core/results.py`.
 
-Retrying a call splits the same way. Deciding whether an error is worth retrying, and
-how long to wait, are pure calculations on the provider's `Utils`
-(`OpenAiLlmUtils.is_retryable_error`, `compute_retry_delay_seconds`). The loop that
-waits and calls again stays in the service.
-
-### LangGraph workflows
-
-A domain whose work is a graph keeps it under `libs/<domain>/`:
-
-- `types.py` — `<Domain>NodeType`, one member per node. LangGraph takes a `StrEnum`
-  member as the node name, so nothing refers to a node by a loose string.
-- `states.py` — one `<Domain>State`, the graph's state model.
-- `services/<domain>_node_service.py` — `<Domain>NodeService`, which builds the nodes.
-  Collaborators arrive through `__init__` like any other service.
-- `graphs/` — a package, not a module, once there is more than one graph:
-  - `base_<domain>_graph_builder.py` — the abstract builder: `graph_name` and
-    `graph_version` as class attributes, an abstract `build_graph(options, checkpointer)`,
-    and the services every builder needs taken through `__init__`.
-  - `<domain>_graph_builder_registry.py` — one builder per enum member, built in
-    `__init__`, looked up by `get_by_text_type`-style method that raises
-    `NotImplementedError` for a member with none (`python-naming.md` › Enum dispatch).
-  - `<variant>/` — one folder per graph: its builder, its prompts, its options input.
-
-A variant is not a lib of its own. Splitting one out puts the engine and the variant in
-a mutual import, which is what the cycle rule below exists to prevent.
-
-**A graph state holds primitives only** — `str`, `int`, `bool`, `UUID`, and containers
-of them. The state is a persisted wire format, not an in-memory object. A domain class
-in there does not survive the round trip: the Redis checkpointer returns it as a
-`{"lc": 2, "type": "constructor", ...}` envelope that no longer validates, and an
-in-memory checkpointer hides that in tests because it never really serializes.
-
-**Group primitives back into a shape with a method on the state**, rather than storing
-the shape: `GenerateTextState.build_auth_user()` returns the `AuthUser` its
-`auth_user_id` and `auth_user_identity` describe. The method reads like an attribute at
-the call site, and the stored checkpoint stays plain.
-
-**A lib never imports a lib that imports it back.** Inside one lib the same cycle
-appears through the package `__init__`: a registry's builders need the lib's services,
-and a service needs the registry. The service imports the registry under
-`if TYPE_CHECKING:` and receives the instance through `__init__`, so nothing is imported
-at runtime in both directions.
-
-**A wrapper around a node re-raises `GraphBubbleUp` before any `except Exception`.**
-LangGraph signals an interrupt by raising it, so a generic handler turns every review
-pause into a recorded failure. Catch the control-flow exception first, record the pause
-for what it is, and let it through.
-
-**A step whose output must follow a format gets an `OutputFormat`**, passed to its
-node builder beside its `Prompt`. `Base<Domain>OutputFormat` has `normalize_output()`,
-which fixes in code only what can't change the meaning (a fence wrapping the whole
-output, surrounding whitespace), and `validate_output()`, which returns the problems
-left. The node normalizes, then validates; on problems it retries the LLM call with
-them added to the user prompt, up to a settings limit, then raises. Checking is code,
-never another LLM call. The format's rules text lives in the same module as the
-`OutputFormat`, and the step's system template uses it, so the instructions and the
-check can't drift apart. Parsing goes through a domain-free `Utils` class, such as
-`MarkdownUtils`. The domain's `Base<Domain>OutputFormat` lives in `output_formats.py`,
-beside `prompts.py`. A graph variant's `OutputFormat` gets its own module directly in the
-variant's folder, beside its builder and its `prompts/` package. When retries run out,
-the node raises a lib exception under `ServiceUnavailableException`: the model, not the
-caller, produced the unusable output, so the caller gets the same 503 as a provider
-failure.
-
-The service owns the graph's lifecycle, not its shape: it asks the registry for the
-builder, calls `build_graph`, runs it, reads the snapshot, and maps it to a `Result`.
+Retrying splits the same way: whether an error is retryable and how long to wait are
+pure calculations on the provider's `Utils`; the loop that waits and calls again stays
+in the service.
 
 ### After-response tasks and background jobs
 
-Two kinds of work happen outside a route's own response, and they're named apart so
-they're never confused:
+Two kinds of work happen outside a route's own response, named apart so they're never
+confused:
 
-- **After-response task:** short work that runs once the response is sent, as part of
-  the same request, such as recording a user's activity. Scheduled with FastAPI's
-  `BackgroundTasks`, in a parameter named `after_response_tasks`.
+- **After-response task:** short work run once the response is sent, such as
+  recording a user's activity. A function in `libs/<domain>/after_response_tasks.py`,
+  scheduled with FastAPI's `BackgroundTasks` through a parameter named
+  `after_response_tasks`, from the dependency or route that knows it's needed. It's a
+  function rather than a service because it's scheduled per request with the values it
+  acts on.
 - **Background job:** work that runs for minutes and outlives the request, such as a
   graph run. A private method on its domain service, started with
-  `BackgroundJobService.start()` (`libs/core/services/`) and drained at shutdown, for
-  up to `BACKGROUND_JOBS__SHUTDOWN_DRAIN_SECONDS`. The machinery around a job, such as
-  its lease, is a service of its own (Services).
+  `BackgroundJobService.start()` (`libs/core/services/`) and drained at shutdown. The
+  machinery around a job, such as its lease, is a service of its own (Services).
 
-An after-response task is a function in `libs/<domain>/after_response_tasks.py`,
-scheduled from the dependency or route that knows it's needed. It runs once the
-response is sent and the request's session has committed and closed, so it never uses
-that session. A task that writes the database takes a session factory and opens its own
-session and transaction. A task that only touches Redis takes the Redis client and
-builds the service it needs, like `libs/auth/after_response_tasks.py`. A task may
-instead hand the session factory to a service that opens its own sessions, as
-`fail_user_unfinished_runs` does with `GenerateTextRunService`. A task that acts on
-several rows logs a failure on one and carries on with the rest. It's a function
-rather than a service because it's scheduled per request with the values it acts on.
+Neither uses the request's session, which has committed and closed by then. A task
+that writes the database takes the session factory and opens its own session and
+transaction, or hands the factory to a service that opens its own sessions. A task
+that only touches Redis takes the Redis client and builds the service it needs. Every
+service a background job calls takes the session factory and opens a short session per
+write. A task that acts on several rows logs a failure on one and carries on with the
+rest.
 
-A background job outlives the request's session too, so every service it calls takes
-the session factory and opens a short session per write, like `GenerateTextRunService`.
+When one of those short transactions must also hold another service's writes, that
+service is built inside the transaction on its `db_session` and never commits.
+Everywhere else a service's collaborators arrive through `__init__`.
 
-When one of those short transactions must also hold another service's writes, such as
-`complete_step` charging the step's owner, the other service is built inside the
-transaction on its `db_session` and never commits:
-`GenerateTextCreditService(db_session=db_session)`. Everywhere else a service's
-collaborators arrive through `__init__`, and request-scoped services share the
-request's session through their dependency factories.
-
-A lib creates a session in only three places: an after-response task that writes the
-database, or the service it hands the session factory to; the services a background job
-calls; and a record that must survive the caller's rollback (below).
-
-Everything else a task needs — the Redis client, the domain's settings, the values it
-acts on — is passed in, so `libs/` still never imports `AppSettings`. A time the task
-writes comes from the database clock (`database.md` › Timestamps), not from its
-caller.
+Everything else a task or job needs — the Redis client, the domain's settings, the
+values it acts on — is passed in, so `libs/` never imports `AppSettings`. A time it
+writes comes from the database clock, not from its caller.
 
 ### Records that must survive a rollback
 
-A service that writes a record which must survive the caller's rollback — the LLM call
-log in `pb_llm_call` — takes the session factory and commits each write in its own
-short transaction, so the record outlives a rolled-back request. Never hold one of
-those sessions open across a slow call: open, write, commit, close.
-
-## Filenames inside a domain package
-
-The folder supplies the domain, so files inside it are short: `domains/users/router.py`,
-never `domains/users/user_router.py`.
-
-Names that escape the package stay fully explicit: `user_router`, `UserService`,
-`UserOrm`.
+A service that writes a record which must survive the caller's rollback, such as the
+LLM call log in `pb_llm_call`, takes the session factory and commits each write in its
+own short transaction. Never hold one of those sessions open across a slow call: open,
+write, commit, close.
 
 ## Layer rules
 
@@ -379,25 +173,55 @@ Names that escape the package stay fully explicit: `user_router`, `UserService`,
 - **`apps/api/domains/<name>/` owns HTTP concerns only**: payload shapes, status
   codes, dependency wiring. No business rules.
 - **A route never returns an `Orm` object.** Map it to a `ResponseDto`.
-- **A domain owns one `router.py`.** When a second kind of the same thing arrives, such
-  as another sign-in provider, it becomes its own domain and its own lib, rather than a
-  second router file.
+- **A domain owns one `router.py`.** A second kind of the same thing, such as another
+  sign-in provider, becomes its own domain and its own lib rather than a second router
+  file.
 - **Cross-domain imports go through `libs/`.** `domains/posts/` may import
   `libs.users.services`, never `domains.users.*`. The one exception is a domain's
   `dependencies.py`, which may import another domain's `...ServiceDep` rather than
-  building the same service twice: `google_auth` takes `AuthSessionServiceDep` and
-  `InviteServiceDep`. When a route needs two domains'
-  services to do one thing, compose them in a lib service that takes both through
-  `__init__` — libs may depend on libs — so the route keeps one dependency.
+  building the same service twice. When a route needs two domains' services to do one
+  thing, compose them in a lib service that takes both through `__init__` — libs may
+  depend on libs — so the route keeps one dependency.
+- **A lib never imports a lib that imports it back.** Inside one lib the same cycle
+  appears through the package `__init__`, such as a registry whose builders need the
+  lib's services while a service needs the registry. The service imports the other
+  side under `if TYPE_CHECKING:` and receives the instance through `__init__`.
 - **`core/` is for what spans every domain**: db session dependency, current-user
   dependency, root settings, shared response DTOs. Used by only two domains means it
   belongs to a domain.
+- **`scripts/` may import `libs/`; nothing imports `scripts/`.** Python scripts run as
+  modules from `backend/`.
 
 ## DTOs
 
-Never use the word "schema". HTTP payload classes are DTOs, in the domain's
-`dtos.py` under `apps/`. The response DTOs every domain shares, and the `UsdDecimal`
-field type, live in `apps/api/core/dtos.py`.
+HTTP payload classes are DTOs, in the domain's `dtos.py` under `apps/`. The response
+DTOs every domain shares, and the `UsdDecimal` field type, live in
+`apps/api/core/dtos.py`. One `dtos.py` per domain holds both directions; never split
+into `requests.py` / `responses.py`. Split by sub-feature only, once a domain's file
+gets unwieldy.
+
+A service never accepts or returns a `Dto`. **Never subclass an `Input` to make a
+`Dto`**; declare the `Dto` independently. Every `Dto` has a `to_input()`; every domain
+`ResponseDto` has a `from_result()`. The shared `IdentityResponseDto` and
+`EmptyResponseDto` are constructed directly.
+
+```python
+class BlogPostDto(BaseModel):
+    title: str
+    body: str
+
+    def to_input(self) -> UpdateBlogPostInput:
+        return UpdateBlogPostInput(title=self.title, body=self.body)
+
+
+class BlogPostResponseDto(BaseModel):
+    identity: UUID
+    title: str
+
+    @classmethod
+    def from_result(cls, find_blog_post_result: FindBlogPostResult) -> "BlogPostResponseDto":
+        return cls(identity=find_blog_post_result.identity, title=find_blog_post_result.title)
+```
 
 ### Inbound
 
@@ -410,20 +234,19 @@ A route takes a `Dto` only when a body or a query model is sent.
 | `GET` list                             | `<Entity>FetchAllQueryDto` query model: `BlogPostFetchAllQueryDto` |
 | Non-CRUD action (`POST /generate-text`) | `<Verb><Entity>Dto` body: `GenerateTextDto`                |
 
-A `FetchAllQueryDto` defines and validates the query string the way a body `Dto`
-validates the body, with filters grouped in a nested filter object. Bind it as
-`Annotated[BlogPostFetchAllQueryDto, Query()]`. Pagination and filter conventions
-are not settled yet — decide them with the first feature that needs them and record
-them here.
+A `FetchAllQueryDto` validates the query string the way a body `Dto` validates the
+body, with filters grouped in a nested filter object. Bind it as
+`Annotated[BlogPostFetchAllQueryDto, Query()]`. Pagination and filter conventions are
+not settled yet — decide them with the first feature that needs them and record them
+here.
 
 A limit on a request field, such as required, length or format, is part of the API
-contract, so it is declared on the `Dto` field. It then reaches the OpenAPI schema
+contract, so it is declared on the `Dto` field, where it reaches the OpenAPI schema
 the frontend is generated from. Declare it as an
-`Annotated[str, StringConstraints(...)]` alias at the top of `dtos.py`, named for
-what it holds, and strip whitespace on required text so `"  "` fails `min_length=1`:
+`Annotated[str, StringConstraints(...)]` alias at the top of `dtos.py`, named for what
+it holds, and strip whitespace on required text so `"  "` fails `min_length=1`:
 
 ```python
-# apps/api/domains/personas/dtos.py
 PersonaNameStr = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
 ]
@@ -445,10 +268,8 @@ A check that needs the database, or more than one field, is a validation guard
 On a CRUD route, a custom `ResponseDto` appears only on a `GET`. Every route declares
 its response DTO as its return annotation.
 
-A USD amount in a response DTO is a `UsdDecimal` (`apps/api/core/dtos.py`), never a
-bare `Decimal`. It writes the exact value as plain digits, `"0.0000000000"`, where
-Pydantic's default would write a rounded zero as `"0E-10"`. It changes only the JSON;
-the value stays a `Decimal` everywhere else.
+A USD amount in a response DTO is a `UsdDecimal`, never a bare `Decimal`, which would
+write a rounded zero as `"0E-10"`.
 
 A list is never a bare array. The service returns a `Result` and the route a
 `<Entity>ListResponseDto`, each holding the rows under a plural field, so pagination
@@ -456,28 +277,19 @@ or a count can join later without changing the shape. A list of the signed-in us
 own rows says so: `find_user_blog_post_list()` returns `FindUserBlogPostListResult`,
 and the route is `find_user_blog_post_list` too.
 
-A route on the collection itself uses the path `""`, never `"/"`. The router's prefix
-already names it, and `"/"` puts the route at `/blog-posts/`, so a call to
-`/blog-posts` answers with a redirect.
+A route on the collection itself uses the path `""`, never `"/"`, which makes a call to
+`/blog-posts` answer with a redirect.
 
-Two exceptions involve a real `Response`. A route that redirects returns
-`RedirectResponse`, annotated as such, and sets any cookie on that response. A route
-that returns a DTO but must set or clear a cookie takes a plain `response: Response`
-parameter, calls `response.set_cookie()` or `response.delete_cookie()` on it, and still
-returns its declared `ResponseDto`.
-
-One `dtos.py` per domain holds both directions. Never split into `requests.py` /
-`responses.py`. Split by sub-feature only, once a domain's file gets unwieldy.
-
-A service never accepts or returns a `Dto`.
+A redirecting route returns an annotated `RedirectResponse` and sets any cookie on it.
+A route that returns a DTO but sets or clears a cookie takes `response: Response`,
+calls `set_cookie()` or `delete_cookie()` on it, and still returns its `ResponseDto`.
 
 ### Identifiers
 
-Every row has two keys (`database.md` › Shared columns). `id` is the `BIGINT` primary key and never
-leaves the backend: not in a DTO, a path, or a query string. `identity` is the UUID
-the API exposes, typed `UUID` everywhere it appears, so FastAPI rejects a malformed
-one with a 422 before a service sees it. Routes and services look rows up by
-`identity`; foreign keys and joins use `id`.
+Every row has two keys. `id` is the `BIGINT` primary key and never leaves the backend:
+not in a DTO, a path, or a query string. `identity` is the UUID the API exposes, typed
+`UUID` everywhere it appears, so a malformed one is a 422 before a service sees it.
+Routes and services look rows up by `identity`; foreign keys and joins use `id`.
 
 ### Input models
 
@@ -488,24 +300,21 @@ A service method taking a structured payload takes a Pydantic `Input` model from
 `create_persona(persona_input: PersonaInput, auth_user: AuthUser)` and
 `update_persona(persona_identity: UUID, persona_input: PersonaInput, auth_user: AuthUser)`.
 
-When create carries fields an update must never change, such as the owning persona or a
-source run, create gets its own `Create<Entity>Dto` and `Create<Entity>Input`, and
-update keeps `<Entity>Dto` with an `Update<Entity>Input`:
+When create carries fields an update must never change, such as an owning parent row,
+create gets its own `Create<Entity>Dto` and `Create<Entity>Input`, and update keeps
+`<Entity>Dto` with an `Update<Entity>Input`:
 `create_blog_post(create_blog_post_input: CreateBlogPostInput, auth_user: AuthUser)` and
 `update_blog_post(blog_post_identity: UUID, update_blog_post_input: UpdateBlogPostInput, auth_user: AuthUser)`.
 
 ### The acting user
 
-The auth guard, `AuthUserDep` in `core/dependencies.py`, resolves the session to an
-`AuthUser` in request scope, carrying the signed-in user's `id`, `identity`, `role`
-and `permissions`, all stored in the session at sign-in. A
-route that needs the acting user takes `AuthUserDep` and passes the `AuthUser` to the
-service. Any service method that writes takes it as its last parameter and fills the
-audit columns from `auth_user.id`. A write whose author isn't the signed-in user takes
-the author's user id instead: an invite redeemed at sign-in grants credits authored by
-the admin who made the invite (`grant_credits(grant_credits_input, granted_by_id)`),
-since no one is signed in yet. Services never read the current user from
-anywhere else.
+`AuthUserDep` in `core/dependencies.py` resolves the session to an `AuthUser` carrying
+the signed-in user's `id`, `identity`, `role` and `permissions`. A route that needs
+the acting user takes `AuthUserDep` and passes the `AuthUser` to the service. Any
+service method that writes takes it as its last parameter and fills the audit columns
+from `auth_user.id`. A write with no signed-in user, such as one made during sign-in,
+takes the author's user id instead (`granted_by_id`). Services never read the current
+user from anywhere else.
 
 A route lists the permission it needs first in its `dependencies`, before any
 validation guard, so a caller without it is refused before anything is read:
@@ -521,349 +330,115 @@ validation guard, so a caller without it is refused before anything is read:
 )
 ```
 
-`require_permissions(...)` in `core/dependencies.py` raises `ForbiddenException` unless
-the user holds every permission named. Code checks permissions, never roles. Every
-route names a permission, reads included, unless it's open by design: health, Google
-sign-in, logout, the development-only LLM route, `POST /invites/check`, which someone
-opening an invite link calls before they have an account, and `GET /users/me`, which any
-signed-in user may call for their own profile. A read permission sits in front of the
-service's own access check, such as ownership or a public flag, and doesn't replace it.
-`tests/api/test_app_factory.py` walks the app's routes and fails on one that does
-neither; a route open by design goes on its allowlist there. It walks them
-with `fastapi.routing.iter_route_contexts`, since `app.routes` no longer lists an
-included router's routes, and a walk over it would pass without checking anything.
-
-**Never subclass an `Input` to make a `Dto`.** Declare the `Dto` independently.
-Every `Dto` has a `to_input()`; every domain `ResponseDto` has a `from_result()`.
-The shared `IdentityResponseDto` and `EmptyResponseDto` are constructed directly.
-
-```python
-# apps/api/core/dtos.py
-class IdentityResponseDto(BaseModel):
-    identity: UUID
-
-
-class EmptyResponseDto(BaseModel):
-    pass
-```
-
-```python
-# apps/api/domains/blog_posts/dtos.py
-class BlogPostDto(BaseModel):
-    title: str
-    body: str
-
-    def to_input(self) -> UpdateBlogPostInput:
-        return UpdateBlogPostInput(title=self.title, body=self.body)
-
-
-class BlogPostResponseDto(BaseModel):
-    identity: UUID
-    title: str
-    body: str
-
-    @classmethod
-    def from_result(cls, result: FindBlogPostResult) -> "BlogPostResponseDto":
-        return cls(identity=result.identity, title=result.title, body=result.body)
-```
+`require_permissions(...)` raises `ForbiddenException` unless the user holds every
+permission named. Code checks permissions, never roles. Every route names a
+permission, reads included, unless it's open by design; an open route goes on
+`OPEN_ROUTES` in `tests/api/test_app_factory.py`, which fails on a route that does
+neither. A read permission sits in front of the service's own access check, such as
+ownership or a public flag, and doesn't replace it.
 
 ## App-scoped vs request-scoped
 
 `lifespan.py` owns long-lived resources — HTTP pool, SQLAlchemy engine, settings —
-created on `app.state` at startup and closed at shutdown. Nothing per-request. It
-also starts the app-lifetime loops (Services), each from a service built by a
+created on `app.state` at startup and closed at shutdown. Nothing per-request. It also
+starts the app-lifetime loops (Services), each from a service built by a
 `build_<service>(app_state)` in its domain's `dependencies.py`, which takes `app.state`
 rather than a `Request`. A loop starts after the resources it uses, and at shutdown it
 is cancelled before background jobs drain, so a stopping process claims no new work.
-Loops don't start in the test environment; a test calls the method one pass runs,
-such as `pick_up_next_expired_run()`.
+Loops don't start in the test environment; a test calls the method one pass runs.
+`lifespan.py` imports only the `build_<service>` functions of domains that run a loop.
 
-Domain `dependencies.py` reads `Request`, pulls from `app.state`, builds
-request-scoped objects, and constructs the service. Each factory is followed
-immediately by its `Annotated` alias, and a factory that takes another alias comes
-after the one it uses.
-
-A route or factory taking more than one dependency puts each parameter on its own
-line, with a trailing comma, so each dependency reads as one line of the diff.
-
-```python
-# apps/api/core/dependencies.py
-async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:
-    db_session_factory = request.app.state.db_session_factory
-    async with db_session_factory() as db_session, db_session.begin():
-        yield db_session
-
-
-DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
-```
+A domain's `dependencies.py` builds request-scoped objects and the service from
+`app.state` and other dependencies. Each factory is followed immediately by its
+`Annotated` alias, and a factory that takes another alias comes after the one it uses.
 
 ```python
 # apps/api/domains/users/dependencies.py
-def get_user_service(request: Request, db_session: DbSessionDep) -> UserService:
-    http_client: AsyncClient = request.app.state.http_client
-    timeout = request.app.state.settings.users.api_timeout_seconds
+def get_user_service(db_session: DbSessionDep, app_settings: AppSettingsDep) -> UserService:
     return UserService(
-        http_client=http_client,
         db_session=db_session,
-        api_timeout_seconds=timeout,
+        low_credit_balance_threshold_usd=app_settings.credits.low_balance_threshold_usd,
     )
 
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 ```
 
-Routers are one line of delegation, type hints only, no `= Depends(...)` defaults.
-A route's permission and validation guards go in the decorator's `dependencies` (The
-acting user).
-Routes are ordered `GET` list, `GET` one, `POST`, `PUT`, `DELETE`:
-
-```python
-# apps/api/domains/blog_posts/router.py
-blog_post_router = APIRouter(prefix="/blog-posts", tags=["blog-posts"])
-
-
-@blog_post_router.get(
-    "",
-    dependencies=[
-        Depends(require_permissions(PermissionType.BLOG_POST_READ)),
-    ],
-)
-async def find_user_blog_post_list(
-    auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
-) -> BlogPostListResponseDto:
-    find_user_blog_post_list_result = await blog_post_service.find_user_blog_post_list(auth_user)
-    return BlogPostListResponseDto.from_result(find_user_blog_post_list_result)
-
-
-@blog_post_router.get(
-    "/{blog_post_identity}",
-    dependencies=[
-        Depends(require_permissions(PermissionType.BLOG_POST_READ)),
-    ],
-)
-async def find_blog_post(
-    blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
-) -> BlogPostResponseDto:
-    find_blog_post_result = await blog_post_service.find_blog_post(blog_post_identity, auth_user)
-    return BlogPostResponseDto.from_result(find_blog_post_result)
-
-
-@blog_post_router.post(
-    "",
-    status_code=201,
-    dependencies=[
-        Depends(require_permissions(PermissionType.BLOG_POST_WRITE)),
-    ],
-)
-async def create_blog_post(
-    dto: CreateBlogPostDto, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
-) -> IdentityResponseDto:
-    create_blog_post_result = await blog_post_service.create_blog_post(
-        dto.to_input(), auth_user
-    )
-    return IdentityResponseDto(identity=create_blog_post_result.identity)
-
-
-@blog_post_router.put(
-    "/{blog_post_identity}",
-    dependencies=[
-        Depends(require_permissions(PermissionType.BLOG_POST_WRITE)),
-    ],
-)
-async def update_blog_post(
-    blog_post_identity: UUID,
-    dto: BlogPostDto,
-    auth_user: AuthUserDep,
-    blog_post_service: BlogPostServiceDep,
-) -> EmptyResponseDto:
-    await blog_post_service.update_blog_post(blog_post_identity, dto.to_input(), auth_user)
-    return EmptyResponseDto()
-
-
-@blog_post_router.delete(
-    "/{blog_post_identity}",
-    dependencies=[
-        Depends(require_permissions(PermissionType.BLOG_POST_WRITE)),
-    ],
-)
-async def delete_blog_post(
-    blog_post_identity: UUID, auth_user: AuthUserDep, blog_post_service: BlogPostServiceDep
-) -> EmptyResponseDto:
-    await blog_post_service.delete_blog_post(blog_post_identity, auth_user)
-    return EmptyResponseDto()
-```
-
-`app_factory.py` is the only file that knows the full list of domains. `lifespan.py`
-imports only the `build_<service>` functions of domains that run an app-lifetime loop.
+Routers are one line of delegation, type hints only, no `= Depends(...)` defaults. A
+route's permission and validation guards go in the decorator's `dependencies` (DTOs ›
+The acting user). Routes are ordered `GET` list, `GET` one, `POST`, `PUT`, `DELETE`.
+Reference: `apps/api/domains/blog_posts/router.py`.
 
 ## Database
 
 Tables, Orm classes, and migrations follow `database.md`. This section covers how
 application code uses the database.
 
-- Async throughout: `AsyncSession`, `async_sessionmaker`, async driver. Never a sync
-  `Session`.
-- The engine is created once in `lifespan`, and the session factory once from it with
-  `create_db_session_factory(db_engine)`. Never build an `async_sessionmaker` by hand;
-  the factory carries the session options and the soft-delete rule. Db sessions are
-  per-request. The exceptions are a row a long-running route needs (Services › Rows
-  a long-running route needs), a validation guard on a route that starts a
-  background job (Services › Validation guards), and the places a lib creates a session
-  (Services › After-response tasks and background jobs).
+- Async throughout: `AsyncSession`, never a sync `Session`.
+- Sessions come only from `create_db_session_factory(db_engine)`, never a hand-built
+  `async_sessionmaker`: the factory carries the session options and the soft-delete
+  rule.
+- A request has one session, `DbSessionDep`, used by every route, reads included. It
+  commits after the route returns and rolls back if the route raises. Never hand-roll
+  a transaction decorator.
+- A session is opened anywhere else only by a dependency that opens its own session, an
+  after-response task or background job and the services they hand the session factory
+  to, and a record that must survive a rollback (all under Services). Otherwise a
+  service receives its session and never commits it.
+- The commit runs in dependency teardown, so a constraint violation surfaces as a 500,
+  and that's intended: a service never catches `IntegrityError` to translate it. A
+  clash the client needs to hear about, such as a duplicate name, is caught before the
+  write by a validation guard; the constraint stays as the backstop against races.
 - A service may import any Orm it needs; the domain boundary applies to services, not
   tables.
 - Python code handles aware UTC datetimes only, and every "now" a query compares with
-  or a write stores comes from the database clock, never `datetime.now(UTC)`
-  (`database.md` › Timestamps).
+  or a write stores comes from the database clock (`DatabaseClockUtils`), never
+  `datetime.now(UTC)` (`database.md` › Timestamps).
 - Deleting a row means setting `deleted_at` and `deleted_by_id`, never `DELETE`. ORM
   selects already exclude soft-deleted rows (`database.md` › Soft delete).
-- There is one request session, `DbSessionDep` (App-scoped vs request-scoped). It
-  opens a transaction that commits after the route returns and rolls back if the route
-  raises. Every route uses it, reads included: a read-only request commits an empty
-  transaction, which costs nothing, and a write can never be silently discarded.
-- Never hand-roll a transaction decorator.
-- The commit runs in dependency teardown, after the route returns, so a constraint
-  violation surfaces as a 500, and that's intended: a service never catches
-  `IntegrityError` to translate it. A clash the client needs to hear about, such as a
-  duplicate name, is caught before the write by a validation guard (Services ›
-  Validation guards). The database constraint stays as the backstop against races.
-- A service receives a db session; it never creates one, and never commits unless it
-  owns the transaction boundary explicitly. The one exception is a record that must
-  survive a rollback (Services › Records that must survive a rollback).
-- Async sessions do not lazy-load. Request relationships up front with
-  `selectinload()` / `joinedload()`.
+- Async sessions do not lazy-load. Load relationships up front with `selectinload()` /
+  `joinedload()`.
 
 ### Querying and writing
 
-2.0-style `select()`, never `session.query()`. Statement, execute, extract:
+2.0-style `select()`, never `session.query()`. One row: `scalar_one_or_none()`, then
+`NotFoundException` on `None`. A list: `scalars().all()`, which is empty rather than an
+error. Reference: `libs/personas/services/persona_service.py`.
 
-```python
-    async def find_user_by_email(self, email: str) -> FindUserByEmailResult:
-        query = (
-            select(UserOrm)
-            .where(UserOrm.email == email)
-            .options(selectinload(UserOrm.personas))
-        )
-        query_result = await self._db_session.execute(query)
-        user_record = query_result.scalar_one_or_none()
-
-        if user_record is None:
-            raise NotFoundException("User not found")
-        return FindUserByEmailResult.model_validate(user_record, from_attributes=True)
-```
-
-A record becomes a `Result` through `model_validate(<entity>_record, from_attributes=True)`,
-which copies only the fields the `Result` declares, including nested `Result`s. The
-flag goes on the call; a `Result` class never sets `model_config`, so it stays a plain
-shape.
-
-A `Result` that adds a value the record doesn't hold, such as a flag computed from a
-setting, is built with its constructor, listing each field. The added field has no
-default, so a caller can't forget it: `FindUserByIdentityResult` and
-`is_credit_balance_low`.
-
-A `Result` that spans related rows is built the same way, from a record whose
-relationships were loaded up front: `contains_eager` when the query already joins them
-(such as for an access filter), `selectinload` otherwise, which also covers a list of
-related rows. A labelled multi-column `select()` read through `.mappings()` is only for
-flat projections and aggregates.
-
-`scalar_one_or_none()` then raise `NotFoundException` for a single row,
-`scalars().all()` for a list, which is empty rather than an error when nothing
-matches.
+A record becomes a `Result` through `<Result>.model_validate(<entity>_record,
+from_attributes=True)`, which copies only the fields the `Result` declares, including
+nested `Result`s. The flag goes on the call; a `Result` never sets `model_config`. A
+`Result` that adds a value the record doesn't hold, such as a flag computed from a
+setting, is built with its constructor, and the added field has no default so a caller
+can't forget it. A `Result` spanning related rows loads them up front: `contains_eager`
+when the query already joins them, `selectinload` otherwise. A labelled multi-column
+`select()` read through `.mappings()` is only for flat projections and aggregates.
 
 Writes are one statement each: `insert()` to create and `update()` to change, never
 `add()` and `flush()`, and never setting attributes on a loaded record. A statement
 lists every column it sets in `.values(...)`, never `**input.model_dump()`, so a
-renamed field can't write to the wrong column. A time it writes is
-`DatabaseClockUtils.build_utc_now_sql()` (`database.md` › Timestamps). A nullable
-`JSONB` column is cleared with `null()`, never `None`, which stores JSON `null` and
-passes `IS NOT NULL`. A service doesn't commit a session it was handed; one that opens
-its own session commits it (Services › Records that must survive a rollback). This
-governs application code. Test factories and tests (`pytest-testing.md` › Test data)
-and e2e seed scripts still create and change rows through the Orm with `add()`,
-attributes and `flush()`.
-
-A create returns what its caller needs with `.returning(...)`:
-
-```python
-    async def create_persona(
-        self, persona_input: PersonaInput, auth_user: AuthUser
-    ) -> CreatePersonaResult:
-        persona_insert = (
-            insert(PersonaOrm)
-            .values(
-                name=persona_input.name,
-                bio=persona_input.bio,
-                created_by_id=auth_user.id,
-                updated_by_id=auth_user.id,
-            )
-            .returning(PersonaOrm.identity)
-        )
-        persona_insert_result = await self._db_session.execute(persona_insert)
-        persona_identity = persona_insert_result.scalar_one()
-
-        return CreatePersonaResult(identity=persona_identity)
-```
+renamed field can't write to the wrong column. A create returns what its caller needs
+with `.returning(<Orm>.identity)`. A time it writes is
+`DatabaseClockUtils.build_utc_now_sql()`. A nullable `JSONB` column is cleared with
+`null()`, never `None`, which stores JSON `null` and passes `IS NOT NULL`. Tests,
+factories and e2e seed scripts still use the Orm with `add()`, attributes and
+`flush()` (`pytest-testing.md` › Test data).
 
 An update that needs an access check reads the row first, in its own query that raises
-`NotFoundException` or `ForbiddenException`, then updates it by `id`:
+`NotFoundException` or `ForbiddenException`, then updates it by `id`. One with no
+access check skips the read: its `WHERE` is the lookup, and a row count of 0 raises
+`NotFoundException`. The soft-delete rule only filters selects, so on a table whose
+rows are soft-deleted that `WHERE` adds `<Orm>.deleted_at.is_(None)`.
 
-```python
-    async def update_persona(
-        self, persona_identity: UUID, persona_input: PersonaInput, auth_user: AuthUser
-    ) -> None:
-        persona_record = await self._find_owned_persona_record(persona_identity, auth_user)
-        persona_update = (
-            update(PersonaOrm)
-            .where(PersonaOrm.id == persona_record.id)
-            .values(
-                name=persona_input.name,
-                bio=persona_input.bio,
-                updated_by_id=auth_user.id,
-            )
-        )
-        await self._db_session.execute(persona_update)
-```
+**A write that moves a row to a new status, or claims it, names the statuses it moves
+from in its `WHERE`**, so a late write from a job that's being stopped can't undo a
+newer one. A row count of 0 then means the row moved on, which is not an error; when
+an unknown row must still raise, a read of its id tells the two apart. When writes
+from different sessions touch a parent row and its children, each locks the parent
+first with `with_for_update()`, so two transactions never wait on each other's rows.
 
-An update with no access check skips the read: its `WHERE` is the lookup, and a row
-count of 0 raises `NotFoundException`. The soft-delete rule only filters selects, so
-when the app soft-deletes rows of that table, as it does personas, blog posts and
-content items, that `WHERE` adds `<Orm>.deleted_at.is_(None)`:
-
-```python
-        step_decision_update = (
-            update(GenerateTextStepOrm)
-            .where(GenerateTextStepOrm.id == step_id)
-            .values(
-                human_decision=human_decision,
-                human_feedback=human_feedback,
-                decided_by_id=auth_user.id,
-                decided_at=DatabaseClockUtils.build_utc_now_sql(),
-                updated_by_id=auth_user.id,
-            )
-        )
-        step_decision_update_result = await db_session.execute(step_decision_update)
-        if step_decision_update_result.rowcount == 0:
-            raise NotFoundException(f"Generate text step {step_id} not found")
-```
-
-An atomic claim works the same way, with its condition in the `WHERE`:
-`claim_paused_run` sets `RUNNING` only where the status is still `AWAITING_REVIEW`, and
-reports whether it changed a row.
-
-**A write that moves a row to a new status names the statuses it moves from in its
-`WHERE`**, so a late write from a job that's being stopped can't undo a newer one:
-`start_run` moves only a `PENDING` run, `complete_run` only a `RUNNING` one, and
-`fail_run` only an unfinished one. A row count of 0 then means the row moved on, which
-is not an error; when an unknown row must still raise, a read of its id tells the two
-apart (`_raise_if_run_missing`, `_raise_if_step_missing`). Writes from different sessions that touch a run and
-its steps lock the run first, as `fail_run`, `create_step` and `complete_step` do with
-`with_for_update()`, so two transactions never wait on each other's rows.
-
-Deletes are updates too: set `deleted_at` from the
-database clock and `deleted_by_id`. `updated_at` needs nothing (`database.md` ›
-Timestamps).
+A delete is an `update()` that sets `deleted_at` from the database clock and
+`deleted_by_id`. `updated_at` sets itself (`database.md` › Timestamps).
 
 ## Configuration and constants
 
@@ -882,11 +457,6 @@ When in doubt, make it a setting, unless it is a request field's limit.
 
 Settings are defined once, in the lib. There is no app-side duplicate.
 
-- **`libs/<domain>/settings.py` declares the shape and defaults.** A plain Pydantic
-  `BaseModel`, `frozen=True`. It knows nothing about TOML, env vars, or file paths.
-- **`apps/api/core/config.py` declares where values come from.** The root
-  `AppSettings` is the only `BaseSettings` in the codebase.
-
 ```python
 # libs/humanizer/settings.py
 class HumanizerSettings(BaseModel):
@@ -894,160 +464,38 @@ class HumanizerSettings(BaseModel):
 
     llm_request_timeout_seconds: int = 30
     max_rewrite_passes: int = 3
-    model_name: str = "claude-sonnet-4-6"
 ```
 
-```python
-# apps/api/core/config.py
-class AppSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        toml_file="config.toml",
-        env_nested_delimiter="__",
-    )
-
-    humanizer: HumanizerSettings = Field(default_factory=HumanizerSettings)
-    users: UserSettings = Field(default_factory=UserSettings)
-
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        toml_settings = TomlConfigSettingsSource(settings_cls)
-        return (init_settings, env_settings, dotenv_settings, file_secret_settings, toml_settings)
-```
-
-`toml_file` alone loads nothing — the TOML source must be added in
-`settings_customise_sources`. Sources earlier in the tuple win, so env vars override
-TOML.
-
-Only the root is a `BaseSettings`. Domain settings nested inside it are plain
-`BaseModel`s; a nested `BaseSettings` reads the environment independently and ignores
-the root's TOML file and `__` delimiter.
-
-```toml
-# config.toml — overrides only
-[humanizer]
-llm_request_timeout_seconds = 60
-```
-
-`HUMANIZER__MAX_REWRITE_PASSES=5` overrides the same field from the environment.
-
+- **`libs/<domain>/settings.py` declares the shape and defaults**, as a frozen
+  `BaseModel` that knows nothing about TOML, env vars, or file paths. It is registered
+  on `AppSettings` in `apps/api/core/config.py` as
+  `<domain>: <Domain>Settings = Field(default_factory=<Domain>Settings)`.
+- **The root `AppSettings` is the only `BaseSettings`.** A nested `BaseSettings` reads
+  the environment independently and ignores the root's TOML file and `__` delimiter.
+- Env vars override `config.toml`: `HUMANIZER__MAX_REWRITE_PASSES=5`. The TOML file
+  carries only what differs between environments; a setting no environment overrides
+  never appears in it.
+- Secrets are env-var only, declared on `AppSettings`, never in TOML.
 - `libs/` never reads a file, never reads `os.environ`, never imports `AppSettings`.
-- **A settings instance is always injected, never constructed inside a lib.**
-  `AppSettings()` is built once in `lifespan`; that populated instance is handed to
-  the service. A lib calling `HumanizerSettings()` itself gets defaults and silently
-  ignores every override.
+- **A settings instance is always injected, never constructed inside a lib.** A lib
+  calling `HumanizerSettings()` itself gets defaults and silently ignores every
+  override.
 - One or two values go into a service as plain arguments; more than that, pass the
   domain's settings object.
-- The TOML file carries only what differs between environments. A setting no
-  environment overrides never appears in it.
-- Secrets are env-var only, declared on `AppSettings`, never in TOML.
-
-```python
-def get_humanizer_service(request: Request) -> HumanizerService:
-    app_settings: AppSettings = request.app.state.settings
-    llm_client: AsyncClient = request.app.state.llm_client
-    return HumanizerService(
-        llm_client=llm_client,
-        humanizer_settings=app_settings.humanizer,
-    )
-```
 
 ### Constants
 
-`constants.py` is small. It holds values where overriding would break correctness —
-values that must match what is already deployed:
-
-```python
-# libs/users/constants.py
-SESSION_COOKIE_NAME = "sid"
-EMAIL_NORMALIZE_PATTERN = re.compile(r"\+[^@]*@")
-CACHE_KEY_PREFIX = "users:"
-```
+`constants.py` is small. It holds values where overriding would break correctness,
+values that must match what is already deployed, such as a cookie name, a cache key
+prefix or a normalizing regex.
 
 Timeouts, operational limits (rate limits, batch sizes, retry counts), model names,
 and feature flags are settings, not constants. A request field's limit is neither; it
 belongs on the DTO (DTOs › Inbound). Never use an `Enum` to group unrelated constants.
 
-A lookup map between a lib's own types is a constant named `<VALUE>_BY_<KEY>`:
-`INVITE_SIGN_IN_RESULT_TYPE_BY_STATUS_TYPE`. When a subclass has to match before its
-parent, it's a tuple of pairs in that order rather than a dict, like
-`SIGN_IN_ERROR_TYPE_BY_EXCEPTION`. The `Utils` class that reads it does the matching.
-
-### Prompts
-
-Every LLM call takes a system prompt and a user prompt, and one `Prompt` class builds
-both for one step. A domain whose steps share a shape declares an abstract
-`Base<Domain>Prompt`, and each step extends it. A lib or graph variant with one prompt
-class keeps it in `prompts.py`. One with more keeps them in a `prompts/` package, one
-module per class named after it in snake_case, holding that class and its templates,
-with `__init__.py` re-exporting every class.
-
-```python
-# libs/generate_text/graphs/blog_post/prompts/blog_post_draft_prompt.py
-DRAFT_SYSTEM_TEMPLATE = (
-    "Write a complete blog post draft from the outline and brief provided. ..."
-    "{persona_prompt_section}{tone_and_audience_prompt_section}"
-)
-
-DRAFT_USER_TEMPLATE = (
-    "Outline:\n\n{outline_text}\n\nBrief:\n\n{prompt_text}{additional_context_prompt_section}"
-)
-
-
-class BlogPostDraftPrompt(BaseGenerateTextPrompt):
-    def build_generate_prompt(self, state: GenerateTextState) -> BuildPromptResult:
-        additional_context_prompt_section = self._build_additional_context_prompt_section(
-            state.additional_context
-        )
-        user_prompt = DRAFT_USER_TEMPLATE.format(
-            outline_text=state.latest_output(),
-            prompt_text=state.prompt_text,
-            additional_context_prompt_section=additional_context_prompt_section,
-        )
-        return BuildPromptResult(
-            system_prompt=self._build_system_prompt(state), user_prompt=user_prompt
-        )
-
-    def _build_system_prompt(self, state: GenerateTextState) -> str:
-        persona = state.build_persona()
-        persona_prompt_section = self._build_persona_prompt_section(
-            persona,
-            ["name", "bio", "background", "writing_style", "sample_writing"],
-        )
-        tone_and_audience_prompt_section = self._build_tone_and_audience_prompt_section(
-            state.tone, state.target_audience
-        )
-        return DRAFT_SYSTEM_TEMPLATE.format(
-            persona_prompt_section=persona_prompt_section,
-            tone_and_audience_prompt_section=tone_and_audience_prompt_section,
-        )
-```
-
-- The system prompt says what the model is expected to do, then who it is doing it
-  as. The user prompt carries the material for this call.
-- Every prompt a class returns is one template, formatted once, with everything passed
-  in, including sections built by `_build_<what>_prompt_section` helpers. Never add to
-  a formatted template afterwards. The helpers format with templates too, and a
-  section that has nothing to say returns `""`.
-- A rewrite is a method on its step's class, not a class of its own, so it shares the
-  step's system prompt.
-- Each class chooses which inputs it uses and where they go. Formatting shared by
-  several steps is a protected helper on the base class; the subclass still decides
-  what to pass it and which prompt it lands in.
-- Method names are `build_<what>_prompt`. Never a bare `prompt()`. Every one returns a
-  `BuildPromptResult` holding `system_prompt` and `user_prompt`.
-- A prompt class holds no state. One needing configuration takes it through
-  `__init__`, like a service.
-- Template text is an `UPPER_SNAKE` constant at the top of the module that uses it.
-  Never inline in the method. Prompt text that belongs to no single step, such as a
-  node's retry instructions, follows the same rule in the module that uses it.
-- A service or node never builds a prompt string inline.
+A lookup map between a lib's own types is a constant named `<VALUE>_BY_<KEY>`. When a
+subclass has to match before its parent, it's a tuple of pairs in that order rather
+than a dict. The `Utils` class that reads it does the matching.
 
 ## Errors
 
@@ -1056,35 +504,13 @@ status codes.
 
 ### Standard exceptions
 
-`libs/core/exceptions.py` holds one exception per error category. They subclass
-`Exception` directly and know nothing about HTTP, so any lib can raise them, and so can
-`apps/`.
-
-```python
-# libs/core/exceptions.py
-class NotFoundException(Exception): ...
-
-
-class ConflictException(Exception): ...
-
-
-class UnauthorizedException(Exception): ...
-
-
-class ForbiddenException(Exception): ...
-
-
-class UnprocessableException(Exception): ...
-
-
-class PaymentRequiredException(Exception): ...
-
-
-class RateLimitedException(Exception): ...
-
-
-class ServiceUnavailableException(Exception): ...
-```
+`libs/core/exceptions.py` holds one exception per error category. Each subclasses
+`Exception` directly and knows nothing about HTTP, so any lib can raise it, and so can
+`apps/`. `apps/api/core/exception_handlers.py` maps each to its status code:
+`NotFoundException` 404, `ConflictException` 409, `UnauthorizedException` 401,
+`PaymentRequiredException` 402, `ForbiddenException` 403, `UnprocessableException`
+422, `RateLimitedException` 429, `ServiceUnavailableException` 503. A lib exception
+gets its parent's status code with no entry of its own.
 
 Add a category only when a status code isn't covered yet. Never add one for a single
 domain.
@@ -1094,19 +520,13 @@ domain.
 A lib that needs its own exceptions declares them in `libs/<domain>/exceptions.py`.
 
 - **Name**: `<Domain><What>Exception`, prefixed the way the domain's service is
-  (`UserService` → `UserEmailTakenException`, `GenerateTextService` →
-  `GenerateTextInappropriateException`).
+  (`UserService` → `UserEmailTakenException`).
 - **Parent**: exactly one standard exception, which is where its status code comes
   from. Never subclass `Exception` directly.
 - **Domain base**: `<Domain>Exception(Exception)`, only if something catches every
   exception from that domain. A domain base never subclasses a standard exception.
   Specific exceptions list it first:
   `class GenerateTextInappropriateException(GenerateTextException, UnprocessableException)`.
-
-```python
-# libs/users/exceptions.py
-class UserEmailTakenException(ConflictException): ...
-```
 
 Raise a standard exception directly when its category says everything:
 `raise NotFoundException(f"Blog post {blog_post_identity} not found")`. Declare a lib
@@ -1117,67 +537,21 @@ never returns `None`, so the route that calls it stays one line. That holds for
 lookups only other services use too: a caller that expects absence catches the
 exception.
 
-### Mapping to status codes
+### Rules
 
-`apps/api/core/exception_handlers.py` maps each standard exception to its status code,
-and `register_exception_handlers()` registers one handler per entry. `create_app()`
-calls it and does nothing else with exceptions. Starlette looks up handlers along the exception's class hierarchy,
-so every lib exception gets its parent's status code without an entry of its own.
-
-```python
-# apps/api/core/exception_handlers.py
-STATUS_CODE_BY_EXCEPTION: dict[type[Exception], int] = {
-    NotFoundException: 404,
-    ConflictException: 409,
-    UnauthorizedException: 401,
-    PaymentRequiredException: 402,
-    ForbiddenException: 403,
-    UnprocessableException: 422,
-    RateLimitedException: 429,
-    ServiceUnavailableException: 503,
-}
-
-
-def build_exception_handler(
-    status_code: int,
-) -> Callable[[Request, Exception], Awaitable[JSONResponse]]:
-    async def handle_exception(request: Request, exception: Exception) -> JSONResponse:
-        return JSONResponse(status_code=status_code, content={"detail": str(exception)})
-
-    return handle_exception
-
-
-def register_exception_handlers(fastapi_app: FastAPI) -> None:
-    for exception_class, status_code in STATUS_CODE_BY_EXCEPTION.items():
-        fastapi_app.add_exception_handler(exception_class, build_exception_handler(status_code))
-```
-
-```python
-# apps/api/app_factory.py
-def create_app() -> FastAPI:
-    fastapi_app = FastAPI(lifespan=lifespan)
-    register_exception_handlers(fastapi_app)
-    ...
-```
-
-- The error body is `{"detail": "<message>"}`, the same shape as FastAPI's own
-  errors. The message goes to the client, so it never carries internals: no SQL, no
-  stack traces, no upstream error text.
+- The error body is `{"detail": "<message>"}`. The message goes to the client, so it
+  never carries internals: no SQL, no stack traces, no upstream error text.
 - Anything not mapped is a bug and returns FastAPI's generic 500.
-- Never raise `HTTPException`, in `libs/` or in `apps/`. Dependencies such as the
-  auth guard raise a standard exception (`UnauthorizedException`), so every error
-  goes through the same map.
+- Never raise `HTTPException`, in `libs/` or in `apps/`. Dependencies such as the auth
+  guard raise a standard exception (`UnauthorizedException`), so every error goes
+  through the same map.
 - Catch a third-party exception at the lib boundary and raise a standard or lib
-  exception from it (`raise LlmUnavailableException(...) from timeout_exception`).
-  A third-party exception never reaches `apps/`.
+  exception from it (`raise LlmUnavailableException(...) from timeout_exception`). A
+  third-party exception never reaches `apps/`.
 - **A route the browser navigates to answers a failure with a redirect**, since JSON
-  would leave the user on the API's URL. The Google callback catches the lib exceptions
-  its flow raises and redirects to `{frontend_url}/sign-in?error=<CODE>`. The lib owns
-  the map from exception to code and the tuple the route catches
-  (`libs/google_auth/constants.py`), and its `Utils` does the matching
-  (`GoogleAuthUtils.find_sign_in_error_type`, `build_sign_in_error_url`); the route
-  only catches and redirects.
-  An exception not in the map still reaches the standard handlers.
-- A lib may build a frontend URL to redirect to in its own `Utils`, from a
-  `frontend_url` passed in: `InviteUtils.build_sign_in_redirect_url`. The values of its
-  enum are the query values the frontend reads (`?invite_error=INVITE_EXPIRED`).
+  would leave the user on the API's URL. The lib owns the map from exception to error
+  code, and the tuple the route catches, in its `constants.py`; its `Utils` does the
+  matching and builds the frontend URL from a `frontend_url` passed in. The route only
+  catches and redirects. The values of the error enum are the query values the
+  frontend reads. An exception not in the map still reaches the standard handlers.
+  Reference: the Google sign-in callback and `GoogleAuthUtils`.
