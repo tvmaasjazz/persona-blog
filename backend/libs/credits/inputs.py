@@ -7,6 +7,7 @@ class GrantCreditsInput(BaseModel):
     user_id: int
     amount_usd: Decimal
     note: str | None
+    invite_id: int | None = None
 
 
 class ChargeCreditsInput(BaseModel):

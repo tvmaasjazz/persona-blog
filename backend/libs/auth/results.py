@@ -9,6 +9,7 @@ class OAuthStateResult(BaseModel):
     oauth_state: str
     nonce: str
     code_verifier: str
+    invite_code: str | None
 
 
 class AuthUser(BaseModel):

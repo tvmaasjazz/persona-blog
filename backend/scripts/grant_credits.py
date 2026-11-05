@@ -21,6 +21,7 @@ from libs.credits.services import CreditLedgerService
 from libs.database.orm import UserOrm
 from libs.database.session import create_db_session_factory
 from libs.permissions.types import RoleType
+from libs.users.services import UserService
 
 
 def _parse_arguments() -> argparse.Namespace:
@@ -63,8 +64,14 @@ async def _grant_credits(email: str, amount_usd: Decimal, note: str) -> None:
 
             # Grant the credits, making a reader a creator, as the admin panel does
             credit_ledger_service = CreditLedgerService(db_session=db_session)
+            user_service = UserService(
+                db_session=db_session,
+                low_credit_balance_threshold_usd=app_settings.credits.low_balance_threshold_usd,
+            )
             admin_credit_service = AdminCreditService(
-                db_session=db_session, credit_ledger_service=credit_ledger_service
+                db_session=db_session,
+                credit_ledger_service=credit_ledger_service,
+                user_service=user_service,
             )
             grant_user_credits_input = AdminGrantUserCreditsInput(amount_usd=amount_usd, note=note)
             grant_user_credits_result = await admin_credit_service.grant_user_credits(

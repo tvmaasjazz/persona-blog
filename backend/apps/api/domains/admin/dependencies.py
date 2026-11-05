@@ -2,8 +2,9 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from apps.api.core.dependencies import DbSessionDep
-from libs.admin.services import AdminCreditService, AdminUserService
+from apps.api.core.dependencies import AppSettingsDep, DbSessionDep
+from apps.api.domains.users.dependencies import UserServiceDep
+from libs.admin.services import AdminCreditService, AdminInviteService, AdminUserService
 from libs.credits.services import CreditLedgerService
 
 
@@ -22,9 +23,24 @@ CreditLedgerServiceDep = Annotated[CreditLedgerService, Depends(get_credit_ledge
 
 
 def get_admin_credit_service(
-    db_session: DbSessionDep, credit_ledger_service: CreditLedgerServiceDep
+    db_session: DbSessionDep,
+    credit_ledger_service: CreditLedgerServiceDep,
+    user_service: UserServiceDep,
 ) -> AdminCreditService:
-    return AdminCreditService(db_session=db_session, credit_ledger_service=credit_ledger_service)
+    return AdminCreditService(
+        db_session=db_session,
+        credit_ledger_service=credit_ledger_service,
+        user_service=user_service,
+    )
 
 
 AdminCreditServiceDep = Annotated[AdminCreditService, Depends(get_admin_credit_service)]
+
+
+def get_admin_invite_service(
+    db_session: DbSessionDep, app_settings: AppSettingsDep
+) -> AdminInviteService:
+    return AdminInviteService(db_session=db_session, frontend_url=app_settings.auth.frontend_url)
+
+
+AdminInviteServiceDep = Annotated[AdminInviteService, Depends(get_admin_invite_service)]

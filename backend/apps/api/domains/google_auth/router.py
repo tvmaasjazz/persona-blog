@@ -7,19 +7,35 @@ from apps.api.domains.google_auth.dependencies import (
     GoogleOAuthServiceDep,
     GoogleSignInServiceDep,
 )
+from apps.api.domains.invites.dependencies import InviteServiceDep
 from libs.auth.constants import SESSION_COOKIE_NAME
 from libs.google_auth.constants import SIGN_IN_ERROR_EXCEPTIONS
 from libs.google_auth.utils import GoogleSignInErrorUtils
+from libs.invites.utils import InviteUtils
 
 google_auth_router = APIRouter(prefix="/auth/google", tags=["google-auth"])
 
 
 @google_auth_router.get("/login")
 async def get_google_login(
+    app_settings: AppSettingsDep,
     google_oauth_service: GoogleOAuthServiceDep,
+    invite_service: InviteServiceDep,
+    invite_code: str | None = None,
 ) -> RedirectResponse:
-    """Redirects the browser to Google's sign-in page."""
-    authorization_url = await google_oauth_service.build_authorization_url()
+    """Redirects the browser to Google's sign-in page, carrying the invite code if it can
+    still be used; an invite that can't be used redirects to the frontend's sign-in page with
+    the reason instead."""
+    # Refuse an invite that can't be used before going to Google
+    if invite_code is not None:
+        invite_sign_in_refusal = await invite_service.find_invite_sign_in_refusal(invite_code)
+        if invite_sign_in_refusal is not None:
+            invite_refusal_url = InviteUtils.build_sign_in_redirect_url(
+                app_settings.auth.frontend_url, invite_sign_in_refusal
+            )
+            return RedirectResponse(invite_refusal_url, status_code=303)
+
+    authorization_url = await google_oauth_service.build_authorization_url(invite_code)
     return RedirectResponse(authorization_url, status_code=307)
 
 
@@ -39,7 +55,11 @@ async def get_google_callback(
         sign_in_error_url = f"{app_settings.auth.frontend_url}/sign-in?error={sign_in_error_type}"
         return RedirectResponse(sign_in_error_url, status_code=303)
 
-    redirect_response = RedirectResponse(app_settings.auth.frontend_url, status_code=303)
+    # The frontend root, or its sign-in page with the invite's outcome
+    sign_in_redirect_url = InviteUtils.build_sign_in_redirect_url(
+        app_settings.auth.frontend_url, google_sign_in_result.invite_sign_in_result_type
+    )
+    redirect_response = RedirectResponse(sign_in_redirect_url, status_code=303)
     redirect_response.set_cookie(
         SESSION_COOKIE_NAME,
         google_sign_in_result.session_id,
