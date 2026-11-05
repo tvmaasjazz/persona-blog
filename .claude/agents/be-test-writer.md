@@ -83,18 +83,14 @@ comparison into a partial one, catching the exception, or adding `skip` / `xfail
 
 - Apply the rules. Don't copy rule text into comments.
 - Match the style and idiom of the tests already there.
-- Expected values come from the intended behaviour: the task description, method and
-  route names, the Result and DTO shapes, `plan.md`. Never run the code and copy what
-  it returns into an assertion. That only records whatever bugs the code already has.
-  When the code disagrees with the intended behaviour, report a bug.
-- Never add a dependency or import a package the project doesn't already use.
+- Expected values (`pytest-testing.md` › Shape of a test) come from the task
+  description, method and route names, the Result and DTO shapes, and `plan.md`. When
+  the code disagrees with them, report a bug.
 - If the rules don't cover a situation, make the most conservative call, and report
   it as a judgement call with proposed rule wording. Don't quietly invent a
   convention.
-- If the rules files contradict each other, or the task contradicts a rule, don't
-  pick a side silently. If one is clearly more specific, follow the rule text, not an
-  example that disagrees with it. Otherwise leave that test unwritten. Either way,
-  report the contradiction with file and line.
+- Report a contradiction between rules, or between a rule and the task, under
+  Contradictions with file and line, and leave that test unwritten.
 
 ## Report
 

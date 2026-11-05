@@ -70,25 +70,8 @@ data. Add a clause only for one of these reasons:
 
 ### Table shape
 
-Every `CREATE TABLE` lists the shared columns in this order:
-
-```sql
-CREATE TABLE pb_persona (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    identity UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
-    name TEXT NOT NULL,
-    bio TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
-    updated_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc'),
-    deleted_at TIMESTAMP,
-    created_by_id BIGINT NOT NULL REFERENCES pb_user (id),
-    updated_by_id BIGINT NOT NULL REFERENCES pb_user (id),
-    deleted_by_id BIGINT REFERENCES pb_user (id)
-);
-
-CREATE INDEX pb_persona_created_by_id_created_at_idx
-    ON pb_persona (created_by_id, created_at DESC);
-```
+Every `CREATE TABLE` lists the shared columns in the order of › Shared columns. The
+pattern is `migrations/sql/pb_persona/0001_create_pb_persona.up.sql`.
 
 - Table-specific columns go between `identity` and `created_at`.
 - A constraint on a single column is written inline and unnamed: `PRIMARY KEY`,
@@ -179,41 +162,25 @@ that import is what registers every mapper before configuration.
 - Indexes and partial unique indexes are declared in `__table_args__` with the exact
   name the SQL uses:
   `Index("pb_user_email_idx", "email", unique=True, postgresql_where=text("deleted_at IS NULL"))`.
-- Many-to-many association tables go in `libs/database/orm/associations.py`.
 - `libs/database/base.py`, `session.py`, `column_types.py`, and `constants.py` are
   setup files. Changing them is a deliberate design change, not part of adding a table.
 
 ### References between tables
 
-Use direct symbols where import order allows. A quoted class name is allowed on **one**
-side of a mutual relationship only: the parent holds the forward reference, and the
-child imports the parent directly.
+Use direct symbols, never quoted class names. In a mutual relationship the child
+imports the parent directly, and the parent imports the child under `if TYPE_CHECKING:`
+to avoid the import cycle; annotations are deferred, so neither side needs quotes.
 
-```python
-# parent module
-if TYPE_CHECKING:
-    from libs.database.orm.blog_post import BlogPostOrm
+The pattern is `libs/database/orm/generate_text_run.py` (parent) and
+`generate_text_step.py` (child).
 
-
-class PersonaOrm(BaseOrm):
-    blog_posts: Mapped[list["BlogPostOrm"]] = relationship(back_populates="persona")
-
-
-# child module
-class BlogPostOrm(BaseOrm):
-    persona_id: Mapped[int] = mapped_column(BigInteger, ForeignKey(PersonaOrm.id))
-    persona: Mapped[PersonaOrm] = relationship(back_populates="blog_posts")
-```
-
-- `ForeignKey(PersonaOrm.id)`, never `ForeignKey("pb_persona.id")`.
+- `ForeignKey(<Orm>.id)`, never `ForeignKey("pb_<table>.id")`.
 - `__tablename__` and the `back_populates` attribute name are the only permitted loose
   strings, with one exception: `ForeignKey("pb_user.id")` on `BaseOrm`'s audit columns and
   `UserOrm`'s own overrides of them, because `UserOrm` extends `BaseOrm` and can't be
   imported there.
 - Add a relationship only in the direction a query uses. A one-way relationship takes
-  no `back_populates` and no quoted class name: `child: Mapped[ChildOrm] = relationship()`.
-- The quoted side still imports its target under `if TYPE_CHECKING:`, so ruff keeps the
-  quotes.
+  no `back_populates`: `child: Mapped[ChildOrm] = relationship()`.
 
 ## Migrations
 
@@ -263,31 +230,8 @@ Revision files are `<YYYYMMDD>_<HHMM>_<slug>.py`, from `file_template` in
 uv run alembic revision --rev-id 20260917_1528 -m create_user_tables
 ```
 
-The wrapper names SQL files and contains no SQL:
-
-```python
-# revisions/20260917_1528_create_user_tables.py
-from migration_runner import MigrationRunner
-
-revision = "20260917_1528"
-down_revision = "20260917_1527"
-
-MIGRATION_RUNNER = MigrationRunner()
-
-
-def upgrade() -> None:
-    MIGRATION_RUNNER.run_transactional("pb_user/0001_create_pb_user.up.sql")
-    MIGRATION_RUNNER.run_transactional(
-        "pb_user_auth_provider/0001_create_pb_user_auth_provider.up.sql"
-    )
-
-
-def downgrade() -> None:
-    MIGRATION_RUNNER.run_transactional(
-        "pb_user_auth_provider/0001_create_pb_user_auth_provider.down.sql"
-    )
-    MIGRATION_RUNNER.run_transactional("pb_user/0001_create_pb_user.down.sql")
-```
+The wrapper names SQL files and contains no SQL. The pattern is
+`migrations/revisions/20260917_1528_create_user_tables.py`.
 
 - `upgrade()` runs the `.up.sql` files it names; `downgrade()` runs the matching
   `.down.sql` files in reverse order. Nothing is inferred from filenames.

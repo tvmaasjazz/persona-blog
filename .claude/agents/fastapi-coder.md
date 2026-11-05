@@ -47,34 +47,31 @@ Shared wiring files take additions only:
   If the task needs a table, column, index, or enum column that doesn't exist, don't
   write code that uses it. List the schema change under "Follow-up needed": the table,
   each column with type, nullability and default, and any constraints.
-- **Permissions** — a `PermissionType` member a route needs but that doesn't exist yet
-  is a schema change (`database.md` › Enums). Don't add it; list it under "Follow-up
-  needed" with the roles that should hold it.
+- **Column enums** — a `StrEnum` that backs a Postgres enum column, including
+  `PermissionType` members (`schema-coder`; `database.md` › Enums). List a missing
+  permission under "Follow-up needed" with the roles that should hold it.
 - **Tests** — owned by the `be-test-writer` agent. List the source files, service
   methods, and routes that need tests, so the work can be handed to it.
-- **App setup files** — `main.py`, `libs/database/base.py`, `session.py`,
-  `column_types.py` and `constants.py`, `core/dtos.py`, `core/exception_handlers.py`,
-  `core/logging.py`, `core/types.py`, `core/event_loop_monitor.py`,
-  `libs/core/exceptions.py`, `libs/core/settings.py`, and `libs/core/services/`
-  (`BackgroundJobService`). Written once; if a task seems to need a change there
-  (including a new standard exception category), report it instead.
+- **Scripts** — anything under `backend/scripts/` (the main session writes them).
+- **App setup files** — `main.py`, the setup files `database.md` › Orm classes names,
+  `core/dtos.py`, `core/exception_handlers.py`, `core/logging.py`, `core/types.py`,
+  `core/event_loop_monitor.py`, `libs/core/exceptions.py`, `libs/core/settings.py`, and
+  `libs/core/services/` (`BackgroundJobService`). If a task seems to need a change
+  there (including a new standard exception category), report it instead.
 
 ## How to work
 
 - Apply the rules. Don't copy rule text into comments.
 - Match the surrounding code's style and idiom. Comments and docstrings follow
   `python-naming.md` › Other conventions, whatever the neighbouring code does.
-- Never add a dependency or import a package the project doesn't already use.
 - You cannot run commands, so you cannot run `ruff` or `pytest`. Say so in your
   report rather than implying the code was checked.
 - If the rules don't cover a situation, including a kind of class they don't give a
   file, make the most conservative call (for a file location, don't choose one), and
   report it as a judgement call with proposed rule wording. Don't quietly invent a
   convention.
-- If the rules files contradict each other, or the task instruction contradicts
-  a rule, do not pick a side silently. Follow the rule text (not an example that
-  disagrees with it) if one is clearly more specific; otherwise leave that piece
-  unwritten. Either way, report the contradiction with file and line.
+- Report a contradiction between rules, or between a rule and the task, under
+  Contradictions with file and line, and leave that piece unwritten.
 
 ## Report
 
@@ -97,6 +94,5 @@ exact wording you'd propose adding and to which rules file. Write "None" if none
 
 **Follow-up needed** — work outside your scope that this change requires (migrations,
 permissions, tests, app setup changes, anything the rules don't give a home to), plus
-a reminder that `ruff check` and `pytest` have not been run. A route open by design
-needs an entry on the `OPEN_ROUTES` allowlist in `tests/api/test_app_factory.py`; say
-so here.
+a reminder that `ruff check` and `pytest` have not been run. Name any route open by
+design (`fastapi-structure.md` › The acting user).

@@ -23,7 +23,7 @@ backend/
 │                        #   types.py, constants.py; as needed: exceptions.py, utils/,
 │                        #   after_response_tasks.py; LLM work: see langgraph.md
 ├── migrations/          # raw SQL: see database.md
-└── scripts/             # e2e/ API walkthroughs
+└── scripts/             # e2e/ walkthroughs, db/ tooling, one-off scripts
 ```
 
 A second service (worker, scheduler) lands as `apps/<name>/` beside `api/` and reuses
@@ -70,12 +70,13 @@ Inside a lib, split services by job:
   its own service.
 - **Machinery around a flow gets its own service.** Work that runs alongside a flow
   rather than being the flow, such as a lease, a heartbeat, or a retry or polling loop,
-  is a `<Domain><Thing>Service` of its own, even when only one service calls it
-  (`GenerateTextRunLeaseService`).
+  is a `<Domain><Thing>Service` of its own, even when only one service calls it. The
+  pattern is `libs/generate_text/services/generate_text_run_lease_service.py`.
 - **A loop that runs for the app's lifetime lives with what it acts on.** A pickup
-  loop or a queue listener is a method on the lib service it acts on
-  (`GenerateTextRunPickupService.pick_up_expired_runs()`). Wiring: App-scoped vs
-  request-scoped. `apps/api/core/` holds only loops that belong to no domain.
+  loop or a queue listener is a method on the lib service it acts on. The pattern is
+  `pick_up_expired_runs()` in
+  `libs/generate_text/services/generate_text_run_pickup_service.py`. Wiring: App-scoped
+  vs request-scoped. `apps/api/core/` holds only loops that belong to no domain.
 - **A method that acts on any user's rows lives in `libs/admin/`** as
   `Admin<Entity>Service`, so a non-admin route can't call it by mistake; other services
   check ownership (the caller's own rows, or public ones). Every class in `libs/admin/`
@@ -111,8 +112,8 @@ session from `request.app.state.db_session_factory`, closed before the route run
 builds the service it calls on that session, so it takes no `...ServiceDep`, and
 returns a row as a `Result` the route passes to its service. A request session held
 open there would sit idle inside an open transaction, and in tests clash with the
-job's session. Reference: `get_generate_text_persona` and `validate_active_run_limit`
-in `apps/api/domains/generate_text/dependencies.py`.
+job's session. The pattern is `get_generate_text_persona` and
+`validate_active_run_limit` in `apps/api/domains/generate_text/dependencies.py`.
 
 ### Utils
 
@@ -155,20 +156,19 @@ service is built inside the transaction on its `db_session` and never commits.
 Everywhere else a service's collaborators arrive through `__init__`.
 
 Everything else a task or job needs — the Redis client, the domain's settings, the
-values it acts on — is passed in, so `libs/` never imports `AppSettings`. A time it
-writes comes from the database clock, not from its caller.
+values it acts on — is passed in, so `libs/` never imports `AppSettings`.
 
 ### Records that must survive a rollback
 
-A service that writes a record which must survive the caller's rollback, such as the
-LLM call log in `pb_llm_call`, takes the session factory and commits each write in its
-own short transaction. Never hold one of those sessions open across a slow call: open,
+A service that writes a record which must survive the caller's rollback, such as a log
+of calls to a paid API, takes the session factory and commits each write in its own
+short transaction. The pattern is `libs/llm/services/llm_call_service.py`. Never hold one of those sessions open across a slow call: open,
 write, commit, close.
 
 ## Layer rules
 
-- **`libs/` has no FastAPI dependency.** `Request`, `Depends`, and `HTTPException`
-  anywhere under `libs/` is a bug. Pydantic is fine. Services take what they need
+- **`libs/` has no FastAPI dependency.** `Request` or `Depends` anywhere under `libs/`
+  is a bug, and so is `HTTPException` anywhere (Errors). Pydantic is fine. Services take what they need
   through `__init__` and must be constructible with no app running.
 - **`apps/api/domains/<name>/` owns HTTP concerns only**: payload shapes, status
   codes, dependency wiring. No business rules.
@@ -238,19 +238,14 @@ A `FetchAllQueryDto` validates the query string the way a body `Dto` validates t
 body, with filters grouped in a nested filter object. Bind it as
 `Annotated[BlogPostFetchAllQueryDto, Query()]`. Pagination and filter conventions are
 not settled yet — decide them with the first feature that needs them and record them
-here.
+here (`plans/plan.md` item 7 decides it).
 
 A limit on a request field, such as required, length or format, is part of the API
 contract, so it is declared on the `Dto` field, where it reaches the OpenAPI schema
 the frontend is generated from. Declare it as an
 `Annotated[str, StringConstraints(...)]` alias at the top of `dtos.py`, named for what
-it holds, and strip whitespace on required text so `"  "` fails `min_length=1`:
-
-```python
-PersonaNameStr = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
-]
-```
+it holds, and strip whitespace on required text so `"  "` fails `min_length=1`. The
+pattern is `PersonaNameStr` in `apps/api/domains/personas/dtos.py`.
 
 A check that needs the database, or more than one field, is a validation guard
 (Services › Validation guards).
@@ -317,18 +312,8 @@ takes the author's user id instead (`granted_by_id`). Services never read the cu
 user from anywhere else.
 
 A route lists the permission it needs first in its `dependencies`, before any
-validation guard, so a caller without it is refused before anything is read:
-
-```python
-@persona_router.post(
-    "",
-    status_code=201,
-    dependencies=[
-        Depends(require_permissions(PermissionType.PERSONA_WRITE)),
-        Depends(validate_new_persona_name),
-    ],
-)
-```
+validation guard, so a caller without it is refused before anything is read. The
+pattern is `create_persona` in `apps/api/domains/personas/router.py`.
 
 `require_permissions(...)` raises `ForbiddenException` unless the user holds every
 permission named. Code checks permissions, never roles. Every route names a
@@ -351,18 +336,7 @@ Loops don't start in the test environment; a test calls the method one pass runs
 A domain's `dependencies.py` builds request-scoped objects and the service from
 `app.state` and other dependencies. Each factory is followed immediately by its
 `Annotated` alias, and a factory that takes another alias comes after the one it uses.
-
-```python
-# apps/api/domains/users/dependencies.py
-def get_user_service(db_session: DbSessionDep, app_settings: AppSettingsDep) -> UserService:
-    return UserService(
-        db_session=db_session,
-        low_credit_balance_threshold_usd=app_settings.credits.low_balance_threshold_usd,
-    )
-
-
-UserServiceDep = Annotated[UserService, Depends(get_user_service)]
-```
+The pattern is `apps/api/domains/users/dependencies.py`.
 
 Routers are one line of delegation, type hints only, no `= Depends(...)` defaults. A
 route's permission and validation guards go in the decorator's `dependencies` (DTOs ›
@@ -391,11 +365,10 @@ application code uses the database.
   write by a validation guard; the constraint stays as the backstop against races.
 - A service may import any Orm it needs; the domain boundary applies to services, not
   tables.
-- Python code handles aware UTC datetimes only, and every "now" a query compares with
-  or a write stores comes from the database clock (`DatabaseClockUtils`), never
-  `datetime.now(UTC)` (`database.md` › Timestamps).
-- Deleting a row means setting `deleted_at` and `deleted_by_id`, never `DELETE`. ORM
-  selects already exclude soft-deleted rows (`database.md` › Soft delete).
+- A time written comes from `DatabaseClockUtils`, never `datetime.now()` or the caller
+  (`database.md` › Timestamps).
+- Deleting a row is an `update()` that sets `deleted_at` and `deleted_by_id`, never
+  `DELETE`. ORM selects already exclude soft-deleted rows (`database.md` › Soft delete).
 - Async sessions do not lazy-load. Load relationships up front with `selectinload()` /
   `joinedload()`.
 
@@ -418,8 +391,7 @@ Writes are one statement each: `insert()` to create and `update()` to change, ne
 `add()` and `flush()`, and never setting attributes on a loaded record. A statement
 lists every column it sets in `.values(...)`, never `**input.model_dump()`, so a
 renamed field can't write to the wrong column. A create returns what its caller needs
-with `.returning(<Orm>.identity)`. A time it writes is
-`DatabaseClockUtils.build_utc_now_sql()`. A nullable `JSONB` column is cleared with
+with `.returning(<Orm>.identity)`. A nullable `JSONB` column is cleared with
 `null()`, never `None`, which stores JSON `null` and passes `IS NOT NULL`. Tests,
 factories and e2e seed scripts still use the Orm with `add()`, attributes and
 `flush()` (`pytest-testing.md` › Test data).
@@ -436,9 +408,6 @@ newer one. A row count of 0 then means the row moved on, which is not an error; 
 an unknown row must still raise, a read of its id tells the two apart. When writes
 from different sessions touch a parent row and its children, each locks the parent
 first with `with_for_update()`, so two transactions never wait on each other's rows.
-
-A delete is an `update()` that sets `deleted_at` from the database clock and
-`deleted_by_id`. `updated_at` sets itself (`database.md` › Timestamps).
 
 ## Configuration and constants
 

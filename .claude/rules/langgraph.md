@@ -7,7 +7,9 @@ paths:
   - "backend/libs/**/output_formats.py"
   - "backend/libs/**/*node_service.py"
   - "backend/libs/llm/**"
-  - "backend/tests/libs/generate_text/**"
+  - "backend/tests/libs/**/graphs/**"
+  - "backend/tests/libs/**/prompts/**"
+  - "backend/tests/stubs/llm.py"
 ---
 
 # LangGraph workflows and prompts

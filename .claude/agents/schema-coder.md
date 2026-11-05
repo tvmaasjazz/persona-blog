@@ -68,8 +68,8 @@ compose needs to be running. Don't work around it.
   which you changed.
 - If the rules don't cover a situation, make the most conservative call and report it
   as a judgement call with proposed rule wording. Don't quietly invent a convention.
-- If the task contradicts a rule, don't pick a side silently. Leave that piece
-  unwritten and report the contradiction with file and line.
+- Report a contradiction between rules, or between a rule and the task, under
+  Contradictions with file and line, and leave that piece unwritten.
 
 ## Report
 

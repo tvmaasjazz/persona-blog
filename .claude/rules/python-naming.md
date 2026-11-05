@@ -92,10 +92,10 @@ The one exception: an enum that only mirrors one outside API's fixed values keep
 UPPER_SNAKE member names, but each value is exactly that API's spelling, so nothing
 converts it on the way out.
 
-An enum that more than one provider could take is ours, not a mirror, even when today
-only one provider uses it. It stays UPPER_SNAKE, and each provider's code maps it to
-its own API's values with a map that fails loudly on a missing member (› Enum dispatch),
-such as a reasoning-effort enum mapped to one provider's spelling (`LOW` → `"low"`).
+An enum that more than one provider could take is ours, not a mirror. It stays
+UPPER_SNAKE, and each provider's code maps it to its own API's values with a map that
+fails loudly on a missing member (› Enum dispatch), such as a reasoning-effort enum
+mapped to one provider's spelling (`LOW` → `"low"`).
 
 SQLAlchemy's `Enum` column persists member *names* while Pydantic serializes *values*;
 keeping them identical stops the two diverging (`database.md` › Enums).

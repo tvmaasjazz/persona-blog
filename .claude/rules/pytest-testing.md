@@ -15,9 +15,10 @@ fixture names, folders, `AuthUserDep`, `BaseOrm` and the markers are real.
 
 Tools: pytest, pytest-asyncio, httpx (`ASGITransport` to call the app,
 `MockTransport` to fake third-party HTTP), `structlog.testing`, and real Postgres and
-Redis from docker compose, never SQLite or fakeredis. Ask before adding any test
-dependency, including `pytest-mock`, `respx`, `factory_boy`, `freezegun`, `pytest-env`
-and `asgi-lifespan`: each has an in-house pattern below.
+Redis from docker compose, never SQLite or fakeredis. `pytest-mock`, `respx`,
+`factory_boy`, `freezegun`, `pytest-env` and `asgi-lifespan` each have an in-house
+pattern below, so none is a reason to add a dependency (CLAUDE.md › Non-obvious stack
+choices).
 
 ## Layout
 
@@ -93,6 +94,8 @@ outcome; a second action belongs in a second test.
 Write expected values as literals in the test, never recomputed with the code's own
 logic: `character_count=19`, not `len(content)`. The no-loose-literals rule covers
 `libs/` and `apps/`, not tests. Test data should be visible where it's asserted.
+Expected values come from the intended behaviour; never run the code and copy its
+output into an assertion.
 
 When behaviour depends on a setting, build the settings model in the test with a
 non-default value, e.g. `WeatherSettings(max_retries=2)`. Never rely on the default.
@@ -284,13 +287,8 @@ Test data comes from `tests/factories/<domain>.py`, one module per lib domain (s
 
 ## Root fixtures
 
-`tests/conftest.py` holds the infrastructure fixtures: `environment_variables` (which
-points the suite at `pb_test` and Redis index 15), `app_settings`, `db_engine`,
-`db_connection`, `db_session_factory`, `db_session` and `redis_client`.
-`tests/api/conftest.py` holds the app fixtures: `fastapi_app`, `api_client`,
-`signed_in_user`, `signed_in_reader`, `signed_in_admin`, `other_user_client`,
-`llm_service_stub` and `background_job_service`. Read those two files rather than
-copying them. A test can rely on:
+The infrastructure fixtures are in `tests/conftest.py` and the app fixtures in
+`tests/api/conftest.py`; read them rather than copying them. A test can rely on:
 
 - The schema is built by the real migrations, never `BaseOrm.metadata.create_all()`.
 - Each test runs inside one rolled-back transaction, and every session's `commit()` is
@@ -428,11 +426,10 @@ def weather_service_stub(fastapi_app: FastAPI) -> WeatherServiceStub:
 
 **Signed-in requests go through the real guard.** Never override `get_auth_user`
 (`AuthUserDep`). `build_auth_user` (`tests/factories/auth.py`) gives a role its seeded
-permissions unless the test passes others. `signed_in_user` is a creator: every
-permission but the admin routes', and $5.00 of credit, enough to start a run.
-`signed_in_reader` holds only the persona and blog post reads, with $0.
-`signed_in_admin` holds every permission, with $0. `other_user_client` is a second
-signed-in creator with its own client.
+permissions unless the test passes others. `signed_in_user` is a creator with every
+non-admin permission and $5.00, enough to start a run; `signed_in_reader` holds only
+the persona and blog post reads and `signed_in_admin` every permission, both with $0;
+`other_user_client` is a second creator with its own client.
 
 | Situation                     | Pattern |
 | ----------------------------- | ------- |
@@ -442,7 +439,7 @@ signed-in creator with its own client.
 | Create (`POST`)               | Select the row by the returned `identity` and assert its columns. The body is `{"identity": "<uuid>"}` |
 | Malformed identity → 422      | One test per route with an identity path parameter: a non-UUID value returns 422 |
 | Update (`PUT`) or `DELETE`    | Assert the body `== {}`, then select to prove the row changed or is gone. `await db_session.refresh(<entity>_record)` before reading a row the test already holds: `expire_on_commit=False` leaves its copy stale |
-| List (`GET` with a `FetchAllQueryDto`) | An invalid query value → 422 with `loc` starting `"query"`. Pagination and filter cases wait on the conventions `fastapi-structure.md` hasn't settled yet |
+| List (`GET` with a `FetchAllQueryDto`) | An invalid query value → 422 with `loc` starting `"query"`. Pagination and filter cases wait on the conventions `fastapi-structure.md` hasn't settled yet (`plans/plan.md` item 7 decides it) |
 | Write rolls back on failure   | Make the route fail after its first write; assert no row |
 | Protected route, signed out   | One test per protected route using plain `api_client`; assert 401 |
 | Signed in without the route's permission | Except on admin routes, one test per route whose permission a reader lacks, with `signed_in_reader`; assert 403, and for a write, select to prove nothing was written or changed. A read every role holds needs none: `test_dependencies.py` covers refusal |
