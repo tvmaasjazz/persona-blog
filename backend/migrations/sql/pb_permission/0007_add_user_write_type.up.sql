@@ -1,0 +1,1 @@
+ALTER TYPE pb_permission_type ADD VALUE IF NOT EXISTS 'USER_WRITE';

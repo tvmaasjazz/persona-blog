@@ -22,3 +22,4 @@ class PermissionType(StrEnum):
     USER_READ = "USER_READ"
     CREDIT_READ = "CREDIT_READ"
     CREDIT_WRITE = "CREDIT_WRITE"
+    USER_WRITE = "USER_WRITE"
