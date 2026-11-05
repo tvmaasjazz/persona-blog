@@ -310,6 +310,16 @@ class GenerateTextRunService:
         )
         return find_run_result.model_copy(update={"persona_identity": persona_identity})
 
+    async def find_unfinished_run_ids(self, user_id: int) -> list[int]:
+        """The ids of the user's runs that haven't finished; empty when there are none."""
+        unfinished_run_id_query = select(GenerateTextRunOrm.id).where(
+            GenerateTextRunOrm.created_by_id == user_id,
+            GenerateTextRunOrm.status.in_(UNFINISHED_RUN_STATUSES),
+        )
+        async with self._db_session_factory() as db_session:
+            unfinished_run_id_query_result = await db_session.execute(unfinished_run_id_query)
+            return list(unfinished_run_id_query_result.scalars().all())
+
     @staticmethod
     async def _raise_if_run_missing(db_session: AsyncSession, run_id: int) -> None:
         """Tells an unknown run from one a guarded write left alone."""

@@ -1,11 +1,11 @@
 from uuid import UUID
 
-from sqlalchemy import insert, or_, select, update
+from sqlalchemy import and_, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import ForbiddenException, NotFoundException
-from libs.database.orm import PersonaOrm
+from libs.database.orm import PersonaOrm, UserOrm
 from libs.database.utils import DatabaseClockUtils
 from libs.personas.inputs import PersonaInput
 from libs.personas.results import (
@@ -127,10 +127,19 @@ class PersonaService:
     async def _find_accessible_persona_record(
         self, persona_identity: UUID, auth_user: AuthUser
     ) -> PersonaOrm:
-        """Finds the caller's own or any public persona; someone else's private one is not found."""
+        """Finds the caller's own or any public persona of an active creator; someone else's
+        private one, or a suspended creator's public one, is not found."""
+        is_creator_active = (
+            select(UserOrm.id)
+            .where(UserOrm.id == PersonaOrm.created_by_id, UserOrm.is_active)
+            .exists()
+        )
         persona_query = select(PersonaOrm).where(
             PersonaOrm.identity == persona_identity,
-            or_(PersonaOrm.created_by_id == auth_user.id, PersonaOrm.is_public),
+            or_(
+                PersonaOrm.created_by_id == auth_user.id,
+                and_(PersonaOrm.is_public, is_creator_active),
+            ),
         )
         persona_query_result = await self._db_session.execute(persona_query)
         persona_record = persona_query_result.scalar_one_or_none()

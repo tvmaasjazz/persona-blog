@@ -1,13 +1,17 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints
 
 from apps.api.core.dtos import UsdDecimal
 from libs.admin.constants import MAX_CREDIT_GRANT_USD
-from libs.admin.inputs import AdminGrantUserCreditsInput
+from libs.admin.inputs import (
+    AdminGrantUserCreditsInput,
+    AdminSetUserActiveInput,
+    AdminSetUserRoleInput,
+)
 from libs.admin.results import (
     AdminCreditLedgerEntryResult,
     AdminFindUserCreditLedgerResult,
@@ -32,6 +36,20 @@ class CreditGrantDto(BaseModel):
 
     def to_input(self) -> AdminGrantUserCreditsInput:
         return AdminGrantUserCreditsInput(amount_usd=self.amount_usd, note=self.note)
+
+
+class UserRoleDto(BaseModel):
+    role: Literal[RoleType.READER, RoleType.CREATOR]
+
+    def to_input(self) -> AdminSetUserRoleInput:
+        return AdminSetUserRoleInput(role=self.role)
+
+
+class UserActiveDto(BaseModel):
+    is_active: bool
+
+    def to_input(self) -> AdminSetUserActiveInput:
+        return AdminSetUserActiveInput(is_active=self.is_active)
 
 
 class AdminUserResponseDto(BaseModel):

@@ -22,3 +22,13 @@ RUN_NEVER_STARTED_ERROR_MESSAGE = "This run never started. Start it again."
 # Stored on a run that was picked up more often than the settings allow.
 RUN_PICKED_UP_TOO_OFTEN_ERROR_CODE = "RunPickedUpTooOften"
 RUN_PICKED_UP_TOO_OFTEN_ERROR_MESSAGE = "This run kept being interrupted. Start it again."
+
+# Stored on a run still unfinished when its user was suspended.
+USER_SUSPENDED_ERROR_CODE = "UserSuspended"
+USER_SUSPENDED_ERROR_MESSAGE = "This run stopped because the account was suspended."
+
+# Stored on a run still unfinished when its user was made a reader.
+USER_ROLE_CHANGED_ERROR_CODE = "UserRoleChanged"
+USER_ROLE_CHANGED_ERROR_MESSAGE = (
+    "This run stopped because the account can no longer generate text."
+)

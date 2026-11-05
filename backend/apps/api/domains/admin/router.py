@@ -4,15 +4,24 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 from apps.api.core.config import AppSettings
 from apps.api.core.dependencies import AuthUserDep, require_permissions
-from apps.api.core.dtos import IdentityResponseDto
+from apps.api.core.dtos import EmptyResponseDto, IdentityResponseDto
 from apps.api.domains.admin.dependencies import AdminCreditServiceDep, AdminUserServiceDep
 from apps.api.domains.admin.dtos import (
     AdminUserListResponseDto,
     AdminUserResponseDto,
     CreditGrantDto,
     CreditLedgerResponseDto,
+    UserActiveDto,
+    UserRoleDto,
 )
 from libs.auth.after_response_tasks import delete_user_sessions
+from libs.generate_text.after_response_tasks import fail_user_unfinished_runs
+from libs.generate_text.constants import (
+    USER_ROLE_CHANGED_ERROR_CODE,
+    USER_ROLE_CHANGED_ERROR_MESSAGE,
+    USER_SUSPENDED_ERROR_CODE,
+    USER_SUSPENDED_ERROR_MESSAGE,
+)
 from libs.permissions.types import PermissionType
 
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
@@ -83,3 +92,84 @@ async def grant_user_credits(
             user_id=grant_user_credits_result.user_id,
         )
     return IdentityResponseDto(identity=grant_user_credits_result.identity)
+
+
+@admin_router.put(
+    "/users/{user_identity}/role",
+    dependencies=[Depends(require_permissions(PermissionType.USER_WRITE))],
+)
+async def set_user_role(
+    user_identity: UUID,
+    dto: UserRoleDto,
+    request: Request,
+    after_response_tasks: BackgroundTasks,
+    auth_user: AuthUserDep,
+    admin_user_service: AdminUserServiceDep,
+) -> EmptyResponseDto:
+    """Sets the user's role to reader or creator, signing them out everywhere and, when a
+    creator becomes a reader, failing their unfinished runs; 404 for an unknown user, 409
+    for an admin."""
+    set_user_role_result = await admin_user_service.set_user_role(
+        user_identity, dto.to_input(), auth_user
+    )
+
+    # Sign the user out after the response, once the change has committed
+    if set_user_role_result.is_changed:
+        app_settings: AppSettings = request.app.state.settings
+        after_response_tasks.add_task(
+            delete_user_sessions,
+            redis_client=request.app.state.redis_client,
+            auth_settings=app_settings.auth,
+            user_id=set_user_role_result.user_id,
+        )
+
+    # A reader can't generate text, so what the user had running stops
+    if set_user_role_result.is_demoted_to_reader:
+        after_response_tasks.add_task(
+            fail_user_unfinished_runs,
+            db_session_factory=request.app.state.db_session_factory,
+            user_id=set_user_role_result.user_id,
+            error_code=USER_ROLE_CHANGED_ERROR_CODE,
+            error_message=USER_ROLE_CHANGED_ERROR_MESSAGE,
+        )
+    return EmptyResponseDto()
+
+
+@admin_router.put(
+    "/users/{user_identity}/active",
+    dependencies=[Depends(require_permissions(PermissionType.USER_WRITE))],
+)
+async def set_user_active(
+    user_identity: UUID,
+    dto: UserActiveDto,
+    request: Request,
+    after_response_tasks: BackgroundTasks,
+    auth_user: AuthUserDep,
+    admin_user_service: AdminUserServiceDep,
+) -> EmptyResponseDto:
+    """Suspends or reactivates the user; a suspension signs them out everywhere and fails
+    their unfinished runs; 404 for an unknown user, 409 for an admin."""
+    set_user_active_result = await admin_user_service.set_user_active(
+        user_identity, dto.to_input(), auth_user
+    )
+
+    # Sign the user out after the response, once the change has committed
+    if set_user_active_result.is_changed:
+        app_settings: AppSettings = request.app.state.settings
+        after_response_tasks.add_task(
+            delete_user_sessions,
+            redis_client=request.app.state.redis_client,
+            auth_settings=app_settings.auth,
+            user_id=set_user_active_result.user_id,
+        )
+
+    # A suspended user's runs stop
+    if set_user_active_result.is_changed and not dto.is_active:
+        after_response_tasks.add_task(
+            fail_user_unfinished_runs,
+            db_session_factory=request.app.state.db_session_factory,
+            user_id=set_user_active_result.user_id,
+            error_code=USER_SUSPENDED_ERROR_CODE,
+            error_message=USER_SUSPENDED_ERROR_MESSAGE,
+        )
+    return EmptyResponseDto()
