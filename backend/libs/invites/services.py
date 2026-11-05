@@ -7,7 +7,7 @@ from libs.database.orm import InviteOrm
 from libs.database.utils import DatabaseClockUtils
 from libs.invites.exceptions import InviteNotFoundException
 from libs.invites.results import FindInviteStatusResult, RedeemInviteResult
-from libs.invites.types import InviteSignInResultType, InviteStatusType
+from libs.invites.types import InviteSignInResultType
 from libs.invites.utils import InviteUtils
 from libs.users.services import UserService
 
@@ -45,17 +45,6 @@ class InviteService:
         return FindInviteStatusResult(
             status=status_type, credit_amount_usd=invite_row.credit_amount_usd
         )
-
-    async def find_invite_sign_in_refusal(self, code: str) -> InviteSignInResultType | None:
-        """The reason the code can't be used to sign in, or None when it can."""
-        try:
-            find_invite_status_result = await self.find_invite_status(code)
-        except InviteNotFoundException:
-            return InviteSignInResultType.INVITE_NOT_FOUND
-
-        if find_invite_status_result.status == InviteStatusType.UNUSED:
-            return None
-        return InviteUtils.build_sign_in_result_type(find_invite_status_result.status)
 
     async def redeem_invite(self, code: str, user_id: int) -> RedeemInviteResult:
         """Marks the invite used by the user, makes a reader a creator and grants the credits,
@@ -111,7 +100,14 @@ class InviteService:
         )
 
     async def _build_refused_result(self, code: str) -> RedeemInviteResult:
-        invite_sign_in_refusal = await self.find_invite_sign_in_refusal(code)
-        if invite_sign_in_refusal is None:
-            raise NotImplementedError("An unused invite was refused")
-        return RedeemInviteResult(result_type=invite_sign_in_refusal, is_made_creator=False)
+        try:
+            find_invite_status_result = await self.find_invite_status(code)
+        except InviteNotFoundException:
+            return RedeemInviteResult(
+                result_type=InviteSignInResultType.INVITE_NOT_FOUND, is_made_creator=False
+            )
+        # An update that matched no row never leaves the invite UNUSED, for which this raises
+        sign_in_result_type = InviteUtils.build_sign_in_result_type(
+            find_invite_status_result.status
+        )
+        return RedeemInviteResult(result_type=sign_in_result_type, is_made_creator=False)

@@ -61,6 +61,7 @@ def get_google_sign_in_service(
         auth_session_service=auth_session_service,
         permission_service=PermissionService(db_session=db_session),
         invite_service=invite_service,
+        frontend_url=app_settings.auth.frontend_url,
     )
 
 

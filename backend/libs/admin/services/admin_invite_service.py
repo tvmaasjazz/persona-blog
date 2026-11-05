@@ -1,3 +1,4 @@
+from datetime import timedelta
 from uuid import UUID
 
 from sqlalchemy import insert, select, update
@@ -15,7 +16,6 @@ from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.database.orm import InviteOrm, UserOrm
 from libs.database.utils import DatabaseClockUtils
-from libs.invites.constants import SECONDS_PER_DAY
 from libs.invites.utils import InviteUtils
 
 
@@ -32,7 +32,7 @@ class AdminInviteService:
     ) -> AdminCreateInviteResult:
         """Creates an invite storing only the code's hash, and returns its identity and link."""
         code = InviteUtils.build_code()
-        expires_in_seconds = admin_create_invite_input.expires_in_days * SECONDS_PER_DAY
+        expires_in = timedelta(days=admin_create_invite_input.expires_in_days)
         invite_insert = (
             insert(InviteOrm)
             .values(
@@ -40,7 +40,7 @@ class AdminInviteService:
                 credit_amount_usd=admin_create_invite_input.credit_amount_usd,
                 note=admin_create_invite_input.note,
                 code_hash=InviteUtils.hash_code(code),
-                expires_at=DatabaseClockUtils.build_utc_now_plus_sql(expires_in_seconds),
+                expires_at=DatabaseClockUtils.build_utc_now_plus_sql(expires_in.total_seconds()),
                 created_by_id=auth_user.id,
                 updated_by_id=auth_user.id,
             )
