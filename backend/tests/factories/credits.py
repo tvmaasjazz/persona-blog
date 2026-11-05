@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,7 +52,11 @@ async def insert_credit_ledger_row(
     generate_text_run_id: int | None = None,
     generate_text_step_id: int | None = None,
     note: str | None = None,
+    created_by_id: int | None = None,
+    created_at: datetime | None = None,
 ) -> CreditLedgerOrm:
+    # The row's own user wrote it unless the test names someone else, such as an admin
+    author_id = user_id if created_by_id is None else created_by_id
     credit_ledger_record = CreditLedgerOrm(
         user_id=user_id,
         amount_usd=amount_usd,
@@ -59,9 +64,12 @@ async def insert_credit_ledger_row(
         generate_text_run_id=generate_text_run_id,
         generate_text_step_id=generate_text_step_id,
         note=note,
-        created_by_id=user_id,
-        updated_by_id=user_id,
+        created_by_id=author_id,
+        updated_by_id=author_id,
     )
+    # Left unset, the column's default fills it in
+    if created_at is not None:
+        credit_ledger_record.created_at = created_at
     db_session.add(credit_ledger_record)
     await db_session.flush()
     return credit_ledger_record

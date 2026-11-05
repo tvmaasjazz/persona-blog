@@ -1,33 +1,29 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.admin.results import AdminUserDetailResult, FindUserListResult
 from libs.admin.services import AdminUserService
 from libs.core.exceptions import NotFoundException
-from libs.database.orm import UserOrm
 from libs.permissions.types import RoleType
-from tests.factories.users import insert_user_row
-
-
-async def _find_system_user_identity(db_session: AsyncSession) -> UUID | None:
-    system_user_identity_query = select(UserOrm.identity).where(UserOrm.is_system_user.is_(True))
-    return await db_session.scalar(system_user_identity_query)
+from tests.factories.users import find_system_user_row, insert_user_row
 
 
 async def test_find_user_list_returns_users_newest_first_with_role_balance_and_activity(
     db_session: AsyncSession,
 ) -> None:
+    older_created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    newer_created_at = datetime(2026, 2, 1, tzinfo=UTC)
     older_user_record = await insert_user_row(
         db_session,
         email="older@example.com",
         display_name=None,
         role=RoleType.READER,
         credit_balance_usd=Decimal("1.50"),
+        created_at=older_created_at,
     )
     newer_user_record = await insert_user_row(
         db_session,
@@ -36,21 +32,8 @@ async def test_find_user_list_returns_users_newest_first_with_role_balance_and_a
         role=RoleType.ADMIN,
         credit_balance_usd=Decimal("7.25"),
         last_activity_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        created_at=newer_created_at,
     )
-    older_created_at = datetime(2026, 1, 1, tzinfo=UTC)
-    newer_created_at = datetime(2026, 2, 1, tzinfo=UTC)
-    older_created_at_update = (
-        update(UserOrm)
-        .where(UserOrm.id == older_user_record.id)
-        .values(created_at=older_created_at)
-    )
-    newer_created_at_update = (
-        update(UserOrm)
-        .where(UserOrm.id == newer_user_record.id)
-        .values(created_at=newer_created_at)
-    )
-    await db_session.execute(older_created_at_update)
-    await db_session.execute(newer_created_at_update)
     admin_user_service = AdminUserService(db_session=db_session)
 
     find_user_list_result = await admin_user_service.find_user_list()
@@ -101,14 +84,13 @@ async def test_find_user_list_same_created_at_orders_by_id_descending(
 
 async def test_find_user_list_excludes_system_user(db_session: AsyncSession) -> None:
     user_record = await insert_user_row(db_session)
-    system_user_identity = await _find_system_user_identity(db_session)
+    system_user_record = await find_system_user_row(db_session)
     admin_user_service = AdminUserService(db_session=db_session)
 
     find_user_list_result = await admin_user_service.find_user_list()
 
     listed_identities = [user.identity for user in find_user_list_result.users]
-    assert system_user_identity is not None
-    assert system_user_identity not in listed_identities
+    assert system_user_record.identity not in listed_identities
     assert listed_identities == [user_record.identity]
 
 
@@ -164,8 +146,8 @@ async def test_find_user_unknown_identity_raises_not_found_exception(
 async def test_find_user_system_user_raises_not_found_exception(
     db_session: AsyncSession,
 ) -> None:
-    system_user_identity = await _find_system_user_identity(db_session)
+    system_user_record = await find_system_user_row(db_session)
     admin_user_service = AdminUserService(db_session=db_session)
 
     with pytest.raises(NotFoundException):
-        await admin_user_service.find_user(system_user_identity)
+        await admin_user_service.find_user(system_user_record.identity)

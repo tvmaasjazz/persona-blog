@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.admin.exceptions import AdminCreditGrantSystemUserException
@@ -22,7 +22,7 @@ from libs.permissions.types import RoleType
 from tests.factories.auth import build_auth_user
 from tests.factories.credits import insert_credit_ledger_row
 from tests.factories.generate_text import insert_generate_text_run_row
-from tests.factories.users import insert_user_row
+from tests.factories.users import find_system_user_row, insert_user_row
 
 
 def _build_admin_credit_service(db_session: AsyncSession) -> AdminCreditService:
@@ -30,11 +30,6 @@ def _build_admin_credit_service(db_session: AsyncSession) -> AdminCreditService:
         db_session=db_session,
         credit_ledger_service=CreditLedgerService(db_session=db_session),
     )
-
-
-async def _find_system_user_identity(db_session: AsyncSession) -> UUID | None:
-    system_user_identity_query = select(UserOrm.identity).where(UserOrm.is_system_user.is_(True))
-    return await db_session.scalar(system_user_identity_query)
 
 
 async def _count_ledger_rows(db_session: AsyncSession) -> int | None:
@@ -49,8 +44,15 @@ async def test_find_user_credit_ledger_returns_rows_newest_first_with_run_and_cr
     admin_record = await insert_user_row(db_session, email="admin@example.com")
     other_user_record = await insert_user_row(db_session)
     run_record = await insert_generate_text_run_row(db_session, created_by_id=user_record.id)
+    older_created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    newer_created_at = datetime(2026, 2, 1, tzinfo=UTC)
     older_grant_record = await insert_credit_ledger_row(
-        db_session, user_id=user_record.id, amount_usd=Decimal("5.00"), note="Welcome credit"
+        db_session,
+        user_id=user_record.id,
+        amount_usd=Decimal("5.00"),
+        note="Welcome credit",
+        created_by_id=admin_record.id,
+        created_at=older_created_at,
     )
     newer_charge_record = await insert_credit_ledger_row(
         db_session,
@@ -58,22 +60,9 @@ async def test_find_user_credit_ledger_returns_rows_newest_first_with_run_and_cr
         amount_usd=Decimal("-0.30"),
         entry_type=CreditLedgerEntryType.CHARGE,
         generate_text_run_id=run_record.id,
+        created_at=newer_created_at,
     )
     await insert_credit_ledger_row(db_session, user_id=other_user_record.id)
-    older_created_at = datetime(2026, 1, 1, tzinfo=UTC)
-    newer_created_at = datetime(2026, 2, 1, tzinfo=UTC)
-    older_grant_update = (
-        update(CreditLedgerOrm)
-        .where(CreditLedgerOrm.id == older_grant_record.id)
-        .values(created_at=older_created_at, created_by_id=admin_record.id)
-    )
-    newer_charge_update = (
-        update(CreditLedgerOrm)
-        .where(CreditLedgerOrm.id == newer_charge_record.id)
-        .values(created_at=newer_created_at)
-    )
-    await db_session.execute(older_grant_update)
-    await db_session.execute(newer_charge_update)
     admin_credit_service = _build_admin_credit_service(db_session)
 
     find_user_credit_ledger_result = await admin_credit_service.find_user_credit_ledger(
@@ -148,11 +137,11 @@ async def test_find_user_credit_ledger_unknown_identity_raises_not_found_excepti
 async def test_find_user_credit_ledger_system_user_raises_not_found_exception(
     db_session: AsyncSession,
 ) -> None:
-    system_user_identity = await _find_system_user_identity(db_session)
+    system_user_record = await find_system_user_row(db_session)
     admin_credit_service = _build_admin_credit_service(db_session)
 
     with pytest.raises(NotFoundException):
-        await admin_credit_service.find_user_credit_ledger(system_user_identity)
+        await admin_credit_service.find_user_credit_ledger(system_user_record.identity)
 
 
 async def test_grant_user_credits_writes_grant_row_and_raises_balance(
@@ -281,7 +270,7 @@ async def test_grant_user_credits_unknown_identity_raises_not_found_and_writes_n
 async def test_grant_user_credits_system_user_raises_admin_credit_grant_system_user_exception(
     db_session: AsyncSession,
 ) -> None:
-    system_user_identity = await _find_system_user_identity(db_session)
+    system_user_record = await find_system_user_row(db_session)
     admin_record = await insert_user_row(db_session, role=RoleType.ADMIN)
     admin_auth_user = build_auth_user(
         user_id=admin_record.id, user_identity=admin_record.identity, role=RoleType.ADMIN
@@ -291,7 +280,7 @@ async def test_grant_user_credits_system_user_raises_admin_credit_grant_system_u
 
     with pytest.raises(AdminCreditGrantSystemUserException):
         await admin_credit_service.grant_user_credits(
-            system_user_identity, grant_user_credits_input, admin_auth_user
+            system_user_record.identity, grant_user_credits_input, admin_auth_user
         )
 
     ledger_row_count = await _count_ledger_rows(db_session)

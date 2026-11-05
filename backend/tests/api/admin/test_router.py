@@ -17,16 +17,9 @@ from libs.permissions.types import RoleType
 from tests.factories.auth import build_auth_user
 from tests.factories.credits import insert_credit_ledger_row
 from tests.factories.generate_text import insert_generate_text_run_row
-from tests.factories.users import insert_user_row
+from tests.factories.users import find_system_user_row, insert_user_row
 
 UNKNOWN_USER_IDENTITY = "7b0f3c1e-5d2a-4e8b-9a61-0c4d2f8e1a53"
-
-
-async def _find_system_user_record(db_session: AsyncSession) -> UserOrm:
-    system_user_query = select(UserOrm).where(UserOrm.is_system_user.is_(True))
-    system_user_record = await db_session.scalar(system_user_query)
-    assert system_user_record is not None
-    return system_user_record
 
 
 async def _count_ledger_rows(db_session: AsyncSession, user_id: int) -> int:
@@ -175,7 +168,7 @@ async def test_find_user_unknown_user_returns_404(api_client: AsyncClient) -> No
 async def test_find_user_system_user_returns_404(
     api_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    system_user_record = await _find_system_user_record(db_session)
+    system_user_record = await find_system_user_row(db_session)
 
     find_user_response = await api_client.get(f"/admin/users/{system_user_record.identity}")
 
@@ -276,7 +269,7 @@ async def test_find_user_credit_ledger_unknown_user_returns_404(api_client: Asyn
 async def test_find_user_credit_ledger_system_user_returns_404(
     api_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    system_user_record = await _find_system_user_record(db_session)
+    system_user_record = await find_system_user_row(db_session)
 
     find_user_credit_ledger_response = await api_client.get(
         f"/admin/users/{system_user_record.identity}/credit-ledger"
@@ -422,7 +415,7 @@ async def test_grant_user_credits_unknown_user_returns_404(api_client: AsyncClie
 async def test_grant_user_credits_system_user_returns_409_and_writes_nothing(
     api_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    system_user_record = await _find_system_user_record(db_session)
+    system_user_record = await find_system_user_row(db_session)
 
     grant_user_credits_response = await api_client.post(
         f"/admin/users/{system_user_record.identity}/credit-grants",
