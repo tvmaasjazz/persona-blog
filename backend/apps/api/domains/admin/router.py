@@ -7,12 +7,12 @@ from apps.api.core.dependencies import AuthUserDep, require_permissions
 from apps.api.core.dtos import EmptyResponseDto, IdentityResponseDto
 from apps.api.domains.admin.dependencies import AdminCreditServiceDep, AdminUserServiceDep
 from apps.api.domains.admin.dtos import (
+    AdminCreditGrantDto,
+    AdminCreditLedgerResponseDto,
+    AdminUserActiveDto,
     AdminUserListResponseDto,
     AdminUserResponseDto,
-    CreditGrantDto,
-    CreditLedgerResponseDto,
-    UserActiveDto,
-    UserRoleDto,
+    AdminUserRoleDto,
 )
 from libs.auth.after_response_tasks import delete_user_sessions
 from libs.generate_text.after_response_tasks import fail_user_unfinished_runs
@@ -55,12 +55,12 @@ async def find_user(
 )
 async def find_user_credit_ledger(
     user_identity: UUID, admin_credit_service: AdminCreditServiceDep
-) -> CreditLedgerResponseDto:
+) -> AdminCreditLedgerResponseDto:
     """Lists the user's credit ledger, newest first; 404 for an unknown user."""
     find_user_credit_ledger_result = await admin_credit_service.find_user_credit_ledger(
         user_identity
     )
-    return CreditLedgerResponseDto.from_result(find_user_credit_ledger_result)
+    return AdminCreditLedgerResponseDto.from_result(find_user_credit_ledger_result)
 
 
 @admin_router.post(
@@ -70,7 +70,7 @@ async def find_user_credit_ledger(
 )
 async def grant_user_credits(
     user_identity: UUID,
-    dto: CreditGrantDto,
+    dto: AdminCreditGrantDto,
     request: Request,
     after_response_tasks: BackgroundTasks,
     auth_user: AuthUserDep,
@@ -100,7 +100,7 @@ async def grant_user_credits(
 )
 async def set_user_role(
     user_identity: UUID,
-    dto: UserRoleDto,
+    dto: AdminUserRoleDto,
     request: Request,
     after_response_tasks: BackgroundTasks,
     auth_user: AuthUserDep,
@@ -141,7 +141,7 @@ async def set_user_role(
 )
 async def set_user_active(
     user_identity: UUID,
-    dto: UserActiveDto,
+    dto: AdminUserActiveDto,
     request: Request,
     after_response_tasks: BackgroundTasks,
     auth_user: AuthUserDep,

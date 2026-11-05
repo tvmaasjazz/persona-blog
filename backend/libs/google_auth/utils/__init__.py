@@ -1,3 +1,3 @@
-from libs.google_auth.utils.google_sign_in_error_utils import GoogleSignInErrorUtils
+from libs.google_auth.utils.google_auth_utils import GoogleAuthUtils
 
-__all__ = ["GoogleSignInErrorUtils"]
+__all__ = ["GoogleAuthUtils"]

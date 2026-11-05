@@ -2,8 +2,9 @@ from libs.auth.types import SignInErrorType
 from libs.google_auth.constants import SIGN_IN_ERROR_TYPE_BY_EXCEPTION
 
 
-class GoogleSignInErrorUtils:
-    """Maps a sign-in failure to the error the frontend shows."""
+class GoogleAuthUtils:
+    """Static helpers for Google sign-in, such as mapping a failure to the error the frontend
+    shows."""
 
     @staticmethod
     def find_sign_in_error_type(exception: Exception) -> SignInErrorType:
