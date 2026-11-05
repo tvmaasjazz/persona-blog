@@ -13,6 +13,7 @@ OPEN_ROUTES = {
     ("GET", "/auth/google/login"),
     ("GET", "/auth/google/callback"),
     ("POST", "/auth/logout"),
+    ("POST", "/invites/check"),
     ("GET", "/users/me"),
     ("POST", "/dev/llm/complete"),
 }
@@ -118,6 +119,14 @@ def test_create_app_every_route_requires_a_permission_or_is_open(
             "/generate-text/runs/{run_identity}",
             PermissionType.GENERATE_TEXT_RUN_READ,
             id="find_generate_text_run",
+        ),
+        pytest.param("GET", "/admin/invites", PermissionType.INVITE_READ, id="find_invite_list"),
+        pytest.param("POST", "/admin/invites", PermissionType.INVITE_WRITE, id="create_invite"),
+        pytest.param(
+            "POST",
+            "/admin/invites/{invite_identity}/revoke",
+            PermissionType.INVITE_WRITE,
+            id="revoke_invite",
         ),
         pytest.param(
             "POST",

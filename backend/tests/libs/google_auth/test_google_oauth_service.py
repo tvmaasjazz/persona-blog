@@ -4,6 +4,7 @@ import httpx
 import pytest
 from redis.asyncio import Redis
 
+from libs.auth.results import OAuthStateResult
 from libs.auth.services import OAuthStateService
 from libs.auth.settings import AuthSettings
 from libs.core.exceptions import ServiceUnavailableException, UnauthorizedException
@@ -60,6 +61,18 @@ async def test_build_authorization_url_stores_state_with_ttl(
     assert 0 < state_ttl_seconds <= 120
 
 
+async def test_build_authorization_url_invite_code_is_stored_in_the_state(
+    google_oauth_service: GoogleOAuthService, redis_client: Redis
+) -> None:
+    authorization_url = await google_oauth_service.build_authorization_url("invite-code-1")
+
+    oauth_state = _extract_query_params(authorization_url)["state"][0]
+    stored_state = await redis_client.get(f"oauth-state:{oauth_state}")
+    assert stored_state is not None
+    assert OAuthStateResult.model_validate_json(stored_state).invite_code == "invite-code-1"
+    assert "invite-code-1" not in authorization_url
+
+
 async def test_build_authorization_url_two_calls_produce_different_state(
     google_oauth_service: GoogleOAuthService,
 ) -> None:
@@ -100,6 +113,7 @@ async def test_exchange_code_for_identity_returns_identity_and_posts_code_verifi
         is_email_verified=True,
         display_name="Ada Lovelace",
         avatar_url="https://example.com/ada.png",
+        invite_code=None,
     )
     assert sent_request_body["code"] == ["auth-code-1"]
     assert sent_request_body["client_id"] == ["test-google-client-id"]
@@ -107,6 +121,23 @@ async def test_exchange_code_for_identity_returns_identity_and_posts_code_verifi
     assert sent_request_body["redirect_uri"] == ["http://localhost:8000/auth/google/callback"]
     assert sent_request_body["grant_type"] == ["authorization_code"]
     assert sent_request_body["code_verifier"][0] != ""
+
+
+async def test_exchange_code_for_identity_returns_the_invite_code_from_the_state(
+    google_oauth_service: GoogleOAuthService, google_handler_stub: HttpHandlerStub
+) -> None:
+    authorization_url = await google_oauth_service.build_authorization_url("invite-code-1")
+    query_params = _extract_query_params(authorization_url)
+    google_id_token = build_google_id_token(nonce=query_params["nonce"][0])
+    google_handler_stub.handle_responses.append(
+        httpx.Response(200, json=build_google_token_response_body(id_token=google_id_token))
+    )
+
+    google_identity_result = await google_oauth_service.exchange_code_for_identity(
+        "auth-code-1", query_params["state"][0]
+    )
+
+    assert google_identity_result.invite_code == "invite-code-1"
 
 
 async def test_exchange_code_for_identity_state_already_consumed_raises_unauthorized_exception(

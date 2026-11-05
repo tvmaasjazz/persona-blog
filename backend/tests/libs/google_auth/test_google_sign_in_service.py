@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -9,12 +10,18 @@ from libs.auth.results import AuthUser
 from libs.auth.services import AuthSessionService
 from libs.auth.settings import AuthSettings
 from libs.core.exceptions import UnauthorizedException
-from libs.database.orm import UserAuthProviderOrm, UserOrm
+from libs.credits.services import CreditLedgerService
+from libs.database.orm import CreditLedgerOrm, UserAuthProviderOrm, UserOrm
 from libs.google_auth.services import GoogleSignInService
+from libs.invites.services import InviteService
+from libs.invites.types import InviteSignInResultType
+from libs.invites.utils import InviteUtils
 from libs.permissions.services import PermissionService
 from libs.permissions.types import PermissionType, RoleType
 from libs.users.services import UserActivityService, UserService
 from libs.users.settings import UserSettings
+from tests.factories.google_auth import build_google_identity_result
+from tests.factories.invites import insert_invite_row
 from tests.factories.users import insert_user_auth_provider_row, insert_user_row
 from tests.stubs.google_auth import GoogleOAuthServiceStub
 
@@ -115,6 +122,124 @@ async def test_sign_in_with_google_bad_state_raises_unauthorized_exception(
         await google_sign_in_service.sign_in_with_google("auth-code-1", "bad-state")
 
 
+async def test_sign_in_with_google_without_invite_code_returns_no_invite_result(
+    db_session: AsyncSession, redis_client: Redis
+) -> None:
+    google_sign_in_service = _build_google_sign_in_service(db_session, redis_client)
+
+    google_sign_in_result = await google_sign_in_service.sign_in_with_google(
+        "auth-code-1", "state-1"
+    )
+
+    assert google_sign_in_result.invite_sign_in_result_type is None
+
+
+async def test_sign_in_with_google_new_identity_with_invite_creates_creator_and_redeems_invite(
+    db_session: AsyncSession, redis_client: Redis
+) -> None:
+    invite_record = await insert_invite_row(
+        db_session,
+        code_hash=InviteUtils.hash_code("known-code"),
+        credit_amount_usd=Decimal("7.50"),
+    )
+    google_oauth_service_stub = GoogleOAuthServiceStub()
+    google_oauth_service_stub.exchange_code_for_identity_result = build_google_identity_result(
+        invite_code="known-code"
+    )
+    google_sign_in_service = _build_google_sign_in_service(
+        db_session, redis_client, google_oauth_service_stub=google_oauth_service_stub
+    )
+
+    google_sign_in_result = await google_sign_in_service.sign_in_with_google(
+        "auth-code-1", "state-1"
+    )
+
+    user_query = select(UserOrm).where(UserOrm.email == "ada@example.com")
+    user_record = await db_session.scalar(user_query)
+    assert user_record is not None
+    await db_session.refresh(invite_record)
+    stored_session = await redis_client.get(f"session:{google_sign_in_result.session_id}")
+    assert stored_session is not None
+    session_auth_user = AuthUser.model_validate_json(stored_session)
+    assert session_auth_user.role == RoleType.CREATOR
+    assert PermissionType.PERSONA_WRITE in session_auth_user.permissions
+    assert google_sign_in_result.invite_sign_in_result_type == InviteSignInResultType.ACCEPTED
+    assert invite_record.used_by_user_id == user_record.id
+    assert user_record.credit_balance_usd == Decimal("7.50")
+
+
+async def test_sign_in_with_google_known_reader_with_invite_becomes_creator(
+    db_session: AsyncSession, redis_client: Redis
+) -> None:
+    user_record = await insert_user_row(db_session, email="ada@example.com", role=RoleType.READER)
+    await insert_user_auth_provider_row(
+        db_session, user_id=user_record.id, provider_subject="google-subject-stub"
+    )
+    await insert_invite_row(db_session, code_hash=InviteUtils.hash_code("known-code"))
+    google_oauth_service_stub = GoogleOAuthServiceStub()
+    google_oauth_service_stub.exchange_code_for_identity_result = build_google_identity_result(
+        invite_code="known-code"
+    )
+    google_sign_in_service = _build_google_sign_in_service(
+        db_session, redis_client, google_oauth_service_stub=google_oauth_service_stub
+    )
+
+    google_sign_in_result = await google_sign_in_service.sign_in_with_google(
+        "auth-code-1", "state-1"
+    )
+
+    stored_session = await redis_client.get(f"session:{google_sign_in_result.session_id}")
+    assert stored_session is not None
+    assert AuthUser.model_validate_json(stored_session).role == RoleType.CREATOR
+    assert google_sign_in_result.is_new_user is False
+
+
+@pytest.mark.parametrize(
+    ("invite_code", "expected_invite_sign_in_result_type"),
+    [
+        pytest.param("used-code", InviteSignInResultType.INVITE_USED, id="used"),
+        pytest.param("unknown-code", InviteSignInResultType.INVITE_NOT_FOUND, id="unknown"),
+    ],
+)
+async def test_sign_in_with_google_unusable_invite_still_signs_in_as_reader_without_grant(
+    db_session: AsyncSession,
+    redis_client: Redis,
+    invite_code: str,
+    expected_invite_sign_in_result_type: InviteSignInResultType,
+) -> None:
+    earlier_user_record = await insert_user_row(db_session)
+    await insert_invite_row(
+        db_session,
+        code_hash=InviteUtils.hash_code("used-code"),
+        used_at=datetime(2026, 1, 2, tzinfo=UTC),
+        used_by_user_id=earlier_user_record.id,
+    )
+    google_oauth_service_stub = GoogleOAuthServiceStub()
+    google_oauth_service_stub.exchange_code_for_identity_result = build_google_identity_result(
+        invite_code=invite_code
+    )
+    google_sign_in_service = _build_google_sign_in_service(
+        db_session, redis_client, google_oauth_service_stub=google_oauth_service_stub
+    )
+
+    google_sign_in_result = await google_sign_in_service.sign_in_with_google(
+        "auth-code-1", "state-1"
+    )
+
+    user_query = select(UserOrm).where(UserOrm.email == "ada@example.com")
+    user_record = await db_session.scalar(user_query)
+    assert user_record is not None
+    ledger_count_query = select(func.count(CreditLedgerOrm.id)).where(
+        CreditLedgerOrm.user_id == user_record.id
+    )
+    ledger_row_count = await db_session.scalar(ledger_count_query)
+    stored_session = await redis_client.get(f"session:{google_sign_in_result.session_id}")
+    assert stored_session is not None
+    assert AuthUser.model_validate_json(stored_session).role == RoleType.READER
+    assert google_sign_in_result.invite_sign_in_result_type == expected_invite_sign_in_result_type
+    assert ledger_row_count == 0
+
+
 def _build_google_sign_in_service(
     db_session: AsyncSession,
     redis_client: Redis,
@@ -127,12 +252,19 @@ def _build_google_sign_in_service(
     user_activity_service = UserActivityService(
         db_session=db_session, redis_client=redis_client, user_settings=UserSettings()
     )
+    user_service = UserService(
+        db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
+    )
+    invite_service = InviteService(
+        db_session=db_session,
+        credit_ledger_service=CreditLedgerService(db_session=db_session),
+        user_service=user_service,
+    )
     return GoogleSignInService(
         google_oauth_service=google_oauth_service_stub or GoogleOAuthServiceStub(),
-        user_service=UserService(
-            db_session=db_session, low_credit_balance_threshold_usd=Decimal("0.50")
-        ),
+        user_service=user_service,
         user_activity_service=user_activity_service,
         auth_session_service=auth_session_service,
         permission_service=PermissionService(db_session=db_session),
+        invite_service=invite_service,
     )
