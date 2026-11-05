@@ -47,7 +47,7 @@ lives and how it's shaped.
   table, for every source file in the task
 - **Fixtures**: in the `conftest.py` the fixture placement rules name
 - **Stubs**: `<Class>Stub` classes in `tests/stubs/<domain>.py`
-- **Factories**: `build_*` and `insert_*_row` functions in
+- **Factories**: `build_*`, `insert_*_row` and `find_*_row` functions in
   `tests/factories/<domain>.py`
 - **Payloads**: third-party response builders in `tests/payloads/<provider>.py`
 
@@ -102,10 +102,8 @@ comparison into a partial one, catching the exception, or adding `skip` / `xfail
   it returns into an assertion. That only records whatever bugs the code already has.
   When the code disagrees with the intended behaviour, report a bug.
 - Never add a dependency or import a package the project doesn't already use.
-- A route test's signed-in fixture must hold the route's permission: `signed_in_user`
-  is a creator, `signed_in_reader` holds only the persona and blog post reads. A route
-  whose permission a reader lacks also gets a 403 test with `signed_in_reader`
-  (`pytest-testing.md` › §6 Route tests).
+- A route test's signed-in fixture must hold the route's permission; the fixtures and
+  the 403 cases are in `pytest-testing.md` › §6 Route tests.
 - If the rules don't cover a situation, make the most conservative call, and report
   it as a judgement call with proposed rule wording. Don't quietly invent a
   convention.
