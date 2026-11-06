@@ -1535,6 +1535,7 @@ async def test_find_public_blog_post_page_invalid_session_returns_401(
     ("query_params", "expected_error_location"),
     [
         pytest.param({"page": "0"}, ["query", "page"], id="page_zero"),
+        pytest.param({"page": "10001"}, ["query", "page"], id="page_over_max"),
         pytest.param({"page_size": "0"}, ["query", "page_size"], id="page_size_zero"),
         pytest.param({"page_size": "101"}, ["query", "page_size"], id="page_size_over_max"),
         pytest.param({"sort_by": "CREATED_AT"}, ["query", "sort_by"], id="unknown_sort_by"),
@@ -1545,6 +1546,7 @@ async def test_find_public_blog_post_page_invalid_session_returns_401(
             {"persona_identity": "not-a-uuid"}, ["query", "persona_identity"], id="bad_persona"
         ),
         pytest.param({"search": "a" * 201}, ["query", "search"], id="search_too_long"),
+        pytest.param({"search": "rye\x00"}, ["query", "search"], id="search_with_nul_byte"),
     ],
 )
 async def test_find_public_blog_post_page_invalid_query_returns_422(

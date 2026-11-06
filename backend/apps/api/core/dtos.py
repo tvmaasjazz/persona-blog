@@ -8,7 +8,10 @@ from libs.core.inputs import PaginationInput
 from libs.core.results import PaginationResult
 from libs.core.types import SortDirectionType
 
-SearchStr = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
+# A NUL byte is refused here: Postgres rejects it in text, which would be a 500
+SearchStr = Annotated[
+    str, StringConstraints(strip_whitespace=True, max_length=200, pattern=r"^[^\x00]*$")
+]
 
 # A USD amount in JSON, as plain digits that keep every decimal place: Pydantic's default
 # str(Decimal) writes a zero rounded to 10 places as "0E-10"
@@ -26,7 +29,8 @@ class EmptyResponseDto(BaseModel):
 
 
 class BasePageQueryDto(BaseModel):
-    page: Annotated[int, Field(ge=1)] = 1
+    # The cap keeps (page - 1) * page_size inside Postgres's bigint OFFSET
+    page: Annotated[int, Field(ge=1, le=10_000)] = 1
     page_size: Annotated[int, Field(ge=1, le=100)] = 20
     search: SearchStr | None = None
     sort_direction: SortDirectionType = SortDirectionType.DESC
