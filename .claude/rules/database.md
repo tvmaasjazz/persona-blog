@@ -177,6 +177,10 @@ that import is what registers every mapper before configuration.
 - Indexes and partial unique indexes are declared in `__table_args__` with the exact
   name the SQL uses:
   `Index("pb_user_email_idx", "email", unique=True, postgresql_where=text("deleted_at IS NULL"))`.
+- Check constraints are declared too, a column's own inside its `mapped_column`, a
+  table's in `__table_args__`. `name=` takes only the middle of the SQL's name, since
+  the naming convention adds `<table>_` and `_check`: `pb_invite_used_check` is
+  `CheckConstraint("...", name="used")`.
 - `libs/database/base.py`, `session.py`, `column_types.py`, and `constants.py` are
   setup files. Changing them is a deliberate design change, not part of adding a table.
 
