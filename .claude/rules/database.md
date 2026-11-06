@@ -61,6 +61,16 @@ class never redeclares them.
 `pb_user` is the one exception: its `created_by_id` and `updated_by_id` are nullable,
 since a person signing up has no creator. `UserOrm` redeclares both.
 
+A row the app calculates from other rows, such as a count or a score, names the system
+user in `created_by_id` and `updated_by_id`, whoever caused the change. The statement
+reads its id inline, `(SELECT id FROM pb_user WHERE is_system_user)`, rather than in a
+query of its own.
+
+A row a signed-out visitor can cause, such as a view, has nullable `created_by_id` and
+`updated_by_id`, and identifies the visitor in `anonymous_user_key TEXT`, with a check
+that exactly one of `created_by_id` and `anonymous_user_key` is set. Each kind of row
+gets its own partial unique index.
+
 A foreign key has no `ON DELETE` clause, in the SQL or as `ondelete=` in the Orm, so a
 real delete of a referenced row fails loudly instead of quietly removing or unlinking
 data. Add a clause only for one of these reasons:
