@@ -13,7 +13,7 @@ class ContentItemViewOrm(BaseOrm):
     __table_args__ = (
         CheckConstraint(
             "(created_by_id IS NULL) <> (anonymous_user_key IS NULL)",
-            name="pb_content_item_view_viewer_check",
+            name="viewer",
         ),
         Index(
             "pb_content_item_view_user_viewer_day_idx",
@@ -43,7 +43,7 @@ class ContentItemViewOrm(BaseOrm):
         SmallInteger,
         CheckConstraint(
             "read_percent IN (0, 25, 50, 75, 100)",
-            name="pb_content_item_view_read_percent_check",
+            name="read_percent",
         ),
     )
     anonymous_user_key: Mapped[str | None]
