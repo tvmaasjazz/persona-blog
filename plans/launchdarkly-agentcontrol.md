@@ -275,13 +275,12 @@ fits this design just as well (a default, a tracker), but it's in maintenance mo
 service in item 1 keeps the choice behind one class either way.
 
 **New dependencies** (to approve): `launchdarkly-server-sdk` and `launchdarkly-ai-server`
-(or `launchdarkly-server-sdk-ai`). The observability plugin comes later, with Phase 2.
+(or `launchdarkly-server-sdk-ai`). The OpenTelemetry packages come later, with Phase 2.
 
-**One client for the whole app:** build the base `ldclient` ourselves in `lifespan.py`,
-and hand it to the AI SDK with `init_client(client=...)`. Feature flags, AgentControl
-and, later, the observability plugin then share one connection. We also get to choose
-its timeout and a Redis persistent store, which the AI SDK's own client wouldn't let us
-do.
+**One client per process:** build the base `ldclient` ourselves in `lifespan.py`, and
+hand it to the AI SDK with `init_client(client=...)`. Feature flags and AgentControl
+then share one connection. We also get to choose its timeout and a Redis persistent
+store, which the AI SDK's own client wouldn't let us do.
 
 ### Level 2 — More providers, real feedback, experiments
 
@@ -385,21 +384,40 @@ logs, errors and metrics for the whole app, not just LLM calls. Logfire was chos
 never wired up, so nothing has to be removed. Building it is plan.md › Phase 2 ›
 *Logging and tracking*. This plan only settles where the data goes.
 
-- **Instrument with plain OpenTelemetry, and use LaunchDarkly only as the exporter.**
-  LaunchDarkly's Python plugin (`ldobserve`, with `ObservabilityPlugin` and
-  `ObservabilityConfig`) sends OTLP to LaunchDarkly and runs OpenTelemetry's
-  auto-instrumentation. Code never imports `ldobserve` outside the wiring, so switching
-  backends later is a config change.
-- **The main gain:** spans carry the flag and config evaluations made during them. A
-  latency or error change can then be traced to the variation that caused it, and
-  guarded rollouts can watch those regressions.
+- **Plain OpenTelemetry, with LaunchDarkly only as where it's sent.**
+  - LaunchDarkly takes standard OTLP at its endpoint
+    (`https://otel.observability.app.launchdarkly.com:4318`). The data needs the SDK key
+    as the resource attribute `launchdarkly.project_id`.
+  - The app uses the OpenTelemetry SDK directly: a tracer provider, a logger provider,
+    an OTLP exporter, and the FastAPI, SQLAlchemy, Redis and httpx instrumentations.
+  - It doesn't use LaunchDarkly's observability plugin (`ldobserve`). The plugin needs
+    an SDK client, and a client is a service connection. Exporting OTLP isn't an SDK
+    connection by LaunchDarkly's definition, so a process that only sends telemetry
+    shouldn't count. Confirm that on the Usage page once it's live.
+  - **Where the data goes is settings, not code:** `apps/api/core/telemetry.py`
+    configures OpenTelemetry once at startup from settings (the standard
+    `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME` and `OTEL_RESOURCE_ATTRIBUTES`).
+    - **With no endpoint set,** nothing is exported and logs only go to the terminal.
+      That's local dev, CI and tests.
+    - **With LaunchDarkly's endpoint,** production sends to LaunchDarkly.
+    - **Any other OTLP backend** is a change to the same settings.
+  - **An OpenTelemetry Collector** is an optional separate service that every process
+    sends to, and that forwards to LaunchDarkly or anywhere else, so a backend can be
+    swapped in one place. It isn't needed to start. One LaunchDarkly page says its
+    public endpoint can't be proxied through a Collector, so check that first if one is
+    ever added.
+- **The flag gain, where it applies:** a process that has an SDK client adds
+  LaunchDarkly's OpenTelemetry tracing hook (`ldotel`) to that client. Its spans then
+  carry the flag and config evaluations made during them, so a latency or error change
+  can be traced to the variation that caused it. That's the generation workers, which
+  are the processes whose behaviour the configs change.
 - **Logging keeps structlog, routed through stdlib `logging`.** The goal is clean logs
   in the terminal locally and searchable logs in LaunchDarkly when deployed. structlog's
   contextvars are the simplest way to put the request ID and run ID on every line, which
   Phase 2 › *Logging and tracking* asks for. Dropping structlog would mean
   `extra={...}` at every call site and a filter to do the same job.
 
-  The plugin only captures stdlib `logging` records, so `apps/api/core/logging.py`
+  OpenTelemetry's logging handler only captures stdlib `logging` records, so `apps/api/core/logging.py`
   changes from rendering straight to the console to this:
 
   - **structlog's last processor is `render_to_log_kwargs`.** It hands each event to
@@ -412,20 +430,14 @@ never wired up, so nothing has to be removed. Building it is plan.md › Phase 2
       working, and stdout doesn't count against LaunchDarkly's log quota.
     - Logs from granian, SQLAlchemy and httpx come out in the same format, which they
       don't today.
-  - **The plugin adds its own handler** for export to LaunchDarkly.
-    - **Ordering gotcha:** the plugin sets up default logging before it instruments, so
-      configure logging first, then register the plugin.
-    - Check in that PR that a log's fields arrive as attributes, not stringified into the
-      message.
-- **One LaunchDarkly client per process,** shared by flags, AgentControl and
-  observability. The plugin is passed to that client, and the AI SDK gets it through
-  `init_client(client=...)`.
+  - **OpenTelemetry's `LoggingHandler`** goes on the root logger when an endpoint is
+    set. Check in that PR that a log's fields arrive as attributes, not stringified into
+    the message.
+- **One LaunchDarkly client per process that evaluates configs or flags,** shared by
+  AgentControl and flags. The AI SDK gets it through `init_client(client=...)`.
 - **To check before building:**
-  - Observability pricing and quotas on our plan.
-  - That the plugin and the OpenTelemetry instrumentations it pulls in run on Python
-    3.14.
-  - Which libraries it auto-instruments (FastAPI, SQLAlchemy, Redis, httpx), and how
-    errors are recorded. The reference page doesn't list them.
+  - That the OpenTelemetry packages and instrumentations run on Python 3.14.
+  - How LaunchDarkly groups exceptions recorded on spans into its Errors view.
 
 ## Free plan budget
 
@@ -444,30 +456,40 @@ once AI runs hit their cap, and that only the metrics stop.
 | Client-side MAU | 1K | Only if the frontend uses LaunchDarkly's JS SDK. | Keep it off the frontend |
 | Session replays | 5K | Only with browser observability. | Not planned |
 
-**Service connections.** Each process holding a client counts, for as much of the month
-as it's connected. Every granian worker process has its own, so:
+**Service connections are a monthly pool of connected time, not a cap on how many run
+at once.** One connection is one SDK client connected to one environment for a whole
+month (43,800 minutes), and partial months add up without rounding. The free 5 are about
+219,000 connection-minutes a month, spent across every environment however we like.
+For example:
 
-- Two API instances plus two generation workers, each a single process running all
-  month, is 4 connections. That leaves 1 for everything else.
-- One replica with two granian workers is 2 connections in production.
-- Staging, if it runs all month, is 1 or 2 more.
-- Local dev counts only while it's running, so a few hours a day comes to a fraction of
-  one.
-- The Phase 2 generation worker adds its own processes.
+- 10 clients for half a month is 5.
+- A few hours of local dev, then a burst in staging, then production, all draw from the
+  same pool.
+
+**Who holds a client.** Only processes that evaluate configs or flags need one; sending
+telemetry doesn't (Observability).
+
+- **Until Phase 2,** LLM calls run in the API, so each API process holds one.
+- **After Phase 2,** only the generation workers hold one. The API makes no LLM calls,
+  needs no flags, and only exports telemetry, so it costs no connections.
+- **Every granian worker process is its own client,** so count processes, not replicas.
+
+**Production only, to start.** Only production has an SDK key.
+
+- Local dev, CI and staging run on the code defaults.
+- A prompt or model change is tried in production by targeting your own user first,
+  then everyone. That's how LaunchDarkly expects changes to be tested.
+- Two generation workers running all month is 2 connections. That leaves about 3 for
+  occasional local runs against LaunchDarkly, or a staging environment later.
 
 To stay under 5:
 
-- **One client per process,** shared by flags, AgentControl and observability (Level 1's
+- **One client per process,** shared by flags and AgentControl (Level 1's
   `init_client(client=...)`). Letting the AI SDK build a second client would double the
   count.
 - **No key in tests or CI,** so they never connect.
-- **Few workers per replica,** and staging only when it's needed.
-- **Partial months count partially.** An instance added for a busy week is about a
-  quarter of a connection, so autoscaling costs less than a fixed count.
-- **Once generation moves to its own worker** (Phase 2), the API makes no LLM calls and
-  may need no flags at all, leaving only observability.
-  - Check whether an observability-only process still counts as a service connection.
-    The plugin attaches to an SDK client, so it might.
+- **Few processes per generation worker instance.** An instance added for a busy week is
+  about a quarter of a connection, so autoscaling costs less than a fixed count.
 - **Polling mode doesn't help.** For Python, 732 polls count as one connection. Polling
   every 30 seconds is about 118 connections a month per process, and polling slowly
   enough to cost less loses "on the fly".
@@ -555,8 +577,3 @@ the API.
 - **Whether a paused run picks up a prompt change before its rewrite.** Recommended: yes,
   since the variation is recorded on every call. The alternative is pinning each step's
   resolved config in the checkpoint.
-- **Which environments use LaunchDarkly.** Production and staging, with local dev on
-  defaults unless a key is set? Each LaunchDarkly environment has its own SDK key and its
-  own targeting.
-- **Whether `.reference/` is committed.** These are copies of third-party docs, and the
-  repo is public. Recommended: gitignore it.
