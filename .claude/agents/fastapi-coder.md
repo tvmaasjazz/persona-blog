@@ -30,7 +30,7 @@ to touch so your code matches what is there.
 
 Any backend Python file the rules give a home under `libs/` or `apps/api/`, except
 those under "What you don't write". The rules say where each lives and how it's
-shaped. In `libs/database/` that's `list_query_config.py`, `results.py`, `utils/` and
+shaped. In `libs/database/` that's `pagination_config.py`, `results.py`, `utils/` and
 `services/`; the rest of it is setup files or `schema-coder`'s.
 
 Shared wiring files take additions only:

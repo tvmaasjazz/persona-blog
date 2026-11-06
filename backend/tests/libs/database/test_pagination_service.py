@@ -4,15 +4,15 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
 
-from libs.core.inputs import ListInput, PageInput
-from libs.core.results import PageInfoResult
+from libs.core.inputs import BasePageInput, PaginationInput
+from libs.core.results import PaginationResult
 from libs.core.types import SortDirectionType
-from libs.database.list_query_config import ListQueryConfig
 from libs.database.orm import ContentItemOrm, PersonaOrm, UserOrm
+from libs.database.pagination_config import PaginationConfig
 from libs.database.results import FindPageResult
-from libs.database.services import PageQueryService
+from libs.database.services import PaginationService
 from tests.factories.content_items import insert_content_item_row
-from tests.factories.core import build_page_input
+from tests.factories.core import build_pagination_input
 from tests.factories.personas import insert_persona_row
 from tests.factories.users import find_system_user_row, insert_user_row
 
@@ -25,22 +25,22 @@ class ContentItemSortType(StrEnum):
     CREATED = "CREATED"
 
 
-class ContentItemListInput(ListInput):
+class ContentItemPageInput(BasePageInput):
     sort_by: ContentItemSortType = ContentItemSortType.CREATED
 
 
-class UserListInput(ListInput):
+class UserPageInput(BasePageInput):
     sort_by: UserSortType = UserSortType.EMAIL
 
 
-USER_LIST_CONFIG = ListQueryConfig(
+USER_PAGINATION_CONFIG = PaginationConfig(
     search_columns=(UserOrm.email,),
     sort_columns={UserSortType.EMAIL: UserOrm.email},
     filters={},
     tiebreak_column=UserOrm.id,
 )
 
-CONTENT_ITEM_LIST_CONFIG = ListQueryConfig(
+CONTENT_ITEM_PAGINATION_CONFIG = PaginationConfig(
     search_columns=(PersonaOrm.name,),
     sort_columns={ContentItemSortType.CREATED: ContentItemOrm.id},
     filters={},
@@ -48,8 +48,8 @@ CONTENT_ITEM_LIST_CONFIG = ListQueryConfig(
 )
 
 
-def _build_user_list_input(page_input: PageInput) -> UserListInput:
-    return UserListInput(page_input=page_input, sort_by=UserSortType.EMAIL)
+def _build_user_page_input(pagination_input: PaginationInput) -> UserPageInput:
+    return UserPageInput(pagination_input=pagination_input, sort_by=UserSortType.EMAIL)
 
 
 def _build_user_base_query() -> Select[tuple[UserOrm]]:
@@ -65,35 +65,35 @@ async def _insert_find_page_users(db_session: AsyncSession) -> list[UserOrm]:
     return user_records
 
 
-async def test_find_page_returns_the_page_records_in_order_with_page_info(
+async def test_find_page_returns_the_page_records_in_order_with_pagination(
     db_session: AsyncSession,
 ) -> None:
     user_records = await _insert_find_page_users(db_session)
-    page_query_service = PageQueryService(db_session=db_session)
-    user_list_input = _build_user_list_input(
-        build_page_input(page=2, page_size=2, sort_direction=SortDirectionType.ASC)
+    pagination_service = PaginationService(db_session=db_session)
+    user_page_input = _build_user_page_input(
+        build_pagination_input(page=2, page_size=2, sort_direction=SortDirectionType.ASC)
     )
 
-    find_page_result = await page_query_service.find_page(
-        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
+    find_page_result = await pagination_service.find_page(
+        _build_user_base_query(), USER_PAGINATION_CONFIG, user_page_input
     )
 
     assert find_page_result == FindPageResult(
         records=[user_records[2], user_records[3]],
-        page_info=PageInfoResult(page=2, page_size=2, total=5),
+        pagination=PaginationResult(page=2, page_size=2, total=5),
     )
 
 
 async def test_find_page_empty_first_page_returns_total_zero(db_session: AsyncSession) -> None:
-    page_query_service = PageQueryService(db_session=db_session)
-    user_list_input = _build_user_list_input(build_page_input(page=1, page_size=2))
+    pagination_service = PaginationService(db_session=db_session)
+    user_page_input = _build_user_page_input(build_pagination_input(page=1, page_size=2))
 
-    find_page_result = await page_query_service.find_page(
-        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
+    find_page_result = await pagination_service.find_page(
+        _build_user_base_query(), USER_PAGINATION_CONFIG, user_page_input
     )
 
     assert find_page_result == FindPageResult(
-        records=[], page_info=PageInfoResult(page=1, page_size=2, total=0)
+        records=[], pagination=PaginationResult(page=1, page_size=2, total=0)
     )
 
 
@@ -101,33 +101,33 @@ async def test_find_page_empty_page_past_the_end_returns_the_full_total(
     db_session: AsyncSession,
 ) -> None:
     await _insert_find_page_users(db_session)
-    page_query_service = PageQueryService(db_session=db_session)
-    user_list_input = _build_user_list_input(build_page_input(page=9, page_size=2))
+    pagination_service = PaginationService(db_session=db_session)
+    user_page_input = _build_user_page_input(build_pagination_input(page=9, page_size=2))
 
-    find_page_result = await page_query_service.find_page(
-        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
+    find_page_result = await pagination_service.find_page(
+        _build_user_base_query(), USER_PAGINATION_CONFIG, user_page_input
     )
 
     assert find_page_result == FindPageResult(
-        records=[], page_info=PageInfoResult(page=9, page_size=2, total=5)
+        records=[], pagination=PaginationResult(page=9, page_size=2, total=5)
     )
 
 
 async def test_find_page_search_counts_only_matching_rows(db_session: AsyncSession) -> None:
     await _insert_find_page_users(db_session)
-    page_query_service = PageQueryService(db_session=db_session)
-    user_list_input = _build_user_list_input(
-        build_page_input(page=1, page_size=1, search="find-page-b")
+    pagination_service = PaginationService(db_session=db_session)
+    user_page_input = _build_user_page_input(
+        build_pagination_input(page=1, page_size=1, search="find-page-b")
     )
 
-    find_page_result = await page_query_service.find_page(
-        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
+    find_page_result = await pagination_service.find_page(
+        _build_user_base_query(), USER_PAGINATION_CONFIG, user_page_input
     )
 
     assert [user_record.email for user_record in find_page_result.records] == [
         "find-page-b@example.com"
     ]
-    assert find_page_result.page_info == PageInfoResult(page=1, page_size=1, total=1)
+    assert find_page_result.pagination == PaginationResult(page=1, page_size=1, total=1)
 
 
 async def test_find_page_load_options_load_the_relationship_on_the_records(
@@ -142,20 +142,20 @@ async def test_find_page_load_options_load_the_relationship_on_the_records(
     )
     # A fresh load, so the relationship can only come from the loader option
     db_session.expunge_all()
-    page_query_service = PageQueryService(db_session=db_session)
+    pagination_service = PaginationService(db_session=db_session)
     all_records_query = (
         select(ContentItemOrm)
         .join(ContentItemOrm.persona)
         .where(PersonaOrm.name == "Slow Mornings Sam")
     )
-    content_item_list_input = ContentItemListInput(
-        page_input=build_page_input(), sort_by=ContentItemSortType.CREATED
+    content_item_page_input = ContentItemPageInput(
+        pagination_input=build_pagination_input(), sort_by=ContentItemSortType.CREATED
     )
 
-    find_page_result = await page_query_service.find_page(
+    find_page_result = await pagination_service.find_page(
         all_records_query,
-        CONTENT_ITEM_LIST_CONFIG,
-        content_item_list_input,
+        CONTENT_ITEM_PAGINATION_CONFIG,
+        content_item_page_input,
         load_options=(contains_eager(ContentItemOrm.persona),),
     )
 

@@ -12,7 +12,7 @@ from apps.api.domains.blog_posts.dtos import (
 )
 from libs.blog_posts.services import BlogPostService, BlogPostValidationService
 from libs.content_items.services import ContentItemService, ContentItemValidationService
-from libs.database.services import PageQueryService
+from libs.database.services import PaginationService
 from libs.generate_text.services import GenerateTextRunService, GenerateTextStepService
 from libs.personas.services import PersonaService
 
@@ -67,11 +67,11 @@ GenerateTextStepServiceDep = Annotated[
 ]
 
 
-def get_page_query_service(db_session: DbSessionDep) -> PageQueryService:
-    return PageQueryService(db_session=db_session)
+def get_pagination_service(db_session: DbSessionDep) -> PaginationService:
+    return PaginationService(db_session=db_session)
 
 
-PageQueryServiceDep = Annotated[PageQueryService, Depends(get_page_query_service)]
+PaginationServiceDep = Annotated[PaginationService, Depends(get_pagination_service)]
 
 
 def get_blog_post_service(
@@ -80,7 +80,7 @@ def get_blog_post_service(
     persona_service: PersonaServiceDep,
     generate_text_run_service: GenerateTextRunServiceDep,
     generate_text_step_service: GenerateTextStepServiceDep,
-    page_query_service: PageQueryServiceDep,
+    pagination_service: PaginationServiceDep,
 ) -> BlogPostService:
     return BlogPostService(
         db_session=db_session,
@@ -88,7 +88,7 @@ def get_blog_post_service(
         persona_service=persona_service,
         generate_text_run_service=generate_text_run_service,
         generate_text_step_service=generate_text_step_service,
-        page_query_service=page_query_service,
+        pagination_service=pagination_service,
     )
 
 

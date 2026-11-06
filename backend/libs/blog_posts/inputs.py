@@ -4,10 +4,10 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from libs.blog_posts.types import PublicBlogPostSortType
-from libs.core.inputs import ListInput
+from libs.core.inputs import BasePageInput
 
 
-class FindPublicBlogPostListInput(ListInput):
+class FindPublicBlogPostPageInput(BasePageInput):
     sort_by: PublicBlogPostSortType
     persona_identity: UUID | None
 

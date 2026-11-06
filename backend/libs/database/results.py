@@ -2,9 +2,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from libs.core.results import PageInfoResult
+from libs.core.results import PaginationResult
 
 
 class FindPageResult(BaseModel):
     records: list[Any]
-    page_info: PageInfoResult
+    pagination: PaginationResult

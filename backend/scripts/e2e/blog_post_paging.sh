@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Walks paging, sorting, filtering and search end to end against a running dev server,
-# on the open list of a persona's posts (GET /blog-posts/public). Writes a public persona
+# on the open page of a persona's posts (GET /blog-posts/public). Writes a public persona
 # with five published public posts, a draft and a private post, then checks pages and
 # their totals, both sorts, search by title and subtitle (never the body), what a
 # signed-out reader, a second user and the owner each see, and the 422s for a bad page or
@@ -196,7 +196,7 @@ has_json_field() { python3 -c "import json,sys; print('$1' in json.load(sys.stdi
 # Evaluates a python expression over the JSON on stdin, bound to d.
 json_eval() { python3 -c 'import json, sys; d = json.load(sys.stdin); print(eval(sys.argv[1]))' "$1"; }
 titles() { json_eval '",".join(row["title"].split(" ")[0] for row in d["blog_posts"])'; }
-total() { json_eval 'd["page_info"]["total"]'; }
+total() { json_eval 'd["pagination"]["total"]'; }
 
 create_post() {
   local title="$1" is_public="$2" published_at="$3" subtitle="$4" body="$5" payload
@@ -213,8 +213,8 @@ create_post() {
     -H 'Content-Type: application/json' -d "$payload" >/dev/null
 }
 
-# Lists the persona's posts signed out; extra arguments are query params.
-list_signed_out() {
+# Fetches a page of the persona's posts signed out; extra arguments are query params.
+fetch_page_signed_out() {
   local description="$1"
   shift
   local params=(--data-urlencode "persona_identity=$PERSONA_IDENTITY")
@@ -246,38 +246,38 @@ create_post "Foxtrot Draft" false "" "" "$POST_BODY"
 create_post "Golf Private" false "$(iso_seconds_ago 20)" "" "$POST_BODY"
 
 step "3. Page through signed out, two at a time, newest first"
-PAGE="$(list_signed_out "page 1" page=1 page_size=2)"
+PAGE="$(fetch_page_signed_out "page 1" page=1 page_size=2)"
 expect "$(echo "$PAGE" | titles)" "Echo,Delta" "page 1 titles"
 expect "$(echo "$PAGE" | total)" "5" "total, without the draft and the private post"
 expect "$(echo "$PAGE" | json_eval 'any("body" in row for row in d["blog_posts"])')" "False" "a row carries a body"
-PAGE="$(list_signed_out "page 2" page=2 page_size=2)"
+PAGE="$(fetch_page_signed_out "page 2" page=2 page_size=2)"
 expect "$(echo "$PAGE" | titles)" "Charlie,Bravo" "page 2 titles"
-PAGE="$(list_signed_out "page 3" page=3 page_size=2)"
+PAGE="$(fetch_page_signed_out "page 3" page=3 page_size=2)"
 expect "$(echo "$PAGE" | titles)" "Alpha" "page 3 titles"
-PAGE="$(list_signed_out "page 4, past the end" page=4 page_size=2)"
+PAGE="$(fetch_page_signed_out "page 4, past the end" page=4 page_size=2)"
 expect "$(echo "$PAGE" | json_eval 'len(d["blog_posts"])')" "0" "rows past the end"
 expect "$(echo "$PAGE" | total)" "5" "total past the end"
 
 step "4. Sort by title"
-PAGE="$(list_signed_out "title A to Z" sort_by=TITLE sort_direction=ASC)"
+PAGE="$(fetch_page_signed_out "title A to Z" sort_by=TITLE sort_direction=ASC)"
 expect "$(echo "$PAGE" | titles)" \
   "Alpha,Bravo,Charlie,Delta,Echo" "title A to Z"
-PAGE="$(list_signed_out "title Z to A" sort_by=TITLE sort_direction=DESC)"
+PAGE="$(fetch_page_signed_out "title Z to A" sort_by=TITLE sort_direction=DESC)"
 expect "$(echo "$PAGE" | titles)" \
   "Echo,Delta,Charlie,Bravo,Alpha" "title Z to A"
 
 step "5. Search the title and subtitle, never the body"
-PAGE="$(list_signed_out "search rye" search=rye)"
+PAGE="$(fetch_page_signed_out "search rye" search=rye)"
 expect "$(echo "$PAGE" | titles)" "Charlie,Alpha" "\"rye\""
-PAGE="$(list_signed_out "search RYE" search=RYE)"
+PAGE="$(fetch_page_signed_out "search RYE" search=RYE)"
 expect "$(echo "$PAGE" | titles)" "Charlie,Alpha" "\"RYE\", ignoring case"
-PAGE="$(list_signed_out "search rye crackers" "search=rye crackers")"
+PAGE="$(fetch_page_signed_out "search rye crackers" "search=rye crackers")"
 expect "$(echo "$PAGE" | titles)" "Charlie" "\"rye crackers\", every word"
-PAGE="$(list_signed_out "search a subtitle word" search=crumb)"
+PAGE="$(fetch_page_signed_out "search a subtitle word" search=crumb)"
 expect "$(echo "$PAGE" | titles)" "Alpha" "\"crumb\", in a subtitle"
-PAGE="$(list_signed_out "search a body-only word" "search=$BODY_ONLY_WORD")"
+PAGE="$(fetch_page_signed_out "search a body-only word" "search=$BODY_ONLY_WORD")"
 expect "$(echo "$PAGE" | total)" "0" "\"$BODY_ONLY_WORD\", only in a body"
-PAGE="$(list_signed_out "search %" search=%)"
+PAGE="$(fetch_page_signed_out "search %" search=%)"
 expect "$(echo "$PAGE" | titles)" "Delta" "\"%\", matched as itself"
 
 step "6. The owner sees their draft and private post too; a second user doesn't"

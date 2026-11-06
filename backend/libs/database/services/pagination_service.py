@@ -5,14 +5,14 @@ from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.interfaces import ExecutableOption
 
-from libs.core.inputs import ListInput
-from libs.database.list_query_config import ListQueryConfig
+from libs.core.inputs import BasePageInput
+from libs.database.pagination_config import PaginationConfig
 from libs.database.results import FindPageResult
-from libs.database.utils import PageQueryUtils
+from libs.database.utils import PaginationQueryUtils
 
 
-class PageQueryService:
-    """Runs one page of a list and finds its total."""
+class PaginationService:
+    """Runs one page of a query and finds its total."""
 
     def __init__(self, db_session: AsyncSession) -> None:
         self._db_session = db_session
@@ -20,19 +20,19 @@ class PageQueryService:
     async def find_page(
         self,
         all_records_query: Select[Any],
-        list_query_config: ListQueryConfig,
-        list_input: ListInput,
+        pagination_config: PaginationConfig,
+        page_input: BasePageInput,
         load_options: Sequence[ExecutableOption] = (),
     ) -> FindPageResult:
-        """Runs one page of a list and finds its total, with loader options on the page only."""
-        page_input = list_input.page_input
+        """Runs one page of a query and finds its total, with loader options on the page only."""
+        pagination_input = page_input.pagination_input
 
         # Filter and search the records, then slice out the page with a window total
-        filtered_query = PageQueryUtils.build_filtered_query(
-            all_records_query, list_query_config, list_input
+        filtered_query = PaginationQueryUtils.build_filtered_query(
+            all_records_query, pagination_config, page_input
         )
-        page_query = PageQueryUtils.build_page_query(
-            filtered_query, list_query_config, list_input
+        page_query = PaginationQueryUtils.build_page_query(
+            filtered_query, pagination_config, page_input
         ).options(*load_options)
         page_query_result = await self._db_session.execute(page_query)
         page_rows = page_query_result.all()
@@ -42,12 +42,12 @@ class PageQueryService:
         total = 0
         if page_rows:
             total = page_rows[0].total
-        elif page_input.page > 1:
-            count_query = PageQueryUtils.build_count_query(filtered_query)
+        elif pagination_input.page > 1:
+            count_query = PaginationQueryUtils.build_count_query(filtered_query)
             count_query_result = await self._db_session.execute(count_query)
             total = count_query_result.scalar_one()
 
         return FindPageResult(
             records=records,
-            page_info=PageQueryUtils.build_page_info(page_input, total),
+            pagination=PaginationQueryUtils.build_pagination_result(pagination_input, total),
         )

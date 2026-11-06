@@ -5,10 +5,10 @@ from sqlalchemy import ColumnElement, Select, and_, func, or_, select
 from sqlalchemy.orm import QueryableAttribute
 from sqlalchemy.sql.elements import UnaryExpression
 
-from libs.core.inputs import ListInput, PageInput
-from libs.core.results import PageInfoResult
+from libs.core.inputs import BasePageInput, PaginationInput
+from libs.core.results import PaginationResult
 from libs.core.types import FilterOperatorType, SortDirectionType
-from libs.database.list_query_config import ListQueryConfig
+from libs.database.pagination_config import PaginationConfig
 
 MAX_SEARCH_WORD_COUNT = 8
 
@@ -32,38 +32,38 @@ ORDER_BUILDER_BY_SORT_DIRECTION: dict[
 }
 
 
-class PageQueryUtils:
-    """Builds the filtered, counted and paged queries of a list from its ListQueryConfig."""
+class PaginationQueryUtils:
+    """Builds the filtered, counted and paged queries of a paged route from its PaginationConfig."""
 
     @staticmethod
     def build_filtered_query(
         all_records_query: Select[Any],
-        list_query_config: ListQueryConfig,
-        list_input: ListInput,
+        pagination_config: PaginationConfig,
+        page_input: BasePageInput,
     ) -> Select[Any]:
-        """Adds the list input's filters that are set and the search words to the query."""
-        page_input = list_input.page_input
+        """Adds the page input's filters that are set and the search words to the query."""
+        pagination_input = page_input.pagination_input
         filtered_query = all_records_query
 
         # Filters: an unset (None) field adds no condition
-        for field_name, list_filter_config in list_query_config.filters.items():
-            filter_value = getattr(list_input, field_name)
+        for field_name, pagination_filter_config in pagination_config.filters.items():
+            filter_value = getattr(page_input, field_name)
             if filter_value is None:
                 continue
-            build_condition = CONDITION_BUILDER_BY_OPERATOR[list_filter_config.operator]
+            build_condition = CONDITION_BUILDER_BY_OPERATOR[pagination_filter_config.operator]
             filtered_query = filtered_query.where(
-                build_condition(list_filter_config.column, filter_value)
+                build_condition(pagination_filter_config.column, filter_value)
             )
 
         # Search: every word must match at least one search column
-        search_words = (page_input.search or "").split()[:MAX_SEARCH_WORD_COUNT]
+        search_words = (pagination_input.search or "").split()[:MAX_SEARCH_WORD_COUNT]
         if search_words:
             search_condition = and_(
                 *[
                     or_(
                         *[
                             search_column.icontains(search_word, autoescape=True)
-                            for search_column in list_query_config.search_columns
+                            for search_column in pagination_config.search_columns
                         ]
                     )
                     for search_word in search_words
@@ -76,23 +76,23 @@ class PageQueryUtils:
     @staticmethod
     def build_page_query(
         filtered_query: Select[Any],
-        list_query_config: ListQueryConfig,
-        list_input: ListInput,
+        pagination_config: PaginationConfig,
+        page_input: BasePageInput,
     ) -> Select[Any]:
         """Adds the total of all filtered rows, orders by the sort column then the tiebreak
         column, and slices out one page."""
-        page_input = list_input.page_input
-        build_order = ORDER_BUILDER_BY_SORT_DIRECTION[page_input.sort_direction]
-        sort_column = list_query_config.sort_columns[list_input.sort_by]
-        offset = (page_input.page - 1) * page_input.page_size
+        pagination_input = page_input.pagination_input
+        build_order = ORDER_BUILDER_BY_SORT_DIRECTION[pagination_input.sort_direction]
+        sort_column = pagination_config.sort_columns[page_input.sort_by]
+        offset = (pagination_input.page - 1) * pagination_input.page_size
         return (
             # The window runs before LIMIT and OFFSET, so each row carries the full total
             filtered_query.add_columns(func.count().over().label("total"))
             .order_by(
                 build_order(sort_column).nulls_last(),
-                build_order(list_query_config.tiebreak_column),
+                build_order(pagination_config.tiebreak_column),
             )
-            .limit(page_input.page_size)
+            .limit(pagination_input.page_size)
             .offset(offset)
         )
 
@@ -103,6 +103,8 @@ class PageQueryUtils:
         return select(func.count()).select_from(unordered_subquery)
 
     @staticmethod
-    def build_page_info(page_input: PageInput, total: int) -> PageInfoResult:
+    def build_pagination_result(pagination_input: PaginationInput, total: int) -> PaginationResult:
         """Returns the requested page, its size and the total row count."""
-        return PageInfoResult(page=page_input.page, page_size=page_input.page_size, total=total)
+        return PaginationResult(
+            page=pagination_input.page, page_size=pagination_input.page_size, total=total
+        )

@@ -4,8 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, PlainSerializer, StringConstraints
 
-from libs.core.inputs import PageInput
-from libs.core.results import PageInfoResult
+from libs.core.inputs import PaginationInput
+from libs.core.results import PaginationResult
 from libs.core.types import SortDirectionType
 
 SearchStr = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
@@ -25,14 +25,14 @@ class EmptyResponseDto(BaseModel):
     pass
 
 
-class PageQueryDto(BaseModel):
+class BasePageQueryDto(BaseModel):
     page: Annotated[int, Field(ge=1)] = 1
     page_size: Annotated[int, Field(ge=1, le=100)] = 20
     search: SearchStr | None = None
     sort_direction: SortDirectionType = SortDirectionType.DESC
 
-    def to_page_input(self) -> PageInput:
-        return PageInput(
+    def to_pagination_input(self) -> PaginationInput:
+        return PaginationInput(
             page=self.page,
             page_size=self.page_size,
             search=self.search or None,
@@ -40,19 +40,19 @@ class PageQueryDto(BaseModel):
         )
 
 
-class PageInfoResponseDto(BaseModel):
+class PaginationResponseDto(BaseModel):
     page: int
     page_size: int
     total: int
 
     @classmethod
-    def from_result(cls, page_info_result: PageInfoResult) -> PageInfoResponseDto:
+    def from_result(cls, pagination_result: PaginationResult) -> PaginationResponseDto:
         return cls(
-            page=page_info_result.page,
-            page_size=page_info_result.page_size,
-            total=page_info_result.total,
+            page=pagination_result.page,
+            page_size=pagination_result.page_size,
+            total=pagination_result.total,
         )
 
 
-class PageResponseDto(BaseModel):
-    page_info: PageInfoResponseDto
+class BasePageResponseDto(BaseModel):
+    pagination: PaginationResponseDto

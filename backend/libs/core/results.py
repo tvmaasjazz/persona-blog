@@ -7,7 +7,7 @@ class SplitMarkdownPostResult(BaseModel):
     body: str
 
 
-class PageInfoResult(BaseModel):
+class PaginationResult(BaseModel):
     page: int
     page_size: int
     total: int

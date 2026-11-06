@@ -286,37 +286,37 @@ built here and used first by a persona's page. Item 10 moves today's lists onto 
 The pattern goes in `fastapi-structure.md`, replacing the "nested filter object"
 sentence in DTOs › Inbound, so items 9 and 10 follow it.
 
-- **Request:** a `GET` with flat query params. Every list's `<Entity>FetchAllQueryDto`
-  extends a shared `PageQueryDto`:
+- **Request:** a `GET` with flat query params. Every paged route's `<Entity>PageQueryDto`
+  extends a shared `BasePageQueryDto`:
 
   | Param | Default | Allowed |
   | --- | --- | --- |
   | `page` | `1` | 1 and up |
   | `page_size` | `20` | 1 to 100 |
   | `search` | none | stripped, up to 200 characters |
-  | `sort_by` | the list's own | the list's `<Entity>SortType`, declared on its own DTO |
+  | `sort_by` | the route's own | the route's `<Entity>SortType`, declared on its own DTO |
   | `sort_direction` | `DESC` | `ASC` or `DESC` |
 
   Paging is by offset. A page number and a total suit the admin tables and item 6's
   warning count, and the feed's changing score (item 9) wouldn't keep a cursor steady
   anyway. A post arriving between two page loads can push a row onto the next page;
   that's accepted.
-- **Response:** every `<Entity>ListResponseDto` extends a shared `PageResponseDto`, so
-  each list has its rows under a plural field and the same `page_info`:
+- **Response:** every `<Entity>PageResponseDto` extends a shared `BasePageResponseDto`,
+  so each page has its rows under a plural field and the same `pagination`:
 
   ```json
-  {"blog_posts": [...], "page_info": {"page": 1, "page_size": 20, "total": 134}}
+  {"blog_posts": [...], "pagination": {"page": 1, "page_size": 20, "total": 134}}
   ```
 
-  Plain subclasses, not a generic `PageResponseDto[T]`, which would name its schemas
-  `PageResponseDto_BlogPostResponseDto_` in the generated types and couldn't name the
-  rows field. A `PageInfoResult` mirrors it in the lib.
-- **Sort:** a list's `<Entity>SortType` enum names the columns it can be sorted by, so
+  Plain subclasses, not a generic `BasePageResponseDto[T]`, which would name its schemas
+  `BasePageResponseDto_BlogPostResponseDto_` in the generated types and couldn't name the
+  rows field. A `PaginationResult` mirrors it in the lib.
+- **Sort:** a paged route's `<Entity>SortType` enum names the columns it can be sorted by, so
   any other is a 422 and the frontend gets the allowed values from the generated
   types. Every sort is the chosen column, `NULLS LAST` either way, then `id` in the same
   direction, so pages keep a fixed order.
-- **Filters:** flat, typed fields on the list's query DTO, one value each, named the
-  same way on every list:
+- **Filters:** flat, typed fields on the route's query DTO, one value each, named the
+  same way on every paged route:
 
   | Kind | Name | Example |
   | --- | --- | --- |
@@ -330,15 +330,20 @@ sentence in DTOs › Inbound, so items 9 and 10 follow it.
   (`ContentItemQueryUtils.build_accessible_condition`, ownership) stays in the
   service's base query and is never a filter. A user-built filter menu, if one comes,
   adds a `POST …/search` body of `{property, operator, value}` checked against the
-  same `ListQueryConfig`, with the flat fields kept for filters a page fixes.
+  same `PaginationConfig`, with the flat fields kept for filters a page fixes.
 - **Search:** the phrase is split into words, at most 8, and each word must match at
-  least one of the list's search fields, case-insensitively (`ILIKE`, with `%` and `_`
+  least one of the route's search fields, case-insensitively (`ILIKE`, with `%` and `_`
   escaped so they match themselves). No full-text search yet: a `pg_trgm` index speeds
-  up the same query when lists grow, and full-text search, for ranking and stemming,
+  up the same query when tables grow, and full-text search, for ranking and stemming,
   would change nothing in the contract.
-- **One config per list, one call per service:** a `ListQueryConfig` declares what a
-  list searches, sorts and filters by, and the service makes one
-  `PageQueryService.find_page` call (`fastapi-structure.md` › Paged lists). The total
+- **Names:** a paged route is a page, not a list: `find_public_blog_post_page`,
+  `FindPublicBlogPostPageInput` and `PublicBlogPostPageResponseDto`. The classes each
+  route extends are `Base…` (`BasePageQueryDto`, `BasePageInput`, `BasePageResponseDto`),
+  and the shared pieces that do the paging are `Pagination…`. `List` names stay only on
+  a route that returns everything at once.
+- **One config per paged route, one call per service:** a `PaginationConfig` declares
+  what a route searches, sorts and filters by, and the service makes one
+  `PaginationService.find_page` call (`fastapi-structure.md` › Paged routes). The total
   comes from `count(*) OVER ()` on the page query, which Postgres computes before
   `LIMIT`. Running a count beside the page on a second session would cost a second
   connection and could disagree with the page, to save one round trip.

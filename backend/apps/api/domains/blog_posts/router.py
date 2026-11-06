@@ -23,8 +23,8 @@ from apps.api.domains.blog_posts.dtos import (
     BlogPostResponseDto,
     CreateBlogPostDto,
     CreateBlogPostFromGenerateTextRunDto,
-    PublicBlogPostFetchAllQueryDto,
-    PublicBlogPostListResponseDto,
+    PublicBlogPostPageQueryDto,
+    PublicBlogPostPageResponseDto,
     PublicBlogPostResponseDto,
 )
 from libs.permissions.types import PermissionType
@@ -51,17 +51,17 @@ async def find_user_blog_post_list(
 
 
 @blog_post_router.get("/public")
-async def find_public_blog_post_list(
-    query_dto: Annotated[PublicBlogPostFetchAllQueryDto, Query()],
+async def find_public_blog_post_page(
+    query_dto: Annotated[PublicBlogPostPageQueryDto, Query()],
     auth_user: OptionalAuthUserDep,
     blog_post_service: BlogPostServiceDep,
-) -> PublicBlogPostListResponseDto:
-    """Lists published public blog posts to anyone, signed in or not, plus the signed-in user's
-    own posts; paged, searchable by title and subtitle, and sortable."""
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
+) -> PublicBlogPostPageResponseDto:
+    """Returns a page of published public blog posts to anyone, signed in or not, plus the
+    signed-in user's own posts; searchable by title and subtitle, and sortable."""
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
         query_dto.to_input(), auth_user
     )
-    return PublicBlogPostListResponseDto.from_result(find_public_blog_post_list_result)
+    return PublicBlogPostPageResponseDto.from_result(find_public_blog_post_page_result)
 
 
 @blog_post_router.get(

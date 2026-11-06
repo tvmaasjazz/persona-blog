@@ -48,7 +48,7 @@ choices).
 | `prompts.py`, or each module in a `prompts/` package | The mirrored module | Each builder: the inputs land in the prompt they belong in (§1) |
 | A graph variant's `<variant>_<what>_output_format.py` | The mirrored module | `normalize_output`: each fix it makes and what it leaves alone. `validate_output`: each problem on its own, and a valid document with none (§1) |
 | `utils/*.py` | `test_<utils>.py` | Every branch of every static method. A `Utils` that builds queries runs them against the test DB (§3); compare compiled SQL only for what a result can't show, such as a dropped `ORDER BY`. A `Utils` whose only output is a wall-clock measurement gets no file |
-| `libs/database/list_query_config.py` | `tests/libs/database/test_list_query_config.py` | One parametrized test over every (list query config, input class) pair: each `filters` key is a field of the input class |
+| `libs/database/pagination_config.py` | `tests/libs/database/test_pagination_config.py` | One parametrized test over every (pagination config, input class) pair: each `filters` key is a field of the input class |
 | `inputs.py`, `results.py`, `settings.py` | The mirrored module | Only models with a validator or declared constraint: accepted and rejected values (§1) |
 | `states.py` | `test_states.py` | Only a method that does more than group stored fields |
 | Class with an enum dispatch map | That class's test file | Every enum member has a handler (§1) |
@@ -59,8 +59,8 @@ choices).
 
 No test file for: a domain's `dtos.py` (unless a mapper has logic, §1), a domain's
 `dependencies.py`, `exceptions.py`, `libs/database/orm/*.py`, `constants.py` (beyond
-the list query config guard above). Route, service and app-factory tests and CI's drift check cover
-them.
+the pagination config guard above). Route, service and app-factory tests and CI's
+drift check cover them.
 
 ## Conventions for every test
 
@@ -443,7 +443,7 @@ the persona and blog post reads and `signed_in_admin` every permission, both wit
 | Create (`POST`)               | Select the row by the returned `identity` and assert its columns. The body is `{"identity": "<uuid>"}` |
 | Malformed identity → 422      | One test per route with an identity path parameter: a non-UUID value returns 422 |
 | Update (`PUT`) or `DELETE`    | Assert the body `== {}`, then select to prove the row changed or is gone. `await db_session.refresh(<entity>_record)` before reading a row the test already holds: `expire_on_commit=False` leaves its copy stale |
-| List (`GET` with a `FetchAllQueryDto`) | An invalid query value → 422 with `loc` starting `"query"`: an out-of-range `page` or `page_size`, and a `sort_by` the list doesn't allow. One test per filter in the list's `ListQueryConfig`, one search case, and `page_info` in a whole-response comparison (`fastapi-structure.md` › Paged lists) |
+| Page or list (`GET` with a query model) | An invalid query value → 422 with `loc` starting `"query"`. A page also: an out-of-range `page` or `page_size` and a `sort_by` the route doesn't allow are 422s; one test per filter in its `PaginationConfig`, one search case, and `pagination` in a whole-response comparison (`fastapi-structure.md` › Paged routes) |
 | Write rolls back on failure   | Make the route fail after its first write; assert no row |
 | Protected route, signed out   | One test per protected route using plain `api_client`; assert 401 |
 | Open `/public` route          | Signed out with plain `api_client`; the owner, with `is_owner` true; another user, with `is_owner` false; a 404 for an entity hidden from others; a 401 for an invalid session cookie |

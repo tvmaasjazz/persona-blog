@@ -12,7 +12,7 @@ from libs.blog_posts.results import (
     BlogPostDetailResult,
     BlogPostPersonaResult,
     BlogPostSummaryResult,
-    FindPublicBlogPostListResult,
+    FindPublicBlogPostPageResult,
     FindUserBlogPostListResult,
     PublicBlogPostResult,
 )
@@ -21,10 +21,10 @@ from libs.blog_posts.types import PublicBlogPostSortType
 from libs.content_items.services import ContentItemService
 from libs.content_items.types import ContentType
 from libs.core.exceptions import ForbiddenException, NotFoundException
-from libs.core.results import PageInfoResult
+from libs.core.results import PaginationResult
 from libs.core.types import SortDirectionType
 from libs.database.orm import BlogPostOrm, ContentItemOrm, GenerateTextRunOrm
-from libs.database.services import PageQueryService
+from libs.database.services import PaginationService
 from libs.generate_text.services import GenerateTextRunService, GenerateTextStepService
 from libs.generate_text.types import GenerateTextRunStatusType, GenerateTextStepStatusType
 from libs.personas.services import PersonaService
@@ -32,7 +32,7 @@ from tests.factories.auth import build_auth_user
 from tests.factories.blog_posts import (
     VALID_BLOG_POST_BODY,
     build_create_blog_post_input,
-    build_find_public_blog_post_list_input,
+    build_find_public_blog_post_page_input,
     build_update_blog_post_input,
     insert_blog_post_row,
 )
@@ -58,7 +58,7 @@ def _build_blog_post_service(
         generate_text_step_service=GenerateTextStepService(
             db_session_factory=db_session_factory, credit_settings=build_credit_settings()
         ),
-        page_query_service=PageQueryService(db_session=db_session),
+        pagination_service=PaginationService(db_session=db_session),
     )
 
 
@@ -1050,15 +1050,15 @@ FUTURE_PUBLISHED_AT = datetime(2099, 1, 1, tzinfo=UTC)
 
 
 def _find_blog_post_titles(
-    find_public_blog_post_list_result: FindPublicBlogPostListResult,
+    find_public_blog_post_page_result: FindPublicBlogPostPageResult,
 ) -> list[str]:
     return [
         blog_post_summary_result.title
-        for blog_post_summary_result in find_public_blog_post_list_result.blog_posts
+        for blog_post_summary_result in find_public_blog_post_page_result.blog_posts
     ]
 
 
-async def test_find_public_blog_post_list_signed_out_returns_published_public_posts(
+async def test_find_public_blog_post_page_signed_out_returns_published_public_posts(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     author_record = await insert_user_row(db_session)
@@ -1077,11 +1077,11 @@ async def test_find_public_blog_post_list_signed_out_returns_published_public_po
     await db_session.commit()
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(page_size=5), None
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(page_size=5), None
     )
 
-    assert find_public_blog_post_list_result == FindPublicBlogPostListResult(
+    assert find_public_blog_post_page_result == FindPublicBlogPostPageResult(
         blog_posts=[
             BlogPostSummaryResult(
                 identity=blog_post_record.identity,
@@ -1096,7 +1096,7 @@ async def test_find_public_blog_post_list_signed_out_returns_published_public_po
                 ),
             )
         ],
-        page_info=PageInfoResult(page=1, page_size=5, total=1),
+        pagination=PaginationResult(page=1, page_size=5, total=1),
     )
 
 
@@ -1111,7 +1111,7 @@ async def test_find_public_blog_post_list_signed_out_returns_published_public_po
         pytest.param(True, True, PAST_PUBLISHED_AT, True, True, id="deleted_post"),
     ],
 )
-async def test_find_public_blog_post_list_signed_out_hidden_post_is_excluded(
+async def test_find_public_blog_post_page_signed_out_hidden_post_is_excluded(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     is_persona_public: bool,
@@ -1136,15 +1136,15 @@ async def test_find_public_blog_post_list_signed_out_hidden_post_is_excluded(
     await db_session.commit()
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(), None
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(), None
     )
 
-    assert find_public_blog_post_list_result.blog_posts == []
-    assert find_public_blog_post_list_result.page_info.total == 0
+    assert find_public_blog_post_page_result.blog_posts == []
+    assert find_public_blog_post_page_result.pagination.total == 0
 
 
-async def test_find_public_blog_post_list_signed_in_includes_own_hidden_posts(
+async def test_find_public_blog_post_page_signed_in_includes_own_hidden_posts(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     user_record = await insert_user_row(db_session)
@@ -1187,16 +1187,16 @@ async def test_find_public_blog_post_list_signed_in_includes_own_hidden_posts(
     await db_session.commit()
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(), auth_user
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(), auth_user
     )
 
-    blog_post_titles = _find_blog_post_titles(find_public_blog_post_list_result)
+    blog_post_titles = _find_blog_post_titles(find_public_blog_post_page_result)
     assert blog_post_titles == ["Published", "Private", "Under Private Persona", "Draft"]
-    assert find_public_blog_post_list_result.page_info.total == 4
+    assert find_public_blog_post_page_result.pagination.total == 4
 
 
-async def test_find_public_blog_post_list_signed_in_as_another_user_excludes_their_hidden_posts(
+async def test_find_public_blog_post_page_signed_in_as_another_user_excludes_their_hidden_posts(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     viewer_record = await insert_user_row(db_session)
@@ -1225,11 +1225,11 @@ async def test_find_public_blog_post_list_signed_in_as_another_user_excludes_the
     await db_session.commit()
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(), viewer_auth_user
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(), viewer_auth_user
     )
 
-    assert _find_blog_post_titles(find_public_blog_post_list_result) == ["Author Published"]
+    assert _find_blog_post_titles(find_public_blog_post_page_result) == ["Author Published"]
 
 
 async def _insert_public_posts(
@@ -1254,7 +1254,7 @@ async def _insert_public_posts(
     await db_session.commit()
 
 
-async def test_find_public_blog_post_list_total_counts_every_row_and_pages_slice_them(
+async def test_find_public_blog_post_page_total_counts_every_row_and_pages_slice_them(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     await _insert_public_posts(
@@ -1262,32 +1262,32 @@ async def test_find_public_blog_post_list_total_counts_every_row_and_pages_slice
     )
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(page=2, page_size=2), None
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(page=2, page_size=2), None
     )
 
-    assert _find_blog_post_titles(find_public_blog_post_list_result) == ["Post 3", "Post 2"]
-    assert find_public_blog_post_list_result.page_info == PageInfoResult(
+    assert _find_blog_post_titles(find_public_blog_post_page_result) == ["Post 3", "Post 2"]
+    assert find_public_blog_post_page_result.pagination == PaginationResult(
         page=2, page_size=2, total=5
     )
 
 
-async def test_find_public_blog_post_list_page_past_the_end_returns_no_rows_and_same_total(
+async def test_find_public_blog_post_page_page_past_the_end_returns_no_rows_and_same_total(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     await _insert_public_posts(db_session, titles=["Post 1", "Post 2", "Post 3"])
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(page=3, page_size=2), None
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(page=3, page_size=2), None
     )
 
-    assert find_public_blog_post_list_result == FindPublicBlogPostListResult(
-        blog_posts=[], page_info=PageInfoResult(page=3, page_size=2, total=3)
+    assert find_public_blog_post_page_result == FindPublicBlogPostPageResult(
+        blog_posts=[], pagination=PaginationResult(page=3, page_size=2, total=3)
     )
 
 
-async def test_find_public_blog_post_list_tied_sort_values_page_without_overlap_or_gaps(
+async def test_find_public_blog_post_page_tied_sort_values_page_without_overlap_or_gaps(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     await _insert_public_posts(
@@ -1297,25 +1297,25 @@ async def test_find_public_blog_post_list_tied_sort_values_page_without_overlap_
     paged_titles: list[str] = []
 
     for page in (1, 2, 3):
-        find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-            build_find_public_blog_post_list_input(page=page, page_size=2), None
+        find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+            build_find_public_blog_post_page_input(page=page, page_size=2), None
         )
-        paged_titles += _find_blog_post_titles(find_public_blog_post_list_result)
+        paged_titles += _find_blog_post_titles(find_public_blog_post_page_result)
 
     assert paged_titles == ["Tied 5", "Tied 4", "Tied 3", "Tied 2", "Tied 1"]
 
 
-async def test_find_public_blog_post_list_tied_sort_values_ascending_break_ties_by_id_ascending(
+async def test_find_public_blog_post_page_tied_sort_values_ascending_break_ties_by_id_ascending(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     await _insert_public_posts(db_session, titles=["Tied 1", "Tied 2", "Tied 3"])
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(sort_direction=SortDirectionType.ASC), None
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(sort_direction=SortDirectionType.ASC), None
     )
 
-    assert _find_blog_post_titles(find_public_blog_post_list_result) == [
+    assert _find_blog_post_titles(find_public_blog_post_page_result) == [
         "Tied 1",
         "Tied 2",
         "Tied 3",
@@ -1329,7 +1329,7 @@ async def test_find_public_blog_post_list_tied_sort_values_ascending_break_ties_
         pytest.param(SortDirectionType.ASC, ["Oldest", "Newest", "Draft"], id="ascending"),
     ],
 )
-async def test_find_public_blog_post_list_sorted_by_published_at_puts_null_last(
+async def test_find_public_blog_post_page_sorted_by_published_at_puts_null_last(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     sort_direction: SortDirectionType,
@@ -1356,14 +1356,14 @@ async def test_find_public_blog_post_list_sorted_by_published_at_puts_null_last(
     await db_session.commit()
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(
             sort_by=PublicBlogPostSortType.PUBLISHED_AT, sort_direction=sort_direction
         ),
         auth_user,
     )
 
-    assert _find_blog_post_titles(find_public_blog_post_list_result) == expected_titles
+    assert _find_blog_post_titles(find_public_blog_post_page_result) == expected_titles
 
 
 @pytest.mark.parametrize(
@@ -1373,7 +1373,7 @@ async def test_find_public_blog_post_list_sorted_by_published_at_puts_null_last(
         pytest.param(SortDirectionType.DESC, ["Cherry", "Banana", "Apple"], id="descending"),
     ],
 )
-async def test_find_public_blog_post_list_sorted_by_title(
+async def test_find_public_blog_post_page_sorted_by_title(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     sort_direction: SortDirectionType,
@@ -1382,17 +1382,17 @@ async def test_find_public_blog_post_list_sorted_by_title(
     await _insert_public_posts(db_session, titles=["Banana", "Cherry", "Apple"])
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(
             sort_by=PublicBlogPostSortType.TITLE, sort_direction=sort_direction
         ),
         None,
     )
 
-    assert _find_blog_post_titles(find_public_blog_post_list_result) == expected_titles
+    assert _find_blog_post_titles(find_public_blog_post_page_result) == expected_titles
 
 
-async def test_find_public_blog_post_list_persona_identity_limits_rows_to_that_persona(
+async def test_find_public_blog_post_page_persona_identity_limits_rows_to_that_persona(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     author_record = await insert_user_row(db_session)
@@ -1417,16 +1417,16 @@ async def test_find_public_blog_post_list_persona_identity_limits_rows_to_that_p
     await db_session.commit()
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(persona_identity=matching_persona_record.identity),
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(persona_identity=matching_persona_record.identity),
         None,
     )
 
-    assert _find_blog_post_titles(find_public_blog_post_list_result) == ["Matching Post"]
-    assert find_public_blog_post_list_result.page_info.total == 1
+    assert _find_blog_post_titles(find_public_blog_post_page_result) == ["Matching Post"]
+    assert find_public_blog_post_page_result.pagination.total == 1
 
 
-async def test_find_public_blog_post_list_without_persona_identity_lists_across_personas(
+async def test_find_public_blog_post_page_without_persona_identity_lists_across_personas(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     author_record = await insert_user_row(db_session)
@@ -1445,11 +1445,11 @@ async def test_find_public_blog_post_list_without_persona_identity_lists_across_
     await db_session.commit()
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(sort_by=PublicBlogPostSortType.TITLE), None
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(sort_by=PublicBlogPostSortType.TITLE), None
     )
 
-    assert _find_blog_post_titles(find_public_blog_post_list_result) == [
+    assert _find_blog_post_titles(find_public_blog_post_page_result) == [
         "Second Persona Post",
         "First Persona Post",
     ]
@@ -1487,7 +1487,7 @@ async def _insert_searchable_posts(
         pytest.param("  \t ", ["Morning Coffee", "Evening Tea"], id="whitespace_only"),
     ],
 )
-async def test_find_public_blog_post_list_search_matches_title_and_subtitle(
+async def test_find_public_blog_post_page_search_matches_title_and_subtitle(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     search: str,
@@ -1502,12 +1502,12 @@ async def test_find_public_blog_post_list_search_matches_title_and_subtitle(
     )
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(search=search, sort_by=PublicBlogPostSortType.TITLE),
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(search=search, sort_by=PublicBlogPostSortType.TITLE),
         None,
     )
 
-    assert _find_blog_post_titles(find_public_blog_post_list_result) == expected_titles
+    assert _find_blog_post_titles(find_public_blog_post_page_result) == expected_titles
 
 
 @pytest.mark.parametrize(
@@ -1517,7 +1517,7 @@ async def test_find_public_blog_post_list_search_matches_title_and_subtitle(
         pytest.param("_", ["snake_case"], id="underscore"),
     ],
 )
-async def test_find_public_blog_post_list_search_wildcard_characters_match_literally(
+async def test_find_public_blog_post_page_search_wildcard_characters_match_literally(
     db_session: AsyncSession,
     db_session_factory: async_sessionmaker[AsyncSession],
     search: str,
@@ -1533,21 +1533,21 @@ async def test_find_public_blog_post_list_search_wildcard_characters_match_liter
     )
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(search=search), None
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(search=search), None
     )
 
-    assert _find_blog_post_titles(find_public_blog_post_list_result) == expected_titles
+    assert _find_blog_post_titles(find_public_blog_post_page_result) == expected_titles
 
 
-async def test_find_public_blog_post_list_search_uses_only_the_first_eight_words(
+async def test_find_public_blog_post_page_search_uses_only_the_first_eight_words(
     db_session: AsyncSession, db_session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     await _insert_searchable_posts(db_session, posts=[("a b c d e f g h", None, "Body.")])
     blog_post_service = _build_blog_post_service(db_session, db_session_factory)
 
-    find_public_blog_post_list_result = await blog_post_service.find_public_blog_post_list(
-        build_find_public_blog_post_list_input(search="a b c d e f g h missing"), None
+    find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
+        build_find_public_blog_post_page_input(search="a b c d e f g h missing"), None
     )
 
-    assert _find_blog_post_titles(find_public_blog_post_list_result) == ["a b c d e f g h"]
+    assert _find_blog_post_titles(find_public_blog_post_page_result) == ["a b c d e f g h"]

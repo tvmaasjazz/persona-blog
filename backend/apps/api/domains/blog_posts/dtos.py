@@ -3,17 +3,17 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
-from apps.api.core.dtos import PageInfoResponseDto, PageQueryDto, PageResponseDto
+from apps.api.core.dtos import BasePageQueryDto, BasePageResponseDto, PaginationResponseDto
 from libs.blog_posts.inputs import (
     CreateBlogPostFromGenerateTextRunInput,
     CreateBlogPostInput,
-    FindPublicBlogPostListInput,
+    FindPublicBlogPostPageInput,
     UpdateBlogPostInput,
 )
 from libs.blog_posts.results import (
     BlogPostDetailResult,
     BlogPostSummaryResult,
-    FindPublicBlogPostListResult,
+    FindPublicBlogPostPageResult,
     FindUserBlogPostListResult,
     PublicBlogPostResult,
 )
@@ -186,13 +186,13 @@ class BlogPostFetchAllQueryDto(BaseModel):
     persona_identity: UUID | None = None
 
 
-class PublicBlogPostFetchAllQueryDto(PageQueryDto):
+class PublicBlogPostPageQueryDto(BasePageQueryDto):
     sort_by: PublicBlogPostSortType = PublicBlogPostSortType.PUBLISHED_AT
     persona_identity: UUID | None = None
 
-    def to_input(self) -> FindPublicBlogPostListInput:
-        return FindPublicBlogPostListInput(
-            page_input=self.to_page_input(),
+    def to_input(self) -> FindPublicBlogPostPageInput:
+        return FindPublicBlogPostPageInput(
+            pagination_input=self.to_pagination_input(),
             sort_by=self.sort_by,
             persona_identity=self.persona_identity,
         )
@@ -225,17 +225,19 @@ class BlogPostSummaryResponseDto(BaseModel):
         )
 
 
-class PublicBlogPostListResponseDto(PageResponseDto):
+class PublicBlogPostPageResponseDto(BasePageResponseDto):
     blog_posts: list[BlogPostSummaryResponseDto]
 
     @classmethod
     def from_result(
-        cls, find_public_blog_post_list_result: FindPublicBlogPostListResult
-    ) -> PublicBlogPostListResponseDto:
+        cls, find_public_blog_post_page_result: FindPublicBlogPostPageResult
+    ) -> PublicBlogPostPageResponseDto:
         return cls(
             blog_posts=[
                 BlogPostSummaryResponseDto.from_result(blog_post_summary_result)
-                for blog_post_summary_result in find_public_blog_post_list_result.blog_posts
+                for blog_post_summary_result in find_public_blog_post_page_result.blog_posts
             ],
-            page_info=PageInfoResponseDto.from_result(find_public_blog_post_list_result.page_info),
+            pagination=PaginationResponseDto.from_result(
+                find_public_blog_post_page_result.pagination
+            ),
         )

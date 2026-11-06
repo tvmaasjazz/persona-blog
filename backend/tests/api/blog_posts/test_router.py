@@ -1418,17 +1418,17 @@ async def _insert_own_blog_post(
     )
 
 
-async def test_find_public_blog_post_list_signed_out_returns_other_users_published_post(
+async def test_find_public_blog_post_page_signed_out_returns_other_users_published_post(
     api_client: AsyncClient, other_user_client: AsyncClient
 ) -> None:
     other_persona_identity, other_blog_post_identity = await _create_other_users_blog_post(
         other_user_client, published_at="2020-01-01T00:00:00+00:00"
     )
 
-    find_public_blog_post_list_response = await api_client.get("/blog-posts/public")
+    find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
 
-    assert find_public_blog_post_list_response.status_code == 200
-    assert find_public_blog_post_list_response.json() == {
+    assert find_public_blog_post_page_response.status_code == 200
+    assert find_public_blog_post_page_response.json() == {
         "blog_posts": [
             {
                 "identity": other_blog_post_identity,
@@ -1441,7 +1441,7 @@ async def test_find_public_blog_post_list_signed_out_returns_other_users_publish
                 "updated_at": ANY,
             }
         ],
-        "page_info": {"page": 1, "page_size": 20, "total": 1},
+        "pagination": {"page": 1, "page_size": 20, "total": 1},
     }
 
 
@@ -1454,7 +1454,7 @@ async def test_find_public_blog_post_list_signed_out_returns_other_users_publish
         pytest.param(False, False, None, id="post_on_private_persona"),
     ],
 )
-async def test_find_public_blog_post_list_signed_out_hidden_post_is_not_listed(
+async def test_find_public_blog_post_page_signed_out_hidden_post_is_not_listed(
     api_client: AsyncClient,
     other_user_client: AsyncClient,
     is_persona_public: bool,
@@ -1468,16 +1468,16 @@ async def test_find_public_blog_post_list_signed_out_hidden_post_is_not_listed(
         published_at=published_at,
     )
 
-    find_public_blog_post_list_response = await api_client.get("/blog-posts/public")
+    find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
 
-    assert find_public_blog_post_list_response.status_code == 200
-    assert find_public_blog_post_list_response.json() == {
+    assert find_public_blog_post_page_response.status_code == 200
+    assert find_public_blog_post_page_response.json() == {
         "blog_posts": [],
-        "page_info": {"page": 1, "page_size": 20, "total": 0},
+        "pagination": {"page": 1, "page_size": 20, "total": 0},
     }
 
 
-async def test_find_public_blog_post_list_signed_in_lists_own_draft_and_others_published(
+async def test_find_public_blog_post_page_signed_in_lists_own_draft_and_others_published(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     db_session: AsyncSession,
@@ -1499,36 +1499,36 @@ async def test_find_public_blog_post_list_signed_in_lists_own_draft_and_others_p
         other_user_client, published_at="2020-01-01T00:00:00+00:00", title="Their Post"
     )
 
-    find_public_blog_post_list_response = await api_client.get("/blog-posts/public")
+    find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
 
-    response_body = find_public_blog_post_list_response.json()
-    assert find_public_blog_post_list_response.status_code == 200
+    response_body = find_public_blog_post_page_response.json()
+    assert find_public_blog_post_page_response.status_code == 200
     assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == [
         "Their Post",
         "My Draft",
     ]
-    assert response_body["page_info"] == {"page": 1, "page_size": 20, "total": 2}
+    assert response_body["pagination"] == {"page": 1, "page_size": 20, "total": 2}
 
 
-async def test_find_public_blog_post_list_signed_in_does_not_list_others_drafts(
+async def test_find_public_blog_post_page_signed_in_does_not_list_others_drafts(
     api_client: AsyncClient, signed_in_user: UserOrm, other_user_client: AsyncClient
 ) -> None:
     await _create_other_users_blog_post(other_user_client, published_at=None)
 
-    find_public_blog_post_list_response = await api_client.get("/blog-posts/public")
+    find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
 
-    assert find_public_blog_post_list_response.status_code == 200
-    assert find_public_blog_post_list_response.json()["blog_posts"] == []
+    assert find_public_blog_post_page_response.status_code == 200
+    assert find_public_blog_post_page_response.json()["blog_posts"] == []
 
 
-async def test_find_public_blog_post_list_invalid_session_returns_401(
+async def test_find_public_blog_post_page_invalid_session_returns_401(
     api_client: AsyncClient,
 ) -> None:
     api_client.cookies.set("sid", "not-a-real-session-id")
 
-    find_public_blog_post_list_response = await api_client.get("/blog-posts/public")
+    find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
 
-    assert find_public_blog_post_list_response.status_code == 401
+    assert find_public_blog_post_page_response.status_code == 401
 
 
 @pytest.mark.parametrize(
@@ -1547,19 +1547,19 @@ async def test_find_public_blog_post_list_invalid_session_returns_401(
         pytest.param({"search": "a" * 201}, ["query", "search"], id="search_too_long"),
     ],
 )
-async def test_find_public_blog_post_list_invalid_query_returns_422(
+async def test_find_public_blog_post_page_invalid_query_returns_422(
     api_client: AsyncClient, query_params: dict[str, str], expected_error_location: list[str]
 ) -> None:
-    find_public_blog_post_list_response = await api_client.get(
+    find_public_blog_post_page_response = await api_client.get(
         "/blog-posts/public", params=query_params
     )
 
-    response_body = find_public_blog_post_list_response.json()
-    assert find_public_blog_post_list_response.status_code == 422
+    response_body = find_public_blog_post_page_response.json()
+    assert find_public_blog_post_page_response.status_code == 422
     assert response_body["detail"][0]["loc"] == expected_error_location
 
 
-async def test_find_public_blog_post_list_pages_and_reports_total_of_every_row(
+async def test_find_public_blog_post_page_pages_and_reports_total_of_every_row(
     api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
 ) -> None:
     persona_record = await insert_persona_row(
@@ -1571,16 +1571,16 @@ async def test_find_public_blog_post_list_pages_and_reports_total_of_every_row(
         )
     await db_session.commit()
 
-    find_public_blog_post_list_response = await api_client.get(
+    find_public_blog_post_page_response = await api_client.get(
         "/blog-posts/public", params={"page": "2", "page_size": "2"}
     )
 
-    response_body = find_public_blog_post_list_response.json()
+    response_body = find_public_blog_post_page_response.json()
     assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == ["Post 1"]
-    assert response_body["page_info"] == {"page": 2, "page_size": 2, "total": 3}
+    assert response_body["pagination"] == {"page": 2, "page_size": 2, "total": 3}
 
 
-async def test_find_public_blog_post_list_page_past_the_end_returns_no_rows_and_same_total(
+async def test_find_public_blog_post_page_page_past_the_end_returns_no_rows_and_same_total(
     api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
 ) -> None:
     persona_record = await insert_persona_row(
@@ -1591,13 +1591,13 @@ async def test_find_public_blog_post_list_page_past_the_end_returns_no_rows_and_
     )
     await db_session.commit()
 
-    find_public_blog_post_list_response = await api_client.get(
+    find_public_blog_post_page_response = await api_client.get(
         "/blog-posts/public", params={"page": "5"}
     )
 
-    assert find_public_blog_post_list_response.json() == {
+    assert find_public_blog_post_page_response.json() == {
         "blog_posts": [],
-        "page_info": {"page": 5, "page_size": 20, "total": 1},
+        "pagination": {"page": 5, "page_size": 20, "total": 1},
     }
 
 
@@ -1608,7 +1608,7 @@ async def test_find_public_blog_post_list_page_past_the_end_returns_no_rows_and_
         pytest.param("DESC", ["Cherry", "Banana", "Apple"], id="descending"),
     ],
 )
-async def test_find_public_blog_post_list_sorted_by_title(
+async def test_find_public_blog_post_page_sorted_by_title(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     db_session: AsyncSession,
@@ -1624,15 +1624,15 @@ async def test_find_public_blog_post_list_sorted_by_title(
         )
     await db_session.commit()
 
-    find_public_blog_post_list_response = await api_client.get(
+    find_public_blog_post_page_response = await api_client.get(
         "/blog-posts/public", params={"sort_by": "TITLE", "sort_direction": sort_direction}
     )
 
-    response_body = find_public_blog_post_list_response.json()
+    response_body = find_public_blog_post_page_response.json()
     assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == expected_titles
 
 
-async def test_find_public_blog_post_list_persona_identity_limits_rows_to_that_persona(
+async def test_find_public_blog_post_page_persona_identity_limits_rows_to_that_persona(
     api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
 ) -> None:
     matching_persona_record = await insert_persona_row(
@@ -1655,13 +1655,13 @@ async def test_find_public_blog_post_list_persona_identity_limits_rows_to_that_p
     )
     await db_session.commit()
 
-    find_public_blog_post_list_response = await api_client.get(
+    find_public_blog_post_page_response = await api_client.get(
         "/blog-posts/public", params={"persona_identity": str(matching_persona_record.identity)}
     )
 
-    response_body = find_public_blog_post_list_response.json()
+    response_body = find_public_blog_post_page_response.json()
     assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == ["Matching Post"]
-    assert response_body["page_info"]["total"] == 1
+    assert response_body["pagination"]["total"] == 1
 
 
 @pytest.mark.parametrize(
@@ -1674,7 +1674,7 @@ async def test_find_public_blog_post_list_persona_identity_limits_rows_to_that_p
         pytest.param("   ", ["Evening Tea", "Morning Coffee"], id="whitespace_means_no_search"),
     ],
 )
-async def test_find_public_blog_post_list_search(
+async def test_find_public_blog_post_page_search(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     db_session: AsyncSession,
@@ -1697,9 +1697,9 @@ async def test_find_public_blog_post_list_search(
     )
     await db_session.commit()
 
-    find_public_blog_post_list_response = await api_client.get(
+    find_public_blog_post_page_response = await api_client.get(
         "/blog-posts/public", params={"search": search, "sort_by": "TITLE", "sort_direction": "ASC"}
     )
 
-    response_body = find_public_blog_post_list_response.json()
+    response_body = find_public_blog_post_page_response.json()
     assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == expected_titles

@@ -1,3 +1,3 @@
-from libs.database.services.page_query_service import PageQueryService
+from libs.database.services.pagination_service import PaginationService
 
-__all__ = ["PageQueryService"]
+__all__ = ["PaginationService"]

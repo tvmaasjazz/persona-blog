@@ -5,13 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.blog_posts.inputs import (
     CreateBlogPostInput,
-    FindPublicBlogPostListInput,
+    FindPublicBlogPostPageInput,
     UpdateBlogPostInput,
 )
 from libs.blog_posts.types import PublicBlogPostSortType
 from libs.core.types import SortDirectionType
 from libs.database.orm import BlogPostOrm
-from tests.factories.core import build_page_input
+from tests.factories.core import build_pagination_input
 
 VALID_BLOG_POST_BODY = (
     "A paragraph that opens the post with some context.\n\n"
@@ -56,7 +56,7 @@ def build_update_blog_post_input(
     )
 
 
-def build_find_public_blog_post_list_input(
+def build_find_public_blog_post_page_input(
     *,
     page: int = 1,
     page_size: int = 20,
@@ -64,9 +64,9 @@ def build_find_public_blog_post_list_input(
     sort_by: PublicBlogPostSortType = PublicBlogPostSortType.PUBLISHED_AT,
     sort_direction: SortDirectionType = SortDirectionType.DESC,
     persona_identity: UUID | None = None,
-) -> FindPublicBlogPostListInput:
-    return FindPublicBlogPostListInput(
-        page_input=build_page_input(
+) -> FindPublicBlogPostPageInput:
+    return FindPublicBlogPostPageInput(
+        pagination_input=build_pagination_input(
             page=page, page_size=page_size, search=search, sort_direction=sort_direction
         ),
         sort_by=sort_by,
