@@ -1,6 +1,7 @@
 from datetime import date
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.content_engagement.settings import ContentEngagementSettings
@@ -85,3 +86,17 @@ async def insert_signed_out_content_item_view_row(
     db_session.add(content_item_view_record)
     await db_session.flush()
     return content_item_view_record
+
+
+async def find_content_item_engagement_row(
+    db_session: AsyncSession, *, content_item_id: int
+) -> ContentItemEngagementOrm:
+    # Re-selects past the session's identity map, since services update the row in SQL
+    content_item_engagement_query = (
+        select(ContentItemEngagementOrm)
+        .where(ContentItemEngagementOrm.content_item_id == content_item_id)
+        .execution_options(populate_existing=True)
+    )
+    content_item_engagement_record = await db_session.scalar(content_item_engagement_query)
+    assert content_item_engagement_record is not None
+    return content_item_engagement_record
