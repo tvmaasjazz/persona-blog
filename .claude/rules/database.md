@@ -45,7 +45,7 @@ Database. The procedure for making a schema change is the `db-migration` skill.
 ### Shared columns
 
 Every table has these columns. `BaseOrm` in `libs/database/base.py` maps them, so an Orm
-class never redeclares them.
+class never redeclares them, except to make the audit columns nullable (below).
 
 | Column          | SQL                                                          | Orm                        | Notes |
 | --------------- | ------------------------------------------------------------ | -------------------------- | ----- |
@@ -58,8 +58,8 @@ class never redeclares them.
 | `updated_by_id` | `BIGINT NOT NULL`, FK `pb_user (id)`                         | `Mapped[int]`              | |
 | `deleted_by_id` | `BIGINT`, FK `pb_user (id)`                                  | `Mapped[int \| None]`      | |
 
-`pb_user` is the one exception: its `created_by_id` and `updated_by_id` are nullable,
-since a person signing up has no creator. `UserOrm` redeclares both.
+`pb_user`'s `created_by_id` and `updated_by_id` are nullable, since a person signing up
+has no creator. `UserOrm` redeclares both.
 
 A row the app calculates from other rows, such as a count or a score, names the system
 user in `created_by_id` and `updated_by_id`, whoever caused the change. The statement
@@ -68,8 +68,11 @@ query of its own.
 
 A row a signed-out visitor can cause, such as a view, has nullable `created_by_id` and
 `updated_by_id`, and identifies the visitor in `anonymous_user_key TEXT`, with a check
-that exactly one of `created_by_id` and `anonymous_user_key` is set. Each kind of row
-gets its own partial unique index.
+that exactly one of `created_by_id` and `anonymous_user_key` is set. Its Orm class
+redeclares both audit columns as `Mapped[int | None]`. Each kind of row gets its own
+partial unique index, named `<table>_user_<what>_idx` and `<table>_anonymous_<what>_idx`
+when the column list would pass 63 characters. The pattern is
+`libs/database/orm/content_item_view.py`.
 
 A foreign key has no `ON DELETE` clause, in the SQL or as `ondelete=` in the Orm, so a
 real delete of a referenced row fails loudly instead of quietly removing or unlinking
