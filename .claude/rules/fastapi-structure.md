@@ -306,6 +306,8 @@ down to `PUBLIC_BLOG_POST_PAGINATION_CONFIG`.
   | Range       | `<field>_from`, `<field>_to`     | `GTE`, `LT`  |
   | Has a value | `has_<field>`                    | `HAS_VALUE`  |
 
+- A datetime filter is an `AwareDatetime`, so a time without a zone is a 422. An any-of
+  `list[...]` filter takes a `max_length`.
 - Filters only narrow. Who may see what stays in the service's all-records query.
 - A `PaginationConfig` in the lib's `constants.py` names the search columns, each sort
   value's column, each filter field's `PaginationFilterConfig` (column and operator),
