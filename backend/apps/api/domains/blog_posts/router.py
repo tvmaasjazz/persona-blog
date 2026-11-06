@@ -53,13 +53,13 @@ async def find_user_blog_post_list(
 @blog_post_router.get("/public")
 async def find_public_blog_post_page(
     query_dto: Annotated[PublicBlogPostPageQueryDto, Query()],
-    auth_user: OptionalAuthUserDep,
     blog_post_service: BlogPostServiceDep,
 ) -> PublicBlogPostPageResponseDto:
-    """Returns a page of published public blog posts to anyone, signed in or not, plus the
-    signed-in user's own posts; searchable by title and subtitle, and sortable."""
+    """Returns a page of published public blog posts, the same to anyone, signed in or not:
+    the homepage feed sorted by FEED_SCORE, or a persona's page filtered by persona;
+    searchable by title, subtitle and persona name."""
     find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
-        query_dto.to_input(), auth_user
+        query_dto.to_input()
     )
     return PublicBlogPostPageResponseDto.from_result(find_public_blog_post_page_result)
 

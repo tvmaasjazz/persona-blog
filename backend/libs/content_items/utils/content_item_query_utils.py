@@ -11,23 +11,29 @@ class ContentItemQueryUtils:
 
     @staticmethod
     def build_accessible_condition(auth_user_id: int | None) -> ColumnElement[bool]:
-        """Matches the user's own items and other people's published items of public personas
-        whose creator is active; with no user, only the published ones."""
+        """Matches the user's own items and the published public ones; with no user, only
+        the published public ones."""
+        is_published_public = ContentItemQueryUtils.build_published_public_condition()
+        if auth_user_id is None:
+            return is_published_public
+        return or_(ContentItemOrm.created_by_id == auth_user_id, is_published_public)
+
+    @staticmethod
+    def build_published_public_condition() -> ColumnElement[bool]:
+        """Matches the items anyone may read, the same for every caller: published public
+        items of public personas whose creator is active."""
         is_creator_active = (
             select(UserOrm.id)
             .where(UserOrm.id == ContentItemOrm.created_by_id, UserOrm.is_active)
             .exists()
         )
-        is_published_public = and_(
+        return and_(
             is_creator_active,
             ContentItemOrm.is_public,
             ContentItemOrm.published_at.is_not(None),
             ContentItemOrm.published_at <= DatabaseClockUtils.build_utc_now_sql(),
             PersonaOrm.is_public,
         )
-        if auth_user_id is None:
-            return is_published_public
-        return or_(ContentItemOrm.created_by_id == auth_user_id, is_published_public)
 
     @staticmethod
     def build_owned_condition(auth_user_id: int) -> ColumnElement[bool]:

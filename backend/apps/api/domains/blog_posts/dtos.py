@@ -206,6 +206,8 @@ class BlogPostSummaryResponseDto(BaseModel):
     identity: UUID
     content_item_identity: UUID
     persona_identity: UUID
+    persona_name: str
+    persona_avatar_url: str | None
     title: str
     subtitle: str | None
     is_public: bool
@@ -222,6 +224,8 @@ class BlogPostSummaryResponseDto(BaseModel):
             identity=blog_post_summary_result.identity,
             content_item_identity=content_item_result.identity,
             persona_identity=content_item_result.persona.identity,
+            persona_name=content_item_result.persona.name,
+            persona_avatar_url=content_item_result.persona.avatar_url,
             title=blog_post_summary_result.title,
             subtitle=blog_post_summary_result.subtitle,
             is_public=content_item_result.is_public,

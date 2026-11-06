@@ -29,7 +29,7 @@ from libs.content_items.types import ContentType
 from libs.content_items.utils.content_item_query_utils import ContentItemQueryUtils
 from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.core.utils.markdown_utils import MarkdownUtils
-from libs.database.orm import BlogPostOrm, ContentItemOrm, PersonaOrm
+from libs.database.orm import BlogPostOrm, ContentItemEngagementOrm, ContentItemOrm, PersonaOrm
 from libs.database.services import PaginationService
 from libs.database.utils import DatabaseClockUtils
 from libs.generate_text.services import GenerateTextRunService, GenerateTextStepService
@@ -166,20 +166,21 @@ class BlogPostService:
         )
 
     async def find_public_blog_post_page(
-        self,
-        find_public_blog_post_page_input: FindPublicBlogPostPageInput,
-        auth_user: AuthUser | None,
+        self, find_public_blog_post_page_input: FindPublicBlogPostPageInput
     ) -> FindPublicBlogPostPageResult:
-        """One page of published public posts of public personas, plus the caller's own posts
-        drafts included, searched, filtered and sorted per the input."""
-        auth_user_id = auth_user.id if auth_user is not None else None
-
-        # All the posts this caller may see; find_page filters, sorts and pages them
+        """One page of published public posts of public personas, the same for every caller,
+        searched, filtered and sorted per the input."""
+        # All the posts anyone may read, with the engagement the feed score sorts by;
+        # find_page filters, sorts and pages them
         all_records_query = (
             select(BlogPostOrm)
             .join(ContentItemOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
             .join(PersonaOrm, ContentItemOrm.persona_id == PersonaOrm.id)
-            .where(ContentItemQueryUtils.build_accessible_condition(auth_user_id))
+            .join(
+                ContentItemEngagementOrm,
+                ContentItemEngagementOrm.content_item_id == ContentItemOrm.id,
+            )
+            .where(ContentItemQueryUtils.build_published_public_condition())
         )
         find_page_result = await self._pagination_service.find_page(
             all_records_query,
