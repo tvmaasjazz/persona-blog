@@ -322,6 +322,14 @@ permission, reads included, unless it's open by design; an open route goes on
 neither. A read permission sits in front of the service's own access check, such as
 ownership or a public flag, and doesn't replace it.
 
+A read anyone may make, signed in or not, is its own route at
+`/{<entity>_identity}/public` beside the owner's `GET` in the same router: no
+permission, on `OPEN_ROUTES`, taking `OptionalAuthUserDep`, which is `None` without a
+session cookie and still a 401 for an expired one. Its service method takes
+`auth_user: AuthUser | None`, and its response holds only the fields a reader sees,
+plus `is_owner`. The owner's `GET` returns every field and a 404 to anyone else. The
+pattern is `find_public_persona` in `apps/api/domains/personas/router.py`.
+
 ## App-scoped vs request-scoped
 
 `lifespan.py` owns long-lived resources — HTTP pool, SQLAlchemy engine, settings —
@@ -383,7 +391,9 @@ from_attributes=True)`, which copies only the fields the `Result` declares, incl
 nested `Result`s. The flag goes on the call; a `Result` never sets `model_config`. A
 `Result` that adds a value the record doesn't hold, such as a flag computed from a
 setting, is built with its constructor, and the added field has no default so a caller
-can't forget it. A `Result` spanning related rows loads them up front: `contains_eager`
+can't forget it. A `Result` that adds a computed field to an existing detail `Result`
+wraps it (`blog_post: BlogPostDetailResult`) instead of copying or subclassing its
+fields. A `Result` spanning related rows loads them up front: `contains_eager`
 when the query already joins them, `selectinload` otherwise. A labelled multi-column
 `select()` read through `.mappings()` is only for flat projections and aggregates.
 
