@@ -3,6 +3,15 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from libs.blog_posts.types import PublicBlogPostSortType
+from libs.core.inputs import PageInput
+
+
+class FindPublicBlogPostListInput(BaseModel):
+    page_input: PageInput
+    sort_by: PublicBlogPostSortType
+    persona_identity: UUID | None
+
 
 class CreateBlogPostInput(BaseModel):
     persona_identity: UUID

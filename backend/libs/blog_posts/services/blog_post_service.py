@@ -6,15 +6,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
 
 from libs.auth.results import AuthUser
+from libs.blog_posts.constants import PUBLIC_BLOG_POST_LIST_SPEC
 from libs.blog_posts.exceptions import BlogPostGenerateTextRunOutputInvalidException
 from libs.blog_posts.inputs import (
     CreateBlogPostFromGenerateTextRunInput,
     CreateBlogPostInput,
+    FindPublicBlogPostListInput,
     UpdateBlogPostInput,
 )
 from libs.blog_posts.results import (
     BlogPostDetailResult,
+    BlogPostSummaryResult,
     CreateBlogPostResult,
+    FindPublicBlogPostListResult,
     FindUserBlogPostListResult,
     PublicBlogPostResult,
 )
@@ -26,7 +30,7 @@ from libs.content_items.utils.content_item_query_utils import ContentItemQueryUt
 from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.core.utils.markdown_utils import MarkdownUtils
 from libs.database.orm import BlogPostOrm, ContentItemOrm, PersonaOrm
-from libs.database.utils import DatabaseClockUtils
+from libs.database.utils import DatabaseClockUtils, PageQueryUtils
 from libs.generate_text.services import GenerateTextRunService, GenerateTextStepService
 from libs.personas.services import PersonaService
 
@@ -156,6 +160,52 @@ class BlogPostService:
         return PublicBlogPostResult(
             blog_post=BlogPostDetailResult.model_validate(blog_post_record, from_attributes=True),
             is_owner=auth_user_id is not None and blog_post_record.created_by_id == auth_user_id,
+        )
+
+    async def find_public_blog_post_list(
+        self,
+        find_public_blog_post_list_input: FindPublicBlogPostListInput,
+        auth_user: AuthUser | None,
+    ) -> FindPublicBlogPostListResult:
+        """One page of published public posts of public personas, plus the caller's own posts
+        drafts included, searched, filtered and sorted per the input."""
+        auth_user_id = auth_user.id if auth_user is not None else None
+        page_input = find_public_blog_post_list_input.page_input
+
+        # Base query: the posts this caller may see
+        base_query = (
+            select(BlogPostOrm)
+            .join(ContentItemOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
+            .join(PersonaOrm, ContentItemOrm.persona_id == PersonaOrm.id)
+            .where(ContentItemQueryUtils.build_accessible_condition(auth_user_id))
+        )
+        filtered_query = PageQueryUtils.build_filtered_query(
+            base_query,
+            PUBLIC_BLOG_POST_LIST_SPEC,
+            find_public_blog_post_list_input,
+            page_input,
+        )
+
+        # Count every matching row, then read the requested page
+        count_query = PageQueryUtils.build_count_query(filtered_query)
+        count_query_result = await self._db_session.execute(count_query)
+        total = count_query_result.scalar_one()
+
+        page_query = PageQueryUtils.build_page_query(
+            filtered_query,
+            PUBLIC_BLOG_POST_LIST_SPEC,
+            find_public_blog_post_list_input.sort_by,
+            page_input,
+        ).options(contains_eager(BlogPostOrm.content_item).contains_eager(ContentItemOrm.persona))
+        page_query_result = await self._db_session.execute(page_query)
+        blog_post_records = page_query_result.scalars().all()
+
+        return FindPublicBlogPostListResult(
+            blog_posts=[
+                BlogPostSummaryResult.model_validate(blog_post_record, from_attributes=True)
+                for blog_post_record in blog_post_records
+            ],
+            page_info=PageQueryUtils.build_page_info(page_input, total),
         )
 
     async def find_user_blog_post_list(
