@@ -8,6 +8,7 @@ from pydantic_settings import (
 
 from apps.api.core.types import EnvironmentType
 from libs.auth.settings import AuthSettings
+from libs.content_engagement.settings import ContentEngagementSettings
 from libs.core.settings import BackgroundJobSettings
 from libs.credits.settings import CreditSettings
 from libs.generate_text.settings import GenerateTextSettings
@@ -35,6 +36,7 @@ class AppSettings(BaseSettings):
     railway_replica_id: str | None = None
     auth: AuthSettings = Field(default_factory=AuthSettings)
     background_jobs: BackgroundJobSettings = Field(default_factory=BackgroundJobSettings)
+    content_engagement: ContentEngagementSettings = Field(default_factory=ContentEngagementSettings)
     credits: CreditSettings = Field(default_factory=CreditSettings)
     generate_text: GenerateTextSettings = Field(default_factory=GenerateTextSettings)
     google_auth: GoogleAuthSettings = Field(default_factory=GoogleAuthSettings)

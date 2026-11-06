@@ -236,8 +236,9 @@ Test data comes from `tests/factories/<domain>.py`, one module per lib domain (s
 - `insert_<entity>_row(db_session, ...)` adds and flushes an `Orm` and returns it.
   Async. It bypasses services, so a test of one service never depends on another
   service working.
-- `find_<entity>_row(db_session)` returns a row the migrations seed, such as the
-  system user. Async.
+- `find_<entity>_row(db_session, ...)` returns a row the migrations seed, such as the
+  system user, or re-selects a row a service changed in SQL, with
+  `populate_existing`. Async.
 - Every parameter is keyword-only with a valid default, so a test passes only the
   values it asserts on. Unique columns default to a fresh value.
 - Write out keyword parameters, never `**overrides`, so a typo fails.
@@ -250,6 +251,9 @@ Test data comes from `tests/factories/<domain>.py`, one module per lib domain (s
   the test inserted and flush. Never reach that state through another service.
 - A test of exception-hierarchy behaviour, such as most-specific matching, may declare
   a throwaway `<What>Exception` subclass in its own module.
+- A test module may keep private `_`-prefixed helpers, such as one that builds the
+  class under test or composes factories. A helper a second module needs goes in
+  `factories/`, except the other-user helper of a route test (§6).
 
 ### Determinism
 
@@ -355,7 +359,7 @@ These are service tests that take the `db_session` fixture.
 | Create                            | Call, then `select()` the row back and assert on it. The returned `Result` alone proves nothing about persistence |
 | Primary key and server defaults   | Assert `id` and `identity` are set and `created_at is not None`. Never assert an exact timestamp |
 | Soft delete                       | Assert the ORM `select()` no longer finds the row and a raw `text()` select still does, with `deleted_by_id` set and `deleted_at` equal to the database's now. A raw `text()` select returns naive datetimes: compare `deleted_at.replace(tzinfo=UTC) == database_utc_now` |
-| Audit columns                     | Assert `created_by_id` / `updated_by_id` equal the `AuthUser` the test passed in |
+| Audit columns                     | Assert `created_by_id` / `updated_by_id` equal the `AuthUser` the test passed in, or what `database.md` › Shared columns sets for a calculated or visitor row |
 | Read, found                       | `insert_*_row`, call, compare the whole `Result` built from the row's values |
 | Read, not found                   | Call with a key that was never inserted and `pytest.raises(NotFoundException)` |
 | Update                            | Insert, call, select back, and assert both the changed and unchanged columns |
@@ -500,7 +504,8 @@ you change what they cover, extend the matching test:
   (`fastapi-structure.md` › The acting user).
 
 To test app-wide behaviour without a domain route, add a throwaway route to the test's
-`fastapi_app` inside the test body. A test that needs the 500 response builds its
+`fastapi_app` inside the test body. To test behaviour that depends on a setting of the
+running app, assign a copy to `fastapi_app.state.settings` with `model_copy(update=...)`. A test that needs the 500 response builds its
 client with `ASGITransport(..., raise_app_exceptions=False)`.
 
 ## §8 Settings

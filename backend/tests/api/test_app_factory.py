@@ -19,6 +19,7 @@ OPEN_ROUTES = {
     ("GET", "/personas/{persona_identity}/public"),
     ("GET", "/blog-posts/{blog_post_identity}/public"),
     ("GET", "/blog-posts/public"),
+    ("PUT", "/content-items/{content_item_identity}/view"),
 }
 
 

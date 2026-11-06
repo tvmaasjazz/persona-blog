@@ -45,7 +45,7 @@ Database. The procedure for making a schema change is the `db-migration` skill.
 ### Shared columns
 
 Every table has these columns. `BaseOrm` in `libs/database/base.py` maps them, so an Orm
-class never redeclares them.
+class never redeclares them, except to make the audit columns nullable (below).
 
 | Column          | SQL                                                          | Orm                        | Notes |
 | --------------- | ------------------------------------------------------------ | -------------------------- | ----- |
@@ -58,8 +58,21 @@ class never redeclares them.
 | `updated_by_id` | `BIGINT NOT NULL`, FK `pb_user (id)`                         | `Mapped[int]`              | |
 | `deleted_by_id` | `BIGINT`, FK `pb_user (id)`                                  | `Mapped[int \| None]`      | |
 
-`pb_user` is the one exception: its `created_by_id` and `updated_by_id` are nullable,
-since a person signing up has no creator. `UserOrm` redeclares both.
+`pb_user`'s `created_by_id` and `updated_by_id` are nullable, since a person signing up
+has no creator. `UserOrm` redeclares both.
+
+A row the app calculates from other rows, such as a count or a score, names the system
+user in `created_by_id` and `updated_by_id`, whoever caused the change. The statement
+reads its id inline, `(SELECT id FROM pb_user WHERE is_system_user)`, rather than in a
+query of its own.
+
+A row a signed-out visitor can cause, such as a view, has nullable `created_by_id` and
+`updated_by_id`, and identifies the visitor in `anonymous_user_key TEXT`, with a check
+that exactly one of `created_by_id` and `anonymous_user_key` is set. Its Orm class
+redeclares both audit columns as `Mapped[int | None]`. Each kind of row gets its own
+partial unique index, named `<table>_user_<what>_idx` and `<table>_anonymous_<what>_idx`
+when the column list would pass 63 characters. The pattern is
+`libs/database/orm/content_item_view.py`.
 
 A foreign key has no `ON DELETE` clause, in the SQL or as `ondelete=` in the Orm, so a
 real delete of a referenced row fails loudly instead of quietly removing or unlinking
@@ -82,6 +95,8 @@ pattern is `migrations/sql/pb_persona/0001_create_pb_persona.up.sql`.
 - If a generated name would pass 63 characters, name the constraint explicitly in both
   the SQL and the Orm class (Postgres truncates; SQLAlchemy shortens differently).
 - Text is `TEXT`, never `VARCHAR(n)`. Case-insensitive text is `CITEXT`.
+- A calendar day is `DATE`, mapped to `Mapped[date]`. Its default is the UTC date,
+  `((now() AT TIME ZONE 'utc')::date)`, mirrored with `server_default`.
 - Postgres doesn't index foreign keys. Add an index for each one you query by.
 - A unique constraint on a soft-deletable table is usually a partial unique index,
   `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL`, so a soft-deleted row doesn't
@@ -162,6 +177,11 @@ that import is what registers every mapper before configuration.
 - Indexes and partial unique indexes are declared in `__table_args__` with the exact
   name the SQL uses:
   `Index("pb_user_email_idx", "email", unique=True, postgresql_where=text("deleted_at IS NULL"))`.
+- Check constraints are declared too, a column's own inside its `mapped_column`, a
+  table's in `__table_args__`. `name=` takes only the middle of the SQL's name, since
+  the naming convention adds `<table>_` and `_check`: `pb_invite_used_check` is
+  `CheckConstraint("...", name="used")`. A check whose full name would pass 63
+  characters gets a shorter middle, named the same in the SQL and the Orm class.
 - `libs/database/base.py`, `session.py`, `column_types.py`, and `constants.py` are
   setup files. Changing them is a deliberate design change, not part of adding a table.
 

@@ -1,0 +1,2 @@
+-- Not reversible on its own: the backfilled rows can't be told apart from rows the app wrote.
+-- Dropping the table (0001 down) removes them.

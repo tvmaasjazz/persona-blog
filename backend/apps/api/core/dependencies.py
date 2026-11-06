@@ -14,6 +14,10 @@ from libs.llm.services import LlmCallService, LlmService, OpenAiLlmService
 from libs.llm.types import LlmProviderType
 from libs.permissions.types import PermissionType
 from libs.users.after_response_tasks import record_user_activity
+from libs.users.services import AnonymousUserKeyService
+
+# Used when a request carries neither the proxy header nor a client address
+UNKNOWN_CLIENT_IP = "unknown"
 
 
 def get_app_settings(request: Request) -> AppSettings:
@@ -104,3 +108,38 @@ AppSettingsDep = Annotated[AppSettings, Depends(get_app_settings)]
 AuthUserDep = Annotated[AuthUser, Depends(get_auth_user)]
 OptionalAuthUserDep = Annotated[AuthUser | None, Depends(get_optional_auth_user)]
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
+
+
+def get_client_ip(request: Request) -> str:
+    """Returns the client's IP: the last entry of the configured proxy header when the
+    request has it, otherwise the connection's own address."""
+    app_settings: AppSettings = request.app.state.settings
+    client_ip_header = app_settings.users.client_ip_header
+    if client_ip_header is not None:
+        client_ip_header_value = request.headers.get(client_ip_header)
+        if client_ip_header_value:
+            # A proxy appends the address it saw, so the last entry is the one to trust
+            return client_ip_header_value.split(",")[-1].strip()
+    if request.client is not None:
+        return request.client.host
+    return UNKNOWN_CLIENT_IP
+
+
+ClientIpDep = Annotated[str, Depends(get_client_ip)]
+
+
+async def get_anonymous_user_key(
+    request: Request, auth_user: OptionalAuthUserDep, client_ip: ClientIpDep
+) -> str | None:
+    """Returns None for a signed-in user; otherwise today's anonymous key for the client's
+    IP and user agent."""
+    if auth_user is not None:
+        return None
+    anonymous_user_key_service = AnonymousUserKeyService(
+        redis_client=request.app.state.redis_client
+    )
+    user_agent = request.headers.get("user-agent", "")
+    return await anonymous_user_key_service.build_anonymous_user_key(client_ip, user_agent)
+
+
+AnonymousUserKeyDep = Annotated[str | None, Depends(get_anonymous_user_key)]

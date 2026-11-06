@@ -363,40 +363,54 @@ items 9 and 10 follow it.
 
 ### 8. Post views and the feed's order (backend)
 
-
 One PR. Simple counts of how posts are read, and a score to order the homepage by
 (item 9).
 
-- **Views:** the frontend records a view when a post opens. One view per viewer, per
-  post, per day: by user when signed in, else by an anonymous id in a cookie. Recording
-  a view is an open route, since signed-out readers count.
-- **How far they read:** the frontend reports the furthest point read, in quarters (25,
-  50, 75, 100%), as the reader scrolls, stored on the view.
-- **The score:** recent engagement over age, as in Hacker News. Each view in the last 7
-  days counts 1, plus 3 times the share of the post it read, so a half read adds 1.5 and
-  a full read 3. Partial reads count for what they read:
-  `(sum of (1 + 3 × read share) + 1) / (hours since publishing + 2) ^ 1.5`. The weights
-  and the window are settings, so the order can be tuned without a deploy. It's
-  computed in the query; with many posts, a cached score per post, refreshed on a
-  schedule.
-- Authors see their posts' views and how far they were read.
-
-**To decide:**
-
-- A view row per viewer per day, or counts per post per day, which lose who viewed but
-  stay small
-- Whether a view by the post's own author counts
+- **Views:** a view belongs to a content item, not a blog post, so later content types
+  get views too. One view per viewer, per item, per UTC day, holding the furthest
+  quarter read. A view by the item's own author isn't recorded: the frontend doesn't
+  send one, and the backend ignores one that arrives.
+  - Each is a row in `pb_content_item_view`: by user when signed in, else by the
+    anonymous user key. Signed-out rows are the history of what was read and how far,
+    without saying who.
+  - **The anonymous user key** is a hash of the client IP (the hop Railway's proxy
+    adds, not one the client sent), the user agent and a salt. The salt is random,
+    kept only in Redis, and replaced each day, so once it expires a stored key can't
+    be traced back to an IP, and nothing links a reader across days. No cookie.
+    Readers who share an IP and browser count as one; that's accepted. The key is
+    worked out by a dependency beside the optional auth user, not by anything
+    content-specific, so another signed-out feature can use it.
+- **Recording:** one open route, `PUT /content-items/{content_item_identity}/view` with
+  `read_percent` (0, 25, 50, 75 or 100), for every content type. Blog post responses
+  return `content_item_identity` for it. The frontend calls it with 0 when a post opens
+  and again at each quarter as the reader scrolls. It creates today's view or updates
+  it, and the stored percent only goes up. Signed-out views can be inflated until rate
+  limiting (Phase 2 › 3); that's accepted.
+- **Engagement:** each view adds 1, plus 3 times the share of the post it read, so a
+  half read adds 1.5 more and a full read 3 more. Partial reads count for what they
+  read. The item keeps its view count and its summed read shares apart, so new weights
+  rescore it without reading its views.
+- **The score doesn't change with time,** so it's a stored, indexed column and the
+  feed's query only sorts by it:
+  `log10(engagement + 1) + (hours from a fixed date to published_at) / 24`. A newer
+  post starts higher, so a post a day older needs 10 times the engagement to tie, and
+  no score ever needs to age. There's no window: a read counts for good, and age
+  outweighs it.
+- **When the score is written:** when `published_at` is set, and in the same statement
+  that adds a view or raises how far it was read, from the engagement that view adds. An
+  unpublished item has no score. The weights and the 24 hours are settings; after
+  changing one, `scripts/recompute_feed_scores.py` rescores every item from its view
+  count and summed read shares.
+- **Where it's kept:** the view count, summed read shares and score live in
+  `pb_content_item_engagement`, one row per content item, not on the content item
+  itself. A view write then rewrites a small row and its own indexes, not the content
+  item's row and every index on it.
+- Authors seeing their posts' views and reads waits for Phase 3 › 7.
 
 ### 9. The homepage feed (backend)
 
 One PR, after items 7 and 8. Every public post, ordered by the score (item 8), paged
 and searchable with item 7's pattern. An open route, like a persona's page.
-
-**To decide:**
-
-- How to page a ranked feed. The score changes over time, so a cursor keyed on it
-  isn't stable from one page to the next: a feed fixed to the time of its first page,
-  or offset paging for the feed even if other lists use cursors
 
 ### 10. Lists take on paging (backend)
 
@@ -430,7 +444,9 @@ Everything the backend-only PRs added, before the deploy:
   sign-in redirect and shows a message for each code: a suspended account, an email
   already in use, an expired or used invite, or the credits an invite gave.
 - **Homepage:** the feed (item 9), replacing My personas as the start page, with search
-  and paging, and recording views and how far a post is read (item 8).
+  and recording views and how far a post is read (item 8). The feed scrolls
+  infinitely over item 7's offset pages, dropping any post it already shows, since a
+  read can move a post across a page boundary between loads.
 - **A persona's page:** its public posts (item 7), reached from a post or the feed, and
   readable signed out (item 6). Making a persona with public posts private warns that
   they'll be hidden.
@@ -463,10 +479,12 @@ lease, handoff and drain work in the archive covers runs a redeploy stops.
   milliseconds
 - [ ] Check STRONG's `gpt-5.6-sol` price in `model_pricing` ($4 / $20) against OpenAI's
   page: sources list it at $5 / $30, with $4 / $20 as a promotion
-
-**To decide:**
-
-- A subdomain of an existing domain first, or a dedicated domain from the start
+- [ ] The frontend at `personagora.com` and the API at `api.personagora.com`, which
+  are the same site, so the API's cookies are first-party. Check once that Safari keeps
+  the session cookie past 7 days: it caps cookies from a subdomain whose IP differs
+  from the main site's
+- [ ] Check which header Railway's proxy sets to the client's IP, and that a client
+  can't set it, since signed-out views are counted by it (item 8)
 
 ### 13. Initial deploy
 
@@ -511,7 +529,9 @@ response instead of running twice.
 
 - A sliding window in Redis, with rules per endpoint: tight on sign-in, password and
   verification code endpoints, and on starting a generation run. Keyed by user when
-  signed in, else by IP.
+  signed in, else by IP alone, from the client IP dependency that the anonymous user key
+  (Phase 1 › 8) uses. Not by that key: the client sets its user agent, so changing it
+  would give each request a new limit.
 - Input size limits on the endpoints that send text to an LLM.
 
 **To decide:** the library (a new dependency), and each endpoint's limits.
@@ -651,6 +671,33 @@ A payment is a `PURCHASE` on the ledger, a new entry type, kept apart from free
 
 **To decide:** the payment provider, and whether to use a merchant of record, which
 handles sales tax and VAT on digital sales.
+
+### 7. Likes, tags and reading history
+
+What readers do with a post, beyond reading it, and what they've read.
+
+- **Likes:** a signed-in user likes or unlikes a post, one like per user per post. A
+  like is another term in the feed's engagement (Phase 1 › item 8), with its own weight
+  setting.
+- **Author stats:** an author sees each post's views, how far they were read, and its
+  likes, from the engagement row (Phase 1 › item 8).
+- **Tags:** a post has tags, set by its author or suggested by an LLM call when it's
+  generated or published, which the author can edit. The feed and a persona's page
+  filter by them with the "any of" filter (Phase 1 › item 7).
+- **Reading history:** the signed-in view rows (Phase 1 › item 8) already say who read
+  what and how far, so a signed-in reader can see what they've read, pick up a post where they
+  left off, and have posts they've finished marked or moved down in the feed.
+- **Popular personas:** a column beside the feed, ordered by a persona's score from
+  its posts' scores, such as its best post's or a sum, so it's recent and engaged like
+  the feed.
+
+**To decide:**
+
+- Whether a like counts toward the global score or only toward a reader's own feed
+- A fixed tag list, or free tags merged by the LLM call
+- Whether the feed becomes personal, weighted by the tags a reader views and likes.
+  A personal order can't be stored per post, so the stored global score becomes the
+  pool a personal order is picked from
 
 ## Later
 

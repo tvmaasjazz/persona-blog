@@ -8,7 +8,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.core.services import BackgroundJobService
-from libs.database.orm import BlogPostOrm, ContentItemOrm, GenerateTextRunOrm, UserOrm
+from libs.database.orm import (
+    BlogPostOrm,
+    ContentItemOrm,
+    GenerateTextRunOrm,
+    UserOrm,
+)
 from libs.generate_text.types import GenerateTextRunStatusType, GenerateTextStepStatusType
 from tests.factories.blog_posts import VALID_BLOG_POST_BODY, insert_blog_post_row
 from tests.factories.content_items import insert_content_item_row
@@ -252,12 +257,17 @@ async def test_create_blog_post_from_generate_text_run_returns_identity_and_pers
     assert create_blog_post_response.status_code == 201
     assert response_body == {"identity": str(blog_post_record.identity)}
     assert run_record.content_item_id == blog_post_record.content_item_id
+    content_item_query = select(ContentItemOrm).where(
+        ContentItemOrm.id == blog_post_record.content_item_id
+    )
+    content_item_record = await db_session.scalar(content_item_query)
 
     find_blog_post_response = await api_client.get(f"/blog-posts/{blog_post_record.identity}")
 
     assert find_blog_post_response.status_code == 200
     assert find_blog_post_response.json() == {
         "identity": str(blog_post_record.identity),
+        "content_item_identity": str(content_item_record.identity),
         "persona_identity": persona_identity,
         "title": "The Title",
         "subtitle": "A subtitle.",
@@ -484,6 +494,16 @@ async def _create_other_users_blog_post(
     return persona_identity, create_blog_post_response.json()["identity"]
 
 
+async def _find_content_item_identity(db_session: AsyncSession, blog_post_identity: str) -> str:
+    content_item_identity_query = (
+        select(ContentItemOrm.identity)
+        .join(BlogPostOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
+        .where(BlogPostOrm.identity == UUID(blog_post_identity))
+    )
+    content_item_identity = await db_session.scalar(content_item_identity_query)
+    return str(content_item_identity)
+
+
 async def test_find_user_blog_post_list_returns_only_signed_in_users_newest_first(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
@@ -538,6 +558,7 @@ async def test_find_user_blog_post_list_returns_only_signed_in_users_newest_firs
         "blog_posts": [
             {
                 "identity": str(newest_blog_post_record.identity),
+                "content_item_identity": str(newest_content_item_record.identity),
                 "persona_identity": str(persona_record.identity),
                 "title": "Newest Post",
                 "subtitle": None,
@@ -549,6 +570,7 @@ async def test_find_user_blog_post_list_returns_only_signed_in_users_newest_firs
             },
             {
                 "identity": str(oldest_blog_post_record.identity),
+                "content_item_identity": str(oldest_content_item_record.identity),
                 "persona_identity": str(persona_record.identity),
                 "title": "Oldest Post",
                 "subtitle": None,
@@ -660,6 +682,7 @@ async def test_find_blog_post_returns_blog_post_response(
     assert find_blog_post_response.status_code == 200
     assert find_blog_post_response.json() == {
         "identity": str(blog_post_record.identity),
+        "content_item_identity": str(content_item_record.identity),
         "persona_identity": str(persona_record.identity),
         "title": "A Title",
         "subtitle": "A Subtitle",
@@ -692,10 +715,13 @@ async def test_find_blog_post_another_users_public_published_post_returns_404(
 
 
 async def test_find_public_blog_post_signed_out_published_post_returns_public_response(
-    api_client: AsyncClient, other_user_client: AsyncClient
+    api_client: AsyncClient, other_user_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     other_persona_identity, other_blog_post_identity = await _create_other_users_blog_post(
         other_user_client, published_at="2020-01-01T00:00:00+00:00"
+    )
+    other_content_item_identity = await _find_content_item_identity(
+        db_session, other_blog_post_identity
     )
 
     find_public_blog_post_response = await api_client.get(
@@ -705,6 +731,7 @@ async def test_find_public_blog_post_signed_out_published_post_returns_public_re
     assert find_public_blog_post_response.status_code == 200
     assert find_public_blog_post_response.json() == {
         "identity": other_blog_post_identity,
+        "content_item_identity": other_content_item_identity,
         "persona_identity": other_persona_identity,
         "title": "Public Post",
         "subtitle": None,
@@ -755,6 +782,7 @@ async def test_find_public_blog_post_signed_in_as_owner_private_post_flags_owner
     assert find_public_blog_post_response.status_code == 200
     assert find_public_blog_post_response.json() == {
         "identity": str(blog_post_record.identity),
+        "content_item_identity": str(content_item_record.identity),
         "persona_identity": str(persona_record.identity),
         "title": "A Title",
         "subtitle": "A Subtitle",
@@ -1419,10 +1447,13 @@ async def _insert_own_blog_post(
 
 
 async def test_find_public_blog_post_page_signed_out_returns_other_users_published_post(
-    api_client: AsyncClient, other_user_client: AsyncClient
+    api_client: AsyncClient, other_user_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     other_persona_identity, other_blog_post_identity = await _create_other_users_blog_post(
         other_user_client, published_at="2020-01-01T00:00:00+00:00"
+    )
+    other_content_item_identity = await _find_content_item_identity(
+        db_session, other_blog_post_identity
     )
 
     find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
@@ -1432,6 +1463,7 @@ async def test_find_public_blog_post_page_signed_out_returns_other_users_publish
         "blog_posts": [
             {
                 "identity": other_blog_post_identity,
+                "content_item_identity": other_content_item_identity,
                 "persona_identity": other_persona_identity,
                 "title": "Public Post",
                 "subtitle": None,

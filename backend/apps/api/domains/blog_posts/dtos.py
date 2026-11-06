@@ -110,6 +110,7 @@ class BlogPostDto(BaseModel):
 
 class BlogPostResponseDto(BaseModel):
     identity: UUID
+    content_item_identity: UUID
     persona_identity: UUID
     title: str
     subtitle: str | None
@@ -124,6 +125,7 @@ class BlogPostResponseDto(BaseModel):
         content_item_result = blog_post_detail_result.content_item
         return cls(
             identity=blog_post_detail_result.identity,
+            content_item_identity=content_item_result.identity,
             persona_identity=content_item_result.persona.identity,
             title=blog_post_detail_result.title,
             subtitle=blog_post_detail_result.subtitle,
@@ -137,6 +139,7 @@ class BlogPostResponseDto(BaseModel):
 
 class PublicBlogPostResponseDto(BaseModel):
     identity: UUID
+    content_item_identity: UUID
     persona_identity: UUID
     title: str
     subtitle: str | None
@@ -155,6 +158,7 @@ class PublicBlogPostResponseDto(BaseModel):
         content_item_result = blog_post_detail_result.content_item
         return cls(
             identity=blog_post_detail_result.identity,
+            content_item_identity=content_item_result.identity,
             persona_identity=content_item_result.persona.identity,
             title=blog_post_detail_result.title,
             subtitle=blog_post_detail_result.subtitle,
@@ -200,6 +204,7 @@ class PublicBlogPostPageQueryDto(BasePageQueryDto):
 
 class BlogPostSummaryResponseDto(BaseModel):
     identity: UUID
+    content_item_identity: UUID
     persona_identity: UUID
     title: str
     subtitle: str | None
@@ -215,6 +220,7 @@ class BlogPostSummaryResponseDto(BaseModel):
         content_item_result = blog_post_summary_result.content_item
         return cls(
             identity=blog_post_summary_result.identity,
+            content_item_identity=content_item_result.identity,
             persona_identity=content_item_result.persona.identity,
             title=blog_post_summary_result.title,
             subtitle=blog_post_summary_result.subtitle,

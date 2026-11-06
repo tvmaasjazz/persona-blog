@@ -4,6 +4,7 @@ from sqlalchemy import insert, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.auth.results import AuthUser
+from libs.content_engagement.services import ContentEngagementService
 from libs.content_items.inputs import CreateContentItemInput, UpdateContentItemInput
 from libs.content_items.results import CreateContentItemResult
 from libs.core.exceptions import NotFoundException
@@ -14,8 +15,11 @@ from libs.database.utils import DatabaseClockUtils
 class ContentItemService:
     """Writes the content item row shared by every kind of published content."""
 
-    def __init__(self, db_session: AsyncSession) -> None:
+    def __init__(
+        self, db_session: AsyncSession, content_engagement_service: ContentEngagementService
+    ) -> None:
         self._db_session = db_session
+        self._content_engagement_service = content_engagement_service
 
     async def create_content_item(
         self, create_content_item_input: CreateContentItemInput, auth_user: AuthUser
@@ -35,6 +39,9 @@ class ContentItemService:
         )
         content_item_insert_result = await self._db_session.execute(content_item_insert)
         content_item_row = content_item_insert_result.one()
+
+        # Give the item its engagement row, scored from its publish time
+        await self._content_engagement_service.create_engagement(content_item_row.id)
 
         if create_content_item_input.generate_text_run_identity is not None:
             await self._link_generate_text_run(
@@ -63,6 +70,9 @@ class ContentItemService:
         content_item_update_result = await self._db_session.execute(content_item_update)
         if content_item_update_result.rowcount == 0:
             raise NotFoundException("Content item not found")
+
+        # The publish time may have changed, so the feed score is rewritten
+        await self._content_engagement_service.rescore_engagement(content_item_id)
 
     async def delete_content_item(self, content_item_id: int, auth_user: AuthUser) -> None:
         """Soft-deletes the item; NotFoundException if it is missing or already deleted."""

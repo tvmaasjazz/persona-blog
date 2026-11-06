@@ -10,6 +10,7 @@ from apps.api.domains.blog_posts.dtos import (
     CreateBlogPostDto,
     CreateBlogPostFromGenerateTextRunDto,
 )
+from apps.api.domains.content_items.dependencies import ContentEngagementServiceDep
 from libs.blog_posts.services import BlogPostService, BlogPostValidationService
 from libs.content_items.services import ContentItemService, ContentItemValidationService
 from libs.database.services import PaginationService
@@ -17,8 +18,12 @@ from libs.generate_text.services import GenerateTextRunService, GenerateTextStep
 from libs.personas.services import PersonaService
 
 
-def get_content_item_service(db_session: DbSessionDep) -> ContentItemService:
-    return ContentItemService(db_session=db_session)
+def get_content_item_service(
+    db_session: DbSessionDep, content_engagement_service: ContentEngagementServiceDep
+) -> ContentItemService:
+    return ContentItemService(
+        db_session=db_session, content_engagement_service=content_engagement_service
+    )
 
 
 ContentItemServiceDep = Annotated[ContentItemService, Depends(get_content_item_service)]

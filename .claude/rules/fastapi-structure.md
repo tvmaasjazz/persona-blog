@@ -246,10 +246,11 @@ that returns everything at once.
 
 A limit on a request field, such as required, length or format, is part of the API
 contract, so it is declared on the `Dto` field, where it reaches the OpenAPI schema
-the frontend is generated from. Declare it as an
-`Annotated[str, StringConstraints(...)]` alias at the top of `dtos.py`, named for what
-it holds, and strip whitespace on required text so `"  "` fails `min_length=1`. The
-pattern is `PersonaNameStr` in `apps/api/domains/personas/dtos.py`.
+the frontend is generated from. Declare it as an alias at the top of `dtos.py`, such
+as `Annotated[str, StringConstraints(...)]` or a `Literal[...]` of the allowed values,
+named as `python-naming.md` › Other conventions says, and strip whitespace on required
+text so `"  "` fails `min_length=1`. The pattern is `PersonaNameStr` in
+`apps/api/domains/personas/dtos.py`.
 
 A check that needs the database, or more than one field, is a validation guard
 (Services › Validation guards).
@@ -350,7 +351,10 @@ the acting user takes `AuthUserDep` and passes the `AuthUser` to the service. An
 service method that writes takes it as its last parameter and fills the audit columns
 from `auth_user.id`. A write with no signed-in user, such as one made during sign-in,
 takes the author's user id instead (`granted_by_id`). Services never read the current
-user from anywhere else.
+user from anywhere else. A write the app calculates takes no `auth_user`. A write a
+signed-out visitor can cause takes `auth_user: AuthUser | None` last, with the
+visitor's `anonymous_user_key` from `AnonymousUserKeyDep` before it. Both fill their
+audit columns as `database.md` › Shared columns says.
 
 A route lists the permission it needs first in its `dependencies`, before any
 validation guard, so a caller without it is refused before anything is read. The
@@ -469,7 +473,7 @@ carries meaning never appears inline in domain code.
 | ------------ | ----------------------------- | ------------------------------------ |
 | **Setting**  | Tunable                       | A settings model, defaults in code   |
 | **Constant** | Overriding it would be a bug  | Module-level `UPPER_SNAKE`           |
-| **Request field limit** | Part of the API contract | An `Annotated` alias in the domain's `dtos.py` (DTOs › Inbound) |
+| **Request field limit** | Part of the API contract | A constrained alias in the domain's `dtos.py` (DTOs › Inbound) |
 
 When in doubt, make it a setting, unless it is a request field's limit.
 
