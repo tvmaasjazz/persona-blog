@@ -3,16 +3,21 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
+from apps.api.core.dtos import BasePageQueryDto, BasePageResponseDto, PaginationResponseDto
 from libs.blog_posts.inputs import (
     CreateBlogPostFromGenerateTextRunInput,
     CreateBlogPostInput,
+    FindPublicBlogPostPageInput,
     UpdateBlogPostInput,
 )
 from libs.blog_posts.results import (
     BlogPostDetailResult,
+    BlogPostSummaryResult,
+    FindPublicBlogPostPageResult,
     FindUserBlogPostListResult,
     PublicBlogPostResult,
 )
+from libs.blog_posts.types import PublicBlogPostSortType
 from libs.blog_posts.utils import BlogPostValidationUtils
 
 
@@ -179,3 +184,60 @@ class BlogPostListResponseDto(BaseModel):
 
 class BlogPostFetchAllQueryDto(BaseModel):
     persona_identity: UUID | None = None
+
+
+class PublicBlogPostPageQueryDto(BasePageQueryDto):
+    sort_by: PublicBlogPostSortType = PublicBlogPostSortType.PUBLISHED_AT
+    persona_identity: UUID | None = None
+
+    def to_input(self) -> FindPublicBlogPostPageInput:
+        return FindPublicBlogPostPageInput(
+            pagination_input=self.to_pagination_input(),
+            sort_by=self.sort_by,
+            persona_identity=self.persona_identity,
+        )
+
+
+class BlogPostSummaryResponseDto(BaseModel):
+    identity: UUID
+    persona_identity: UUID
+    title: str
+    subtitle: str | None
+    is_public: bool
+    published_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_result(
+        cls, blog_post_summary_result: BlogPostSummaryResult
+    ) -> BlogPostSummaryResponseDto:
+        content_item_result = blog_post_summary_result.content_item
+        return cls(
+            identity=blog_post_summary_result.identity,
+            persona_identity=content_item_result.persona.identity,
+            title=blog_post_summary_result.title,
+            subtitle=blog_post_summary_result.subtitle,
+            is_public=content_item_result.is_public,
+            published_at=content_item_result.published_at,
+            created_at=blog_post_summary_result.created_at,
+            updated_at=blog_post_summary_result.updated_at,
+        )
+
+
+class PublicBlogPostPageResponseDto(BasePageResponseDto):
+    blog_posts: list[BlogPostSummaryResponseDto]
+
+    @classmethod
+    def from_result(
+        cls, find_public_blog_post_page_result: FindPublicBlogPostPageResult
+    ) -> PublicBlogPostPageResponseDto:
+        return cls(
+            blog_posts=[
+                BlogPostSummaryResponseDto.from_result(blog_post_summary_result)
+                for blog_post_summary_result in find_public_blog_post_page_result.blog_posts
+            ],
+            pagination=PaginationResponseDto.from_result(
+                find_public_blog_post_page_result.pagination
+            ),
+        )

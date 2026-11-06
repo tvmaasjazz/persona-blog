@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from libs.core.results import PaginationResult
+
 
 class CreateBlogPostResult(BaseModel):
     identity: UUID
@@ -26,6 +28,20 @@ class BlogPostDetailResult(BaseModel):
     created_at: datetime
     updated_at: datetime
     content_item: BlogPostContentItemResult
+
+
+class BlogPostSummaryResult(BaseModel):
+    identity: UUID
+    title: str
+    subtitle: str | None
+    created_at: datetime
+    updated_at: datetime
+    content_item: BlogPostContentItemResult
+
+
+class FindPublicBlogPostPageResult(BaseModel):
+    blog_posts: list[BlogPostSummaryResult]
+    pagination: PaginationResult
 
 
 class PublicBlogPostResult(BaseModel):

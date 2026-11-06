@@ -30,7 +30,8 @@ to touch so your code matches what is there.
 
 Any backend Python file the rules give a home under `libs/` or `apps/api/`, except
 those under "What you don't write". The rules say where each lives and how it's
-shaped.
+shaped. In `libs/database/` that's `pagination_config.py`, `results.py`, `utils/` and
+`services/`; the rest of it is setup files or `schema-coder`'s.
 
 Shared wiring files take additions only:
 
@@ -39,6 +40,8 @@ Shared wiring files take additions only:
 - `core/dependencies.py` and `lifespan.py`: a dependency factory with its `Annotated`
   alias, an app-scoped resource with its shutdown, or an app-lifetime loop. Never
   restructure what's there or change how an existing dependency or resource is built.
+- `core/dtos.py` and `core/types.py`: a shared DTO, field type or enum, nothing else.
+  Never change an existing one.
 
 ## What you don't write
 
@@ -54,8 +57,7 @@ Shared wiring files take additions only:
   methods, and routes that need tests, so the work can be handed to it.
 - **Scripts** — anything under `backend/scripts/` (the main session writes them).
 - **App setup files** — `main.py`, the setup files `database.md` › Orm classes names,
-  `core/dtos.py`, `core/exception_handlers.py`, `core/logging.py`, `core/types.py`,
-  `core/event_loop_monitor.py`, `libs/core/exceptions.py`, `libs/core/settings.py`, and
+  `core/exception_handlers.py`, `core/logging.py`, `core/event_loop_monitor.py`, `libs/core/exceptions.py`, `libs/core/settings.py`, and
   `libs/core/services/` (`BackgroundJobService`). If a task seems to need a change
   there (including a new standard exception category), report it instead.
 

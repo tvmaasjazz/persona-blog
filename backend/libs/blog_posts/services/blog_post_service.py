@@ -6,15 +6,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
 
 from libs.auth.results import AuthUser
+from libs.blog_posts.constants import PUBLIC_BLOG_POST_PAGINATION_CONFIG
 from libs.blog_posts.exceptions import BlogPostGenerateTextRunOutputInvalidException
 from libs.blog_posts.inputs import (
     CreateBlogPostFromGenerateTextRunInput,
     CreateBlogPostInput,
+    FindPublicBlogPostPageInput,
     UpdateBlogPostInput,
 )
 from libs.blog_posts.results import (
     BlogPostDetailResult,
+    BlogPostSummaryResult,
     CreateBlogPostResult,
+    FindPublicBlogPostPageResult,
     FindUserBlogPostListResult,
     PublicBlogPostResult,
 )
@@ -26,6 +30,7 @@ from libs.content_items.utils.content_item_query_utils import ContentItemQueryUt
 from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.core.utils.markdown_utils import MarkdownUtils
 from libs.database.orm import BlogPostOrm, ContentItemOrm, PersonaOrm
+from libs.database.services import PaginationService
 from libs.database.utils import DatabaseClockUtils
 from libs.generate_text.services import GenerateTextRunService, GenerateTextStepService
 from libs.personas.services import PersonaService
@@ -41,8 +46,10 @@ class BlogPostService:
         persona_service: PersonaService,
         generate_text_run_service: GenerateTextRunService,
         generate_text_step_service: GenerateTextStepService,
+        pagination_service: PaginationService,
     ) -> None:
         self._db_session = db_session
+        self._pagination_service = pagination_service
         self._content_item_service = content_item_service
         self._persona_service = persona_service
         self._generate_text_run_service = generate_text_run_service
@@ -156,6 +163,39 @@ class BlogPostService:
         return PublicBlogPostResult(
             blog_post=BlogPostDetailResult.model_validate(blog_post_record, from_attributes=True),
             is_owner=auth_user_id is not None and blog_post_record.created_by_id == auth_user_id,
+        )
+
+    async def find_public_blog_post_page(
+        self,
+        find_public_blog_post_page_input: FindPublicBlogPostPageInput,
+        auth_user: AuthUser | None,
+    ) -> FindPublicBlogPostPageResult:
+        """One page of published public posts of public personas, plus the caller's own posts
+        drafts included, searched, filtered and sorted per the input."""
+        auth_user_id = auth_user.id if auth_user is not None else None
+
+        # All the posts this caller may see; find_page filters, sorts and pages them
+        all_records_query = (
+            select(BlogPostOrm)
+            .join(ContentItemOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
+            .join(PersonaOrm, ContentItemOrm.persona_id == PersonaOrm.id)
+            .where(ContentItemQueryUtils.build_accessible_condition(auth_user_id))
+        )
+        find_page_result = await self._pagination_service.find_page(
+            all_records_query,
+            PUBLIC_BLOG_POST_PAGINATION_CONFIG,
+            find_public_blog_post_page_input,
+            load_options=(
+                contains_eager(BlogPostOrm.content_item).contains_eager(ContentItemOrm.persona),
+            ),
+        )
+
+        return FindPublicBlogPostPageResult(
+            blog_posts=[
+                BlogPostSummaryResult.model_validate(blog_post_record, from_attributes=True)
+                for blog_post_record in find_page_result.records
+            ],
+            pagination=find_page_result.pagination,
         )
 
     async def find_user_blog_post_list(

@@ -464,6 +464,7 @@ async def _create_other_users_blog_post(
     is_persona_public: bool = True,
     is_public: bool = True,
     published_at: str | None = None,
+    title: str = "Public Post",
 ) -> tuple[str, str]:
     create_persona_response = await other_user_client.post(
         "/personas",
@@ -474,7 +475,7 @@ async def _create_other_users_blog_post(
         "/blog-posts",
         json={
             "persona_identity": persona_identity,
-            "title": "Public Post",
+            "title": title,
             "body": VALID_BLOG_POST_BODY,
             "is_public": is_public,
             "published_at": published_at,
@@ -1387,3 +1388,318 @@ async def test_find_user_blog_post_list_reader_returns_200(api_client: AsyncClie
 
     assert find_user_blog_post_list_response.status_code == 200
     assert find_user_blog_post_list_response.json() == {"blog_posts": []}
+
+
+async def _insert_own_blog_post(
+    db_session: AsyncSession,
+    *,
+    user_record: UserOrm,
+    persona_id: int,
+    title: str,
+    subtitle: str | None = None,
+    body: str = VALID_BLOG_POST_BODY,
+    is_public: bool = True,
+    published_at: datetime | None = datetime(2020, 1, 1, tzinfo=UTC),
+) -> BlogPostOrm:
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=user_record.id,
+        persona_id=persona_id,
+        is_public=is_public,
+        published_at=published_at,
+    )
+    return await insert_blog_post_row(
+        db_session,
+        created_by_id=user_record.id,
+        content_item_id=content_item_record.id,
+        title=title,
+        subtitle=subtitle,
+        body=body,
+    )
+
+
+async def test_find_public_blog_post_page_signed_out_returns_other_users_published_post(
+    api_client: AsyncClient, other_user_client: AsyncClient
+) -> None:
+    other_persona_identity, other_blog_post_identity = await _create_other_users_blog_post(
+        other_user_client, published_at="2020-01-01T00:00:00+00:00"
+    )
+
+    find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
+
+    assert find_public_blog_post_page_response.status_code == 200
+    assert find_public_blog_post_page_response.json() == {
+        "blog_posts": [
+            {
+                "identity": other_blog_post_identity,
+                "persona_identity": other_persona_identity,
+                "title": "Public Post",
+                "subtitle": None,
+                "is_public": True,
+                "published_at": "2020-01-01T00:00:00Z",
+                "created_at": ANY,
+                "updated_at": ANY,
+            }
+        ],
+        "pagination": {"page": 1, "page_size": 20, "total": 1},
+    }
+
+
+@pytest.mark.parametrize(
+    ("is_persona_public", "is_public", "published_at"),
+    [
+        pytest.param(True, False, "2020-01-01T00:00:00+00:00", id="private_post"),
+        pytest.param(True, True, None, id="draft"),
+        pytest.param(True, True, "2099-01-01T00:00:00+00:00", id="scheduled_post"),
+        pytest.param(False, False, None, id="post_on_private_persona"),
+    ],
+)
+async def test_find_public_blog_post_page_signed_out_hidden_post_is_not_listed(
+    api_client: AsyncClient,
+    other_user_client: AsyncClient,
+    is_persona_public: bool,
+    is_public: bool,
+    published_at: str | None,
+) -> None:
+    await _create_other_users_blog_post(
+        other_user_client,
+        is_persona_public=is_persona_public,
+        is_public=is_public,
+        published_at=published_at,
+    )
+
+    find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
+
+    assert find_public_blog_post_page_response.status_code == 200
+    assert find_public_blog_post_page_response.json() == {
+        "blog_posts": [],
+        "pagination": {"page": 1, "page_size": 20, "total": 0},
+    }
+
+
+async def test_find_public_blog_post_page_signed_in_lists_own_draft_and_others_published(
+    api_client: AsyncClient,
+    signed_in_user: UserOrm,
+    db_session: AsyncSession,
+    other_user_client: AsyncClient,
+) -> None:
+    private_persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_user.id, is_public=False
+    )
+    await _insert_own_blog_post(
+        db_session,
+        user_record=signed_in_user,
+        persona_id=private_persona_record.id,
+        title="My Draft",
+        is_public=False,
+        published_at=None,
+    )
+    await db_session.commit()
+    await _create_other_users_blog_post(
+        other_user_client, published_at="2020-01-01T00:00:00+00:00", title="Their Post"
+    )
+
+    find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
+
+    response_body = find_public_blog_post_page_response.json()
+    assert find_public_blog_post_page_response.status_code == 200
+    assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == [
+        "Their Post",
+        "My Draft",
+    ]
+    assert response_body["pagination"] == {"page": 1, "page_size": 20, "total": 2}
+
+
+async def test_find_public_blog_post_page_signed_in_does_not_list_others_drafts(
+    api_client: AsyncClient, signed_in_user: UserOrm, other_user_client: AsyncClient
+) -> None:
+    await _create_other_users_blog_post(other_user_client, published_at=None)
+
+    find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
+
+    assert find_public_blog_post_page_response.status_code == 200
+    assert find_public_blog_post_page_response.json()["blog_posts"] == []
+
+
+async def test_find_public_blog_post_page_invalid_session_returns_401(
+    api_client: AsyncClient,
+) -> None:
+    api_client.cookies.set("sid", "not-a-real-session-id")
+
+    find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
+
+    assert find_public_blog_post_page_response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("query_params", "expected_error_location"),
+    [
+        pytest.param({"page": "0"}, ["query", "page"], id="page_zero"),
+        pytest.param({"page_size": "0"}, ["query", "page_size"], id="page_size_zero"),
+        pytest.param({"page_size": "101"}, ["query", "page_size"], id="page_size_over_max"),
+        pytest.param({"sort_by": "CREATED_AT"}, ["query", "sort_by"], id="unknown_sort_by"),
+        pytest.param(
+            {"sort_direction": "SIDEWAYS"}, ["query", "sort_direction"], id="unknown_sort_direction"
+        ),
+        pytest.param(
+            {"persona_identity": "not-a-uuid"}, ["query", "persona_identity"], id="bad_persona"
+        ),
+        pytest.param({"search": "a" * 201}, ["query", "search"], id="search_too_long"),
+    ],
+)
+async def test_find_public_blog_post_page_invalid_query_returns_422(
+    api_client: AsyncClient, query_params: dict[str, str], expected_error_location: list[str]
+) -> None:
+    find_public_blog_post_page_response = await api_client.get(
+        "/blog-posts/public", params=query_params
+    )
+
+    response_body = find_public_blog_post_page_response.json()
+    assert find_public_blog_post_page_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == expected_error_location
+
+
+async def test_find_public_blog_post_page_pages_and_reports_total_of_every_row(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_user.id, is_public=True
+    )
+    for title in ["Post 1", "Post 2", "Post 3"]:
+        await _insert_own_blog_post(
+            db_session, user_record=signed_in_user, persona_id=persona_record.id, title=title
+        )
+    await db_session.commit()
+
+    find_public_blog_post_page_response = await api_client.get(
+        "/blog-posts/public", params={"page": "2", "page_size": "2"}
+    )
+
+    response_body = find_public_blog_post_page_response.json()
+    assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == ["Post 1"]
+    assert response_body["pagination"] == {"page": 2, "page_size": 2, "total": 3}
+
+
+async def test_find_public_blog_post_page_page_past_the_end_returns_no_rows_and_same_total(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_user.id, is_public=True
+    )
+    await _insert_own_blog_post(
+        db_session, user_record=signed_in_user, persona_id=persona_record.id, title="Only Post"
+    )
+    await db_session.commit()
+
+    find_public_blog_post_page_response = await api_client.get(
+        "/blog-posts/public", params={"page": "5"}
+    )
+
+    assert find_public_blog_post_page_response.json() == {
+        "blog_posts": [],
+        "pagination": {"page": 5, "page_size": 20, "total": 1},
+    }
+
+
+@pytest.mark.parametrize(
+    ("sort_direction", "expected_titles"),
+    [
+        pytest.param("ASC", ["Apple", "Banana", "Cherry"], id="ascending"),
+        pytest.param("DESC", ["Cherry", "Banana", "Apple"], id="descending"),
+    ],
+)
+async def test_find_public_blog_post_page_sorted_by_title(
+    api_client: AsyncClient,
+    signed_in_user: UserOrm,
+    db_session: AsyncSession,
+    sort_direction: str,
+    expected_titles: list[str],
+) -> None:
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_user.id, is_public=True
+    )
+    for title in ["Banana", "Cherry", "Apple"]:
+        await _insert_own_blog_post(
+            db_session, user_record=signed_in_user, persona_id=persona_record.id, title=title
+        )
+    await db_session.commit()
+
+    find_public_blog_post_page_response = await api_client.get(
+        "/blog-posts/public", params={"sort_by": "TITLE", "sort_direction": sort_direction}
+    )
+
+    response_body = find_public_blog_post_page_response.json()
+    assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == expected_titles
+
+
+async def test_find_public_blog_post_page_persona_identity_limits_rows_to_that_persona(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    matching_persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_user.id, is_public=True
+    )
+    other_persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_user.id, is_public=True
+    )
+    await _insert_own_blog_post(
+        db_session,
+        user_record=signed_in_user,
+        persona_id=matching_persona_record.id,
+        title="Matching Post",
+    )
+    await _insert_own_blog_post(
+        db_session,
+        user_record=signed_in_user,
+        persona_id=other_persona_record.id,
+        title="Other Persona Post",
+    )
+    await db_session.commit()
+
+    find_public_blog_post_page_response = await api_client.get(
+        "/blog-posts/public", params={"persona_identity": str(matching_persona_record.identity)}
+    )
+
+    response_body = find_public_blog_post_page_response.json()
+    assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == ["Matching Post"]
+    assert response_body["pagination"]["total"] == 1
+
+
+@pytest.mark.parametrize(
+    ("search", "expected_titles"),
+    [
+        pytest.param("coffee", ["Morning Coffee"], id="title"),
+        pytest.param("brewing", ["Morning Coffee"], id="subtitle"),
+        pytest.param("zebra", [], id="body_is_not_searched"),
+        pytest.param("%", [], id="percent_is_literal"),
+        pytest.param("   ", ["Evening Tea", "Morning Coffee"], id="whitespace_means_no_search"),
+    ],
+)
+async def test_find_public_blog_post_page_search(
+    api_client: AsyncClient,
+    signed_in_user: UserOrm,
+    db_session: AsyncSession,
+    search: str,
+    expected_titles: list[str],
+) -> None:
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_user.id, is_public=True
+    )
+    await _insert_own_blog_post(
+        db_session,
+        user_record=signed_in_user,
+        persona_id=persona_record.id,
+        title="Morning Coffee",
+        subtitle="Slow brewing",
+        body="A body mentioning a zebra.",
+    )
+    await _insert_own_blog_post(
+        db_session, user_record=signed_in_user, persona_id=persona_record.id, title="Evening Tea"
+    )
+    await db_session.commit()
+
+    find_public_blog_post_page_response = await api_client.get(
+        "/blog-posts/public", params={"search": search, "sort_by": "TITLE", "sort_direction": "ASC"}
+    )
+
+    response_body = find_public_blog_post_page_response.json()
+    assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == expected_titles

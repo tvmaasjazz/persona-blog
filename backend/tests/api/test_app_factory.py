@@ -18,6 +18,7 @@ OPEN_ROUTES = {
     ("POST", "/dev/llm/complete"),
     ("GET", "/personas/{persona_identity}/public"),
     ("GET", "/blog-posts/{blog_post_identity}/public"),
+    ("GET", "/blog-posts/public"),
 }
 
 

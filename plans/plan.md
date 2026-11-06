@@ -281,24 +281,85 @@ pages nothing, so a reviewer only has to think about who can see what.
 
 ### 7. Paging and search (backend)
 
-One PR. One way of paging and searching every list in the app, used first by a
-persona's page, which needs paging but not the feed's score.
+One PR. One way of paging, searching, sorting and filtering every list in the app,
+built here and used first by a persona's page. Item 10 moves today's lists onto it.
+The pattern goes in `fastapi-structure.md`, replacing the "nested filter object"
+sentence in DTOs › Inbound, so items 9 and 10 follow it.
 
-- **Pagination:** a query DTO with a page size and a cursor or offset, and the same
-  response shape on every list. The pattern goes in `fastapi-structure.md`, so items 9
-  and 10 follow it.
-- **Search:** one search box per list, matching the fields that list chooses (a post's
-  title and body, a user's email and name). Filters can be fixed by the page at first,
-  with no filter menu yet.
-- **A persona's page:** a new open route listing a public persona's public posts,
-  newest first, paged and searchable, so anyone can read a persona and what it's
-  written. Today's lists show only the signed-in user's own.
+- **Request:** a `GET` with flat query params. Every paged route's `<Entity>PageQueryDto`
+  extends a shared `BasePageQueryDto`:
 
-**To decide:**
+  | Param | Default | Allowed |
+  | --- | --- | --- |
+  | `page` | `1` | 1 and up |
+  | `page_size` | `20` | 1 to 100 |
+  | `search` | none | stripped, up to 200 characters |
+  | `sort_by` | the route's own | the route's `<Entity>SortType`, declared on its own DTO |
+  | `sort_direction` | `DESC` | `ASC` or `DESC` |
 
-- Cursor or offset pagination. A cursor keeps pages steady while new posts arrive, but
-  can't jump to a page number
-- Search with Postgres full-text search, or a simple `ILIKE` to start
+  Paging is by offset. A page number and a total suit the admin tables and item 6's
+  warning count, and the feed's changing score (item 9) wouldn't keep a cursor steady
+  anyway. A post arriving between two page loads can push a row onto the next page;
+  that's accepted.
+- **Response:** every `<Entity>PageResponseDto` extends a shared `BasePageResponseDto`,
+  so each page has its rows under a plural field and the same `pagination`:
+
+  ```json
+  {"blog_posts": [...], "pagination": {"page": 1, "page_size": 20, "total": 134}}
+  ```
+
+  Plain subclasses, not a generic `BasePageResponseDto[T]`, which would name its schemas
+  `BasePageResponseDto_BlogPostResponseDto_` in the generated types and couldn't name the
+  rows field. A `PaginationResult` mirrors it in the lib.
+- **Sort:** a paged route's `<Entity>SortType` enum names the columns it can be sorted by, so
+  any other is a 422 and the frontend gets the allowed values from the generated
+  types. Every sort is the chosen column, `NULLS LAST` either way, then `id` in the same
+  direction, so pages keep a fixed order.
+- **Filters:** flat, typed fields on the route's query DTO, one value each, named the
+  same way on every paged route:
+
+  | Kind | Name | Example |
+  | --- | --- | --- |
+  | Equals | `<field>` | `persona_identity=…`, `is_public=true` |
+  | Any of | plural `<fields>`, repeated | `roles=ADMIN&roles=WRITER` |
+  | Range | `<field>_from` (inclusive), `<field>_to` (exclusive) | `created_at_from=2026-10-01` |
+  | Has a value | `has_<field>` | `has_published_at=false` |
+
+  A missing field filters nothing; `null` never means "where it's null", which is what
+  `has_<field>` is for. Filters only narrow: who may see what
+  (`ContentItemQueryUtils.build_accessible_condition`, ownership) stays in the
+  service's base query and is never a filter. A user-built filter menu, if one comes,
+  adds a `POST …/search` body of `{property, operator, value}` checked against the
+  same `PaginationConfig`, with the flat fields kept for filters a page fixes.
+- **Search:** the phrase is split into words, at most 8, and each word must match at
+  least one of the route's search fields, case-insensitively (`ILIKE`, with `%` and `_`
+  escaped so they match themselves). No full-text search yet: a `pg_trgm` index speeds
+  up the same query when tables grow, and full-text search, for ranking and stemming,
+  would change nothing in the contract.
+- **Names:** a paged route is a page, not a list: `find_public_blog_post_page`,
+  `FindPublicBlogPostPageInput` and `PublicBlogPostPageResponseDto`. The classes each
+  route extends are `Base…` (`BasePageQueryDto`, `BasePageInput`, `BasePageResponseDto`),
+  and the shared pieces that do the paging are `Pagination…`. `List` names stay only on
+  a route that returns everything at once.
+- **One config per paged route, one call per service:** a `PaginationConfig` declares
+  what a route searches, sorts and filters by, and the service makes one
+  `PaginationService.find_page` call (`fastapi-structure.md` › Paged routes). The total
+  comes from `count(*) OVER ()` on the page query, which Postgres computes before
+  `LIMIT`. Running a count beside the page on a second session would cost a second
+  connection and could disagree with the page, to save one round trip.
+  `SortDirectionType` and `FilterOperatorType` live in
+  `libs/core/types.py`, since the libs use them and can't import from `apps/`.
+- **A persona's page:** `GET /blog-posts/public`, an open route on `OPEN_ROUTES`,
+  lists the posts its caller may see under `build_accessible_condition`: other
+  people's published public posts of public personas, and all of the signed-in
+  caller's own, as the `/public` reads in item 6 do. It filters by `persona_identity`,
+  sorts by `PUBLISHED_AT` (the default) or `TITLE`, and searches the title and
+  subtitle. Rows leave out the body, which a list doesn't show, and search skips it
+  too: matching a body is worth it only once search can weigh it against the title. A
+  later owner's toggle to see the page as readers do is a flag that drops "all of the
+  caller's own", not a column filter. It's declared before
+  `/{blog_post_identity}`, so `public` isn't read as an identity. No migration: a
+  `(persona_id, published_at)` index waits until the page is slow.
 
 ### 8. Post views and the feed's order (backend)
 

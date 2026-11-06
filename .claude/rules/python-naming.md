@@ -18,7 +18,8 @@ Every class ends in the suffix for what it is:
 | Suffix       | Use for                                      | Example                          |
 | ------------ | -------------------------------------------- | -------------------------------- |
 | `Type`       | Enums                                        | `TextType.BLOG_POST`             |
-| `Settings`   | Config models: the root `AppSettings` (`BaseSettings`) and each domain's frozen `BaseModel` | `HumanizerSettings` |
+| `Settings`   | Values loaded from `config.toml` and env vars: the root `AppSettings` (`BaseSettings`) and each domain's frozen `BaseModel` | `HumanizerSettings` |
+| `Config`     | A fixed declaration in code that a `Utils` or service reads, such as which columns a paged route searches (`libs/` only) | `PaginationConfig` |
 | `Prompt`     | Builds one step's system and user prompt     | `BlogPostDraftPrompt`            |
 | `OutputFormat` | Normalizes and validates one step's LLM output | `BlogPostBodyOutputFormat`     |
 | `Input`      | A service method's payload (`libs/` only)    | `CreateUserInput`                |
@@ -31,7 +32,7 @@ Every class ends in the suffix for what it is:
 | `State`      | A LangGraph graph's state model              | `GenerateTextState`              |
 | `Middleware` | ASGI / FastAPI middleware                    | `RequestLogMiddleware`           |
 | `Dto`        | Inbound HTTP body (`apps/` only)             | `BlogPostDto`, `GenerateTextDto` |
-| `QueryDto`   | A list route's query model (`apps/` only)    | `BlogPostFetchAllQueryDto`       |
+| `QueryDto`   | A page or list route's query model (`apps/` only) | `PublicBlogPostPageQueryDto`, `BlogPostFetchAllQueryDto` |
 | `ResponseDto`| A route's response shape (`apps/` only)      | `BlogPostResponseDto`, `IdentityResponseDto` |
 | `Orm`        | SQLAlchemy table classes                     | `UserOrm`, `PersonaOrm`          |
 | `Key`        | Defined key objects                          | `CacheKey`, `StateKey`           |
@@ -40,8 +41,9 @@ Every class ends in the suffix for what it is:
 | `Mixin`      | SQLAlchemy column mixins (`libs/database/` only) | `SoftDeleteMixin`            |
 | `Model`      | Only when the purpose is genuinely unclear. A smell, not a default: flag it in your summary for Tyler to rename | — |
 
-An abstract class takes a `Base` prefix and keeps the suffix of what it is:
-`BaseLlmProviderService`, `BaseGenerateTextGraphBuilder`. A concrete one is named for
+An abstract class, or any class that is only ever extended and never used on its own,
+takes a `Base` prefix and keeps the suffix of what it is: `BaseLlmProviderService`,
+`BaseOrm`, `BasePageInput`. A concrete one is named for
 the case it handles, with no prefix: `OpenAiLlmService`, `BlogPostGraphBuilder`.
 
 A `Utils` class holds `@staticmethod`s and nothing else: no state, no `__init__`, no
@@ -123,6 +125,9 @@ class ExecutionEngine:
     def _execute_start(self) -> None: ...
 ```
 
+In a static-only `Utils` class, the map is a module-level constant beside the class,
+named as `fastapi-structure.md` › Constants names a lookup map.
+
 A member with no entry fails loudly at call time.
 
 ## Variables
@@ -135,7 +140,7 @@ session, client, and config in this codebase:
 | ---------- | ------------------------------------------- |
 | `session`  | `db_session`                                |
 | `client`   | `http_client`, `llm_client`, `storage_client` |
-| `config`   | `humanizer_settings`                        |
+| `config`   | `humanizer_settings`, `pagination_config`   |
 | `result`   | `query_result`, `humanize_result`           |
 | `service`  | `user_service`, `humanizer_service`         |
 | `data`     | name the actual contents                    |
@@ -260,7 +265,7 @@ The same applies to chained attribute access into a call:
   route's docstring is also its API description. Ruff's `D101`-`D103` enforce it.
 - Exempt from the requirement: tests, migrations, the shapes and declarations in
   `dtos.py`, `results.py`, `inputs.py`, `settings.py`, `types.py`, `exceptions.py`,
-  the Orm modules in `libs/database/orm/` and `__init__.py`, and the app wiring
+  `pagination_config.py`, the Orm modules in `libs/database/orm/` and `__init__.py`, and the app wiring
   (`dependencies.py`, `app_factory.py`, `lifespan.py`, `core/config.py`,
   `core/logging.py`, `core/exception_handlers.py`) and `scripts/`. There, and on a
   private helper, a docstring is written only when the name isn't enough, such as a

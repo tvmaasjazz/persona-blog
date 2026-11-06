@@ -3,8 +3,15 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from libs.blog_posts.inputs import CreateBlogPostInput, UpdateBlogPostInput
+from libs.blog_posts.inputs import (
+    CreateBlogPostInput,
+    FindPublicBlogPostPageInput,
+    UpdateBlogPostInput,
+)
+from libs.blog_posts.types import PublicBlogPostSortType
+from libs.core.types import SortDirectionType
 from libs.database.orm import BlogPostOrm
+from tests.factories.core import build_pagination_input
 
 VALID_BLOG_POST_BODY = (
     "A paragraph that opens the post with some context.\n\n"
@@ -46,6 +53,24 @@ def build_update_blog_post_input(
         body=body,
         is_public=is_public,
         published_at=published_at,
+    )
+
+
+def build_find_public_blog_post_page_input(
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    search: str | None = None,
+    sort_by: PublicBlogPostSortType = PublicBlogPostSortType.PUBLISHED_AT,
+    sort_direction: SortDirectionType = SortDirectionType.DESC,
+    persona_identity: UUID | None = None,
+) -> FindPublicBlogPostPageInput:
+    return FindPublicBlogPostPageInput(
+        pagination_input=build_pagination_input(
+            page=page, page_size=page_size, search=search, sort_direction=sort_direction
+        ),
+        sort_by=sort_by,
+        persona_identity=persona_identity,
     )
 
 

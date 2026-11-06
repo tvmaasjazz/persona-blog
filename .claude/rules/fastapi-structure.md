@@ -17,8 +17,11 @@ backend/
 │   ├── lifespan.py      # app-scoped resources on app.state, app-lifetime loops
 │   └── app_factory.py   # create_app(): the only file that lists every domain
 ├── libs/
-│   ├── core/            # domain-free: exceptions.py, results.py, services/, utils/
-│   ├── database/        # BaseOrm, session factory, DatabaseClockUtils, orm/: see database.md
+│   ├── core/            # domain-free: exceptions.py, inputs.py, results.py, types.py,
+│   │                    #   services/, utils/
+│   ├── database/        # BaseOrm, session factory, orm/: see database.md;
+│   │                    #   pagination_config.py, results.py, services/ (PaginationService),
+│   │                    #   utils/ (DatabaseClockUtils, PaginationQueryUtils)
 │   └── <domain>/        # services.py or services/, inputs.py, results.py, settings.py,
 │                        #   types.py, constants.py; as needed: exceptions.py, utils/,
 │                        #   after_response_tasks.py; LLM work: see langgraph.md
@@ -42,7 +45,8 @@ packages.
 
 All of a domain's enums live in one module, `types.py`: `libs/<domain>/types.py`, or
 `apps/api/domains/<name>/types.py` for a domain with no lib. Enums the whole app uses
-live in `apps/api/core/types.py`. Never put an enum in `inputs.py`, `constants.py`, or
+live in `apps/api/core/types.py`, or in `libs/core/types.py` when a lib uses them,
+since `libs/` can't import `apps/`. Never put an enum in `inputs.py`, `constants.py`, or
 `dtos.py`, even when only one of them uses it.
 
 ## Logging
@@ -194,9 +198,9 @@ write, commit, close.
 
 ## DTOs
 
-HTTP payload classes are DTOs, in the domain's `dtos.py` under `apps/`. The response
-DTOs every domain shares, and the `UsdDecimal` field type, live in
-`apps/api/core/dtos.py`. One `dtos.py` per domain holds both directions; never split
+HTTP payload classes are DTOs, in the domain's `dtos.py` under `apps/`. The DTOs and
+field types every domain shares, such as `IdentityResponseDto`, `BasePageQueryDto`,
+`BasePageResponseDto` and `UsdDecimal`, live in `apps/api/core/dtos.py`. One `dtos.py` per domain holds both directions; never split
 into `requests.py` / `responses.py`. Split by sub-feature only, once a domain's file
 gets unwieldy.
 
@@ -231,14 +235,14 @@ A route takes a `Dto` only when a body or a query model is sent.
 | -------------------------------------- | ---------------------------------------------------------- |
 | `POST` create / `PUT` update           | `<Entity>Dto` body, **one class shared by both**: `PersonaDto`. Create gets its own `Create<Entity>Dto` only when it carries fields an update must never change (see Input models) |
 | `GET /{identity}` / `DELETE /{identity}` | None — the entity's `identity` is a plain `UUID` path parameter |
-| `GET` list                             | `<Entity>FetchAllQueryDto` query model: `BlogPostFetchAllQueryDto` |
+| `GET` page                             | `<Entity>PageQueryDto` query model: `PublicBlogPostPageQueryDto` (› Paged routes) |
+| `GET` list, everything in one response | `<Entity>FetchAllQueryDto` query model: `BlogPostFetchAllQueryDto` |
 | Non-CRUD action (`POST /generate-text`) | `<Verb><Entity>Dto` body: `GenerateTextDto`                |
 
-A `FetchAllQueryDto` validates the query string the way a body `Dto` validates the
-body, with filters grouped in a nested filter object. Bind it as
-`Annotated[BlogPostFetchAllQueryDto, Query()]`. Pagination and filter conventions are
-not settled yet — decide them with the first feature that needs them and record them
-here (`plans/plan.md` item 7 decides it).
+A query model validates the query string the way a body `Dto` validates the body.
+Bind it as `Annotated[PublicBlogPostPageQueryDto, Query()]`. A route over a collection
+that can grow is a paged route (› Paged routes); a `FetchAllQueryDto` is only for one
+that returns everything at once.
 
 A limit on a request field, such as required, length or format, is part of the API
 contract, so it is declared on the `Dto` field, where it reaches the OpenAPI schema
@@ -255,6 +259,7 @@ A check that needs the database, or more than one field, is a validation guard
 | Route                          | Returns                                               |
 | ------------------------------ | ----------------------------------------------------- |
 | `GET /{identity}`              | A custom `<Entity>ResponseDto`: `BlogPostResponseDto`  |
+| `GET` page                     | `<Entity>PageResponseDto` extending `BasePageResponseDto`: `{"blog_posts": [...], "pagination": {...}}` |
 | `GET` list                     | `<Entity>ListResponseDto`, rows under a plural field: `{"blog_posts": [...]}` |
 | `POST` create                  | `IdentityResponseDto` — `{"identity": "<uuid>"}`, status 201 |
 | `PUT` update / `DELETE`        | `EmptyResponseDto` — `{}`                             |
@@ -266,11 +271,10 @@ its response DTO as its return annotation.
 A USD amount in a response DTO is a `UsdDecimal`, never a bare `Decimal`, which would
 write a rounded zero as `"0E-10"`.
 
-A list is never a bare array. The service returns a `Result` and the route a
-`<Entity>ListResponseDto`, each holding the rows under a plural field, so pagination
-or a count can join later without changing the shape. A list of the signed-in user's
-own rows says so: `find_user_blog_post_list()` returns `FindUserBlogPostListResult`,
-and the route is `find_user_blog_post_list` too.
+Rows are never a bare array. The service returns a `Result` and the route a
+`ResponseDto`, each holding the rows under a plural field. A page or list of the
+signed-in user's own rows says so: `find_user_blog_post_list()` returns
+`FindUserBlogPostListResult`, and the route is `find_user_blog_post_list` too.
 
 A route on the collection itself uses the path `""`, never `"/"`, which makes a call to
 `/blog-posts` answer with a redirect.
@@ -278,6 +282,41 @@ A route on the collection itself uses the path `""`, never `"/"`, which makes a 
 A redirecting route returns an annotated `RedirectResponse` and sets any cookie on it.
 A route that returns a DTO but sets or clears a cookie takes `response: Response`,
 calls `set_cookie()` or `delete_cookie()` on it, and still returns its `ResponseDto`.
+
+### Paged routes
+
+A paged route returns one page of a collection, and every one pages, sorts, filters and
+searches the same way. Its names say page where an unpaged route says list:
+`find_<…>_page`, `Find<…>PageInput`, `Find<…>PageResult`, `<Entity>PageQueryDto` and
+`<Entity>PageResponseDto`. The shared pieces that do the paging are `Pagination…`. The
+pattern is `find_public_blog_post_page`, from `apps/api/domains/blog_posts/router.py`
+down to `PUBLIC_BLOG_POST_PAGINATION_CONFIG`.
+
+- The `<Entity>PageQueryDto` extends `BasePageQueryDto` and adds `sort_by`, typed as
+  the route's `<Entity>SortType` with its default, plus its filters. Its `to_input()`
+  builds the route's `Find<…>PageInput`, which extends `BasePageInput`, carrying
+  `to_pagination_input()` as its `pagination_input`.
+- Filters are flat, typed fields, one value each, never a nested object. A missing
+  field filters nothing.
+
+  | Kind        | Name                             | Operator     |
+  | ----------- | -------------------------------- | ------------ |
+  | Equals      | `<field>`                        | `EQUALS`     |
+  | Any of      | plural `<fields>`, a `list[...]` | `IN`         |
+  | Range       | `<field>_from`, `<field>_to`     | `GTE`, `LT`  |
+  | Has a value | `has_<field>`                    | `HAS_VALUE`  |
+
+- Filters only narrow. Who may see what stays in the service's all-records query.
+- A `PaginationConfig` in the lib's `constants.py` names the search columns, each sort
+  value's column, each filter field's `PaginationFilterConfig` (column and operator),
+  and the tiebreak column. Add each new one and its `Input` to the config guard test
+  (`pytest-testing.md` › What to write for each source file).
+- The service builds its all-records query (the joins and who may see what) and makes
+  one call, `PaginationService.find_page`, passing the `PaginationConfig`, its `Input`,
+  and its loader options as `load_options`. `find_page` counts with `count(*) OVER ()`
+  on the page query, and runs a separate count only for an empty page past the first.
+- The `<Entity>PageResponseDto` extends `BasePageResponseDto`, and its `Result` carries
+  `pagination: PaginationResult`, mapped with `PaginationResponseDto.from_result()`.
 
 ### Identifiers
 
@@ -348,7 +387,7 @@ The pattern is `apps/api/domains/users/dependencies.py`.
 
 Routers are one line of delegation, type hints only, no `= Depends(...)` defaults. A
 route's permission and validation guards go in the decorator's `dependencies` (DTOs ›
-The acting user). Routes are ordered `GET` list, `GET` one, `POST`, `PUT`, `DELETE`.
+The acting user). Routes are ordered `GET` page or list, `GET` one, `POST`, `PUT`, `DELETE`.
 Reference: `apps/api/domains/blog_posts/router.py`.
 
 ## Database
