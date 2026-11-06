@@ -180,7 +180,8 @@ that import is what registers every mapper before configuration.
 - Check constraints are declared too, a column's own inside its `mapped_column`, a
   table's in `__table_args__`. `name=` takes only the middle of the SQL's name, since
   the naming convention adds `<table>_` and `_check`: `pb_invite_used_check` is
-  `CheckConstraint("...", name="used")`.
+  `CheckConstraint("...", name="used")`. A check whose full name would pass 63
+  characters gets a shorter middle, named the same in the SQL and the Orm class.
 - `libs/database/base.py`, `session.py`, `column_types.py`, and `constants.py` are
   setup files. Changing them is a deliberate design change, not part of adding a table.
 
