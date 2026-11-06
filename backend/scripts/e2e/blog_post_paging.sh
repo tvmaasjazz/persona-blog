@@ -95,6 +95,12 @@ if ! curl -sf --max-time 3 "$API_URL/health" >/dev/null; then
 fi
 pass "$API_URL is up"
 
+step "Checking the server has the paged route"
+if ! curl -sf --max-time 3 "$API_URL/openapi.json" | grep -q '"/blog-posts/public"'; then
+  fail "the server at $API_URL has no GET /blog-posts/public — it's running older code; restart it with: uv run granian --interface asgi apps.api.main:app --reload"
+fi
+pass "GET /blog-posts/public is served"
+
 step "Checking migrations"
 if ! uv run alembic current 2>/dev/null | grep -q '(head)'; then
   fail "the database isn't at the latest migration — run: uv run alembic upgrade head"
@@ -293,7 +299,7 @@ expect "$(echo "$OTHER_PAGE" | total)" "5" "second user's total"
 step "7. A bad page, page size or sort is a 422"
 request_signed_out 422 "page 0" -G "$API_URL/blog-posts/public" --data-urlencode page=0 >/dev/null
 request_signed_out 422 "page_size 101" -G "$API_URL/blog-posts/public" --data-urlencode page_size=101 >/dev/null
-request_signed_out 422 "sort_by a column the list doesn't allow" -G "$API_URL/blog-posts/public" \
+request_signed_out 422 "sort_by a column the route doesn't allow" -G "$API_URL/blog-posts/public" \
   --data-urlencode sort_by=CREATED_AT >/dev/null
 request_signed_out 422 "a malformed persona_identity" -G "$API_URL/blog-posts/public" \
   --data-urlencode persona_identity=not-a-uuid >/dev/null
