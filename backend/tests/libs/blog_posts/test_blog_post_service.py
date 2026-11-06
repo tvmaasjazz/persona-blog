@@ -18,6 +18,7 @@ from libs.blog_posts.results import (
 )
 from libs.blog_posts.services import BlogPostService
 from libs.blog_posts.types import PublicBlogPostSortType
+from libs.content_engagement.services import ContentEngagementService
 from libs.content_items.services import ContentItemService
 from libs.content_items.types import ContentType
 from libs.core.exceptions import ForbiddenException, NotFoundException
@@ -36,6 +37,7 @@ from tests.factories.blog_posts import (
     build_update_blog_post_input,
     insert_blog_post_row,
 )
+from tests.factories.content_engagement import build_content_engagement_settings
 from tests.factories.content_items import insert_content_item_row
 from tests.factories.credits import build_credit_settings
 from tests.factories.database import fetch_database_utc_now
@@ -52,7 +54,13 @@ def _build_blog_post_service(
 ) -> BlogPostService:
     return BlogPostService(
         db_session=db_session,
-        content_item_service=ContentItemService(db_session=db_session),
+        content_item_service=ContentItemService(
+            db_session=db_session,
+            content_engagement_service=ContentEngagementService(
+                db_session=db_session,
+                content_engagement_settings=build_content_engagement_settings(),
+            ),
+        ),
         persona_service=PersonaService(db_session=db_session),
         generate_text_run_service=GenerateTextRunService(db_session_factory=db_session_factory),
         generate_text_step_service=GenerateTextStepService(
