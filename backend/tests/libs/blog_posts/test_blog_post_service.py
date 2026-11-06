@@ -396,7 +396,7 @@ async def test_find_blog_post_own_post_returns_blog_post_detail_result(
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
     persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
-    _, blog_post_record = await _insert_blog_post(
+    content_item_record, blog_post_record = await _insert_blog_post(
         db_session, created_by_id=user_record.id, persona_id=persona_record.id
     )
     await db_session.commit()
@@ -414,6 +414,7 @@ async def test_find_blog_post_own_post_returns_blog_post_detail_result(
         created_at=blog_post_record.created_at,
         updated_at=blog_post_record.updated_at,
         content_item=BlogPostContentItemResult(
+            identity=content_item_record.identity,
             is_public=False,
             published_at=None,
             persona=BlogPostPersonaResult(identity=persona_record.identity),
@@ -453,7 +454,7 @@ async def test_find_public_blog_post_signed_out_published_post_returns_result_no
     persona_record = await insert_persona_row(
         db_session, created_by_id=owner_record.id, is_public=True
     )
-    _, blog_post_record = await _insert_blog_post(
+    content_item_record, blog_post_record = await _insert_blog_post(
         db_session,
         created_by_id=owner_record.id,
         persona_id=persona_record.id,
@@ -476,6 +477,7 @@ async def test_find_public_blog_post_signed_out_published_post_returns_result_no
             created_at=blog_post_record.created_at,
             updated_at=blog_post_record.updated_at,
             content_item=BlogPostContentItemResult(
+                identity=content_item_record.identity,
                 is_public=True,
                 published_at=datetime(2020, 1, 1, tzinfo=UTC),
                 persona=BlogPostPersonaResult(identity=persona_record.identity),
@@ -520,7 +522,7 @@ async def test_find_public_blog_post_owner_private_post_returns_result_flagged_a
     owner_record = await insert_user_row(db_session)
     owner_auth_user = build_auth_user(user_id=owner_record.id, user_identity=owner_record.identity)
     persona_record = await insert_persona_row(db_session, created_by_id=owner_record.id)
-    _, blog_post_record = await _insert_blog_post(
+    content_item_record, blog_post_record = await _insert_blog_post(
         db_session, created_by_id=owner_record.id, persona_id=persona_record.id
     )
     await db_session.commit()
@@ -539,6 +541,7 @@ async def test_find_public_blog_post_owner_private_post_returns_result_flagged_a
             created_at=blog_post_record.created_at,
             updated_at=blog_post_record.updated_at,
             content_item=BlogPostContentItemResult(
+                identity=content_item_record.identity,
                 is_public=False,
                 published_at=None,
                 persona=BlogPostPersonaResult(identity=persona_record.identity),
@@ -783,14 +786,14 @@ async def test_find_user_blog_post_list_returns_only_own_newest_first(
     other_persona_record = await insert_persona_row(
         db_session, created_by_id=other_user_record.id, is_public=True
     )
-    _, oldest_blog_post_record = await _insert_blog_post(
+    oldest_content_item_record, oldest_blog_post_record = await _insert_blog_post(
         db_session,
         created_by_id=user_record.id,
         persona_id=persona_record.id,
         title="Oldest Post",
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
-    _, newest_blog_post_record = await _insert_blog_post(
+    newest_content_item_record, newest_blog_post_record = await _insert_blog_post(
         db_session,
         created_by_id=user_record.id,
         persona_id=persona_record.id,
@@ -830,6 +833,7 @@ async def test_find_user_blog_post_list_returns_only_own_newest_first(
                 created_at=newest_blog_post_record.created_at,
                 updated_at=newest_blog_post_record.updated_at,
                 content_item=BlogPostContentItemResult(
+                    identity=newest_content_item_record.identity,
                     is_public=False,
                     published_at=None,
                     persona=BlogPostPersonaResult(identity=persona_record.identity),
@@ -843,6 +847,7 @@ async def test_find_user_blog_post_list_returns_only_own_newest_first(
                 created_at=oldest_blog_post_record.created_at,
                 updated_at=oldest_blog_post_record.updated_at,
                 content_item=BlogPostContentItemResult(
+                    identity=oldest_content_item_record.identity,
                     is_public=False,
                     published_at=None,
                     persona=BlogPostPersonaResult(identity=persona_record.identity),
@@ -859,7 +864,7 @@ async def test_find_user_blog_post_list_filters_by_persona_identity(
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
     matching_persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
     other_persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
-    _, matching_blog_post_record = await _insert_blog_post(
+    matching_content_item_record, matching_blog_post_record = await _insert_blog_post(
         db_session,
         created_by_id=user_record.id,
         persona_id=matching_persona_record.id,
@@ -888,6 +893,7 @@ async def test_find_user_blog_post_list_filters_by_persona_identity(
                 created_at=matching_blog_post_record.created_at,
                 updated_at=matching_blog_post_record.updated_at,
                 content_item=BlogPostContentItemResult(
+                    identity=matching_content_item_record.identity,
                     is_public=False,
                     published_at=None,
                     persona=BlogPostPersonaResult(identity=matching_persona_record.identity),
@@ -1073,7 +1079,7 @@ async def test_find_public_blog_post_page_signed_out_returns_published_public_po
     persona_record = await insert_persona_row(
         db_session, created_by_id=author_record.id, is_public=True
     )
-    _, blog_post_record = await _insert_blog_post(
+    content_item_record, blog_post_record = await _insert_blog_post(
         db_session,
         created_by_id=author_record.id,
         persona_id=persona_record.id,
@@ -1098,6 +1104,7 @@ async def test_find_public_blog_post_page_signed_out_returns_published_public_po
                 created_at=blog_post_record.created_at,
                 updated_at=blog_post_record.updated_at,
                 content_item=BlogPostContentItemResult(
+                    identity=content_item_record.identity,
                     is_public=True,
                     published_at=PAST_PUBLISHED_AT,
                     persona=BlogPostPersonaResult(identity=persona_record.identity),
