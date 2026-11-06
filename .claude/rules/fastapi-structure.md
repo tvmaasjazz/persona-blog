@@ -20,7 +20,8 @@ backend/
 │   ├── core/            # domain-free: exceptions.py, inputs.py, results.py, types.py,
 │   │                    #   services/, utils/
 │   ├── database/        # BaseOrm, session factory, orm/: see database.md;
-│   │                    #   list_query_spec.py, utils/ (DatabaseClockUtils, PageQueryUtils)
+│   │                    #   list_query_spec.py, results.py, services/ (PageQueryService),
+│   │                    #   utils/ (DatabaseClockUtils, PageQueryUtils)
 │   └── <domain>/        # services.py or services/, inputs.py, results.py, settings.py,
 │                        #   types.py, constants.py; as needed: exceptions.py, utils/,
 │                        #   after_response_tasks.py; LLM work: see langgraph.md
@@ -288,7 +289,8 @@ Every list pages, sorts, filters and searches the same way. The pattern is
 
 - The `<Entity>FetchAllQueryDto` extends `PageQueryDto` and adds `sort_by`, typed as
   the list's `<Entity>SortType` with its default, plus the list's filters. Its
-  `to_input()` carries `to_page_input()` as the list `Input`'s `page_input`.
+  `to_input()` builds the list's `Input`, which extends `ListInput`, carrying
+  `to_page_input()` as its `page_input`.
 - Filters are flat, typed fields, one value each, never a nested object. A missing
   field filters nothing.
 
@@ -299,13 +301,15 @@ Every list pages, sorts, filters and searches the same way. The pattern is
   | Range       | `<field>_from`, `<field>_to`     | `GTE`, `LT`  |
   | Has a value | `has_<field>`                    | `HAS_VALUE`  |
 
-- Filters only narrow. Who may see what stays in the service's base `select()`.
+- Filters only narrow. Who may see what stays in the service's all-records query.
 - A `ListQuerySpec` in the lib's `constants.py` names the search columns, each sort
   value's column, each filter field's column and operator, and the tiebreak column.
   Add each new spec and its `Input` to the spec guard (`pytest-testing.md` › What to
   write for each source file).
-- The service runs the count, then the page, and adds loader options to the page
-  query only.
+- The service builds its all-records query (the joins and who may see what) and makes
+  one call, `PageQueryService.find_page`, passing the spec, its `Input`, and its loader
+  options as `load_options`. `find_page` counts with `count(*) OVER ()` on the page
+  query, and runs a separate count only for an empty page past the first.
 - The `<Entity>ListResponseDto` extends `PageResponseDto`, and its `Result` carries
   `page_info: PageInfoResult`, mapped with `PageInfoResponseDto.from_result()`.
 
