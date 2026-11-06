@@ -257,8 +257,14 @@ as it does today.
    and `config_variation_version`. Every call can then be traced to the variation that
    wrote it. Calls that used the code default leave them null.
 6. **Settings and wiring:**
-   - An optional SDK key in settings. With no key, LaunchDarkly is off and every step
-     uses its default, which is how tests and local dev run unless the key is set.
+   - **Whether LaunchDarkly is used is an explicit setting,** never inferred from
+     whether a key is present. `LaunchDarklySettings` has `is_enabled` (default `false`
+     in `config.toml`) and `sdk_key`, overridden by `LAUNCHDARKLY__IS_ENABLED` and
+     `LAUNCHDARKLY__SDK_KEY`.
+     - Enabled with no key refuses to start.
+     - Disabled means no client is created and every step uses its default.
+   - **Tests always run with it off.** The test settings set it off, so a developer's
+     `.env` with LaunchDarkly on never makes the suite connect.
    - The client is created in `lifespan.py` with a short init timeout, and closed (which
      flushes events) on shutdown.
    - A startup failure logs and carries on with defaults. It never stops the app.
@@ -402,9 +408,18 @@ never wired up, so nothing has to be removed. Building it is plan.md › Phase 2
     connections. That was the only argument against it.
 - **One wrapper owns the choice of backend:** `configure_telemetry(settings, ld_client)`
   in `apps/api/core/telemetry.py`, called once at startup.
-  - **With an SDK key** (production), it registers the plugin on the client.
-  - **With none** (local dev, CI, tests), nothing is exported and logs only go to the
-    terminal.
+  - **Where telemetry goes is its own setting,** never inferred from whether a key is
+    present. `TelemetrySettings.exporter` is a `TelemetryExporterType`, overridden by
+    `TELEMETRY__EXPORTER`:
+    - `NONE`: nothing is exported, and logs only go to the terminal. This is the
+      default in `config.toml`, and what tests use.
+    - `LAUNCHDARKLY`: registers the plugin on the client. Settings refuse it unless
+      LaunchDarkly is enabled.
+    - `OTLP`: plain OpenTelemetry to `TelemetrySettings.otlp_endpoint`, with the `ldotel`
+      hook on the client when there is one.
+  - **The two settings are independent.** For example, LaunchDarkly can be on for flags
+    and AgentControl while telemetry is `NONE` locally. Production sets both by env
+    var, and so does a local `.env` while developing against LaunchDarkly.
   - **Code never imports `ldobserve`.** A custom span uses `opentelemetry.trace`, a log
     uses structlog, and an error is recorded on the current span. So moving to plain
     OpenTelemetry, or another backend, replaces only this wrapper. Then the `ldotel` hook
@@ -474,16 +489,22 @@ For example:
 AgentControl and observability (Observability). Every granian worker process is its own
 client, so count processes, not replicas.
 
-**Production only, to start.** Only production has an SDK key.
+**Production, plus local dev while building it.** Both are turned on by settings
+(Observability, Level 1 › Settings and wiring).
 
-- Local dev, CI and staging run on the code defaults, with no flags served and no
-  telemetry exported.
-- A prompt or model change is tried in production by targeting your own user first,
-  then everyone. That's how LaunchDarkly expects changes to be tested.
+- **Local dev uses its own LaunchDarkly environment,** such as `development`, with its
+  own SDK key and targeting. Trying a prompt or flag locally then never changes what
+  production serves. Its connected time comes out of the same pool.
+- **CI and tests always run with LaunchDarkly off.**
+- **Once the integration is built,** local dev can go back to the defaults, and a
+  prompt or model change is tried in production by targeting your own user first, then
+  everyone. That's how LaunchDarkly expects changes to be tested.
 - **The math:**
   - Two API instances and two generation workers, each one process running all month,
     is 4 connections.
-  - That leaves about 1 for occasional local runs against LaunchDarkly.
+  - That leaves about 1 for local dev. That's plenty: a dev server running 8 hours a
+    day is about a third of a connection, and that's per granian process, so use one
+    worker locally too.
   - A staging environment running all month, or a fifth process, means the paid plan.
 
 To stay under 5:
@@ -491,7 +512,7 @@ To stay under 5:
 - **One client per process,** shared by flags, AgentControl and observability (Level 1's
   `init_client(client=...)`). Letting the AI SDK build a second client would double the
   count.
-- **No key in tests or CI,** so they never connect.
+- **LaunchDarkly off in tests and CI,** so they never connect.
 - **One granian worker per API instance,** since the app is async, and one process per
   generation worker instance.
 - **Autoscaling over a fixed count.** An instance added for a busy week is about a
