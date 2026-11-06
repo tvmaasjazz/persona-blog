@@ -1,4 +1,4 @@
-from sqlalchemy import Date, cast, literal_column
+from sqlalchemy import literal_column
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,41 +23,38 @@ class ContentViewService:
     ) -> None:
         """Records the view, raising the day's read percent only upward, and adds what it
         gained to the item's engagement; a request that raises nothing changes nothing."""
-        # Identify the viewer: a signed-in user by id, a signed-out visitor by their key
-        if auth_user is not None:
-            viewer_id = auth_user.id
-            anonymous_user_key = None
-        elif record_content_view_input.anonymous_user_key is not None:
-            viewer_id = None
-            anonymous_user_key = record_content_view_input.anonymous_user_key
-        else:
+        # Identify the viewer: a signed-in user by id, else a signed-out visitor by their key
+        viewer_id = auth_user.id if auth_user is not None else None
+        anonymous_user_key = (
+            record_content_view_input.anonymous_user_key if auth_user is None else None
+        )
+        if viewer_id is None and anonymous_user_key is None:
             raise ValueError("A view needs a signed-in user or an anonymous user key")
+        viewer_column = (
+            ContentItemViewOrm.created_by_id
+            if viewer_id is not None
+            else ContentItemViewOrm.anonymous_user_key
+        )
 
-        # Insert the day's view, or raise its read percent when the new one is higher.
-        # The conflict target repeats the WHERE of the viewer kind's partial unique index
-        if viewer_id is not None:
-            index_elements = ["content_item_id", "created_by_id", "viewed_on"]
-            index_where = ContentItemViewOrm.created_by_id.is_not(None) & (
-                ContentItemViewOrm.deleted_at.is_(None)
-            )
-        else:
-            index_elements = ["content_item_id", "anonymous_user_key", "viewed_on"]
-            index_where = ContentItemViewOrm.anonymous_user_key.is_not(None) & (
-                ContentItemViewOrm.deleted_at.is_(None)
-            )
-
+        # Upsert today's view: insert it, or when the viewer already has one today, raise
+        # its read percent only if the new one is higher. viewed_on takes its UTC-date default
         content_item_view_insert = insert(ContentItemViewOrm).values(
             content_item_id=record_content_view_input.content_item_id,
-            viewed_on=cast(DatabaseClockUtils.build_utc_now_sql(), Date),
             read_percent=record_content_view_input.read_percent,
             anonymous_user_key=anonymous_user_key,
             created_by_id=viewer_id,
             updated_by_id=viewer_id,
         )
-        # SQLAlchemy's onupdate does not fire for ON CONFLICT DO UPDATE, so updated_at is set here
         content_item_view_upsert = content_item_view_insert.on_conflict_do_update(
-            index_elements=index_elements,
-            index_where=index_where,
+            # "Already viewed today" means a clash on the viewer kind's partial unique index.
+            # Postgres finds that index from its columns and its WHERE, so both are repeated
+            index_elements=[
+                ContentItemViewOrm.content_item_id,
+                viewer_column,
+                ContentItemViewOrm.viewed_on,
+            ],
+            index_where=viewer_column.is_not(None) & ContentItemViewOrm.deleted_at.is_(None),
+            # SQLAlchemy's onupdate does not fire here, so updated_at is set explicitly
             set_={
                 "read_percent": content_item_view_insert.excluded.read_percent,
                 "updated_at": DatabaseClockUtils.build_utc_now_sql(),

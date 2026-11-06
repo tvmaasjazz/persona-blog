@@ -21,8 +21,13 @@ class ContentEngagementUtils:
         published_at_sql: ColumnElement[datetime | None],
         content_engagement_settings: ContentEngagementSettings,
     ) -> ColumnElement[float]:
-        """The score's SQL: log10 of weighted engagement plus hours since the start over
-        hours per tenfold; NULL when the publish time is NULL."""
+        """The feed score as SQL; higher sorts first, and NULL for an unpublished item.
+
+        It adds two parts. Engagement: views and reading earn points, and the log means
+        each tenfold more points adds just 1. Recency: every hours-per-tenfold after the
+        start date adds 1. So a post published a day later starts 1 ahead and an older
+        post passes it only with ten times its engagement. Neither part changes as time
+        passes, so the stored score never needs refreshing."""
         view_weight = literal(content_engagement_settings.view_weight, Double)
         read_weight = literal(content_engagement_settings.read_weight, Double)
         hours_per_tenfold = literal(
