@@ -343,7 +343,7 @@ async def test_find_persona_another_users_private_persona_returns_404(
     assert find_persona_response.status_code == 404
 
 
-async def test_find_persona_another_users_public_persona_returns_persona_response(
+async def test_find_persona_another_users_public_persona_returns_404(
     api_client: AsyncClient, signed_in_user: UserOrm, other_user_client: AsyncClient
 ) -> None:
     other_create_response = await other_user_client.post(
@@ -354,21 +354,134 @@ async def test_find_persona_another_users_public_persona_returns_persona_respons
 
     find_persona_response = await api_client.get(f"/personas/{other_persona_identity}")
 
-    assert find_persona_response.status_code == 200
-    assert find_persona_response.json() == {
+    assert find_persona_response.status_code == 404
+
+
+async def test_find_public_persona_signed_out_public_persona_returns_public_persona_response(
+    api_client: AsyncClient, other_user_client: AsyncClient
+) -> None:
+    other_create_response = await other_user_client.post(
+        "/personas",
+        json={
+            "name": "Public Persona",
+            "bio": "Writes public essays.",
+            "background": "Former mathematician.",
+            "writing_style": "Formal",
+            "default_tone": "Warm",
+            "default_target_audience": "Engineers",
+            "sample_writing": "It was a cold morning in London.",
+            "is_public": True,
+        },
+    )
+    other_persona_identity = other_create_response.json()["identity"]
+
+    find_public_persona_response = await api_client.get(
+        f"/personas/{other_persona_identity}/public"
+    )
+
+    assert find_public_persona_response.status_code == 200
+    assert find_public_persona_response.json() == {
         "identity": other_persona_identity,
         "name": "Public Persona",
         "bio": "Writes public essays.",
         "avatar_url": None,
-        "background": None,
-        "writing_style": None,
-        "default_tone": None,
-        "default_target_audience": None,
-        "sample_writing": None,
         "is_public": True,
+        "is_owner": False,
         "created_at": ANY,
         "updated_at": ANY,
     }
+
+
+async def test_find_public_persona_signed_out_private_persona_returns_404(
+    api_client: AsyncClient, other_user_client: AsyncClient
+) -> None:
+    other_create_response = await other_user_client.post(
+        "/personas", json={"name": "Private Persona", "bio": "Writes essays."}
+    )
+    other_persona_identity = other_create_response.json()["identity"]
+
+    find_public_persona_response = await api_client.get(
+        f"/personas/{other_persona_identity}/public"
+    )
+
+    assert find_public_persona_response.status_code == 404
+
+
+async def test_find_public_persona_signed_in_as_owner_private_persona_flags_owner(
+    api_client: AsyncClient, signed_in_user: UserOrm
+) -> None:
+    create_response = await api_client.post(
+        "/personas",
+        json={"name": "Private Persona", "bio": "Writes essays.", "background": "Secret."},
+    )
+    persona_identity = create_response.json()["identity"]
+
+    find_public_persona_response = await api_client.get(f"/personas/{persona_identity}/public")
+
+    assert find_public_persona_response.status_code == 200
+    assert find_public_persona_response.json() == {
+        "identity": persona_identity,
+        "name": "Private Persona",
+        "bio": "Writes essays.",
+        "avatar_url": None,
+        "is_public": False,
+        "is_owner": True,
+        "created_at": ANY,
+        "updated_at": ANY,
+    }
+
+
+async def test_find_public_persona_signed_in_as_another_user_public_persona_is_not_owner(
+    api_client: AsyncClient, signed_in_user: UserOrm, other_user_client: AsyncClient
+) -> None:
+    other_create_response = await other_user_client.post(
+        "/personas", json={"name": "Public Persona", "bio": "Writes essays.", "is_public": True}
+    )
+    other_persona_identity = other_create_response.json()["identity"]
+
+    find_public_persona_response = await api_client.get(
+        f"/personas/{other_persona_identity}/public"
+    )
+
+    assert find_public_persona_response.status_code == 200
+    assert find_public_persona_response.json()["is_owner"] is False
+
+
+async def test_find_public_persona_signed_in_as_another_user_private_persona_returns_404(
+    api_client: AsyncClient, signed_in_user: UserOrm, other_user_client: AsyncClient
+) -> None:
+    other_create_response = await other_user_client.post(
+        "/personas", json={"name": "Private Persona", "bio": "Writes essays."}
+    )
+    other_persona_identity = other_create_response.json()["identity"]
+
+    find_public_persona_response = await api_client.get(
+        f"/personas/{other_persona_identity}/public"
+    )
+
+    assert find_public_persona_response.status_code == 404
+
+
+async def test_find_public_persona_never_inserted_returns_404(api_client: AsyncClient) -> None:
+    find_public_persona_response = await api_client.get(f"/personas/{uuid4()}/public")
+
+    assert find_public_persona_response.status_code == 404
+
+
+async def test_find_public_persona_malformed_identity_returns_422(api_client: AsyncClient) -> None:
+    find_public_persona_response = await api_client.get("/personas/not-a-uuid/public")
+
+    response_body = find_public_persona_response.json()
+    assert find_public_persona_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == ["path", "persona_identity"]
+
+
+async def test_find_public_persona_invalid_session_returns_401(api_client: AsyncClient) -> None:
+    api_client.cookies.set("sid", "not-a-real-session-id")
+
+    find_public_persona_response = await api_client.get(f"/personas/{uuid4()}/public")
+
+    assert find_public_persona_response.status_code == 401
 
 
 @pytest.mark.usefixtures("signed_in_user")

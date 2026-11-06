@@ -23,6 +23,17 @@ class PersonaDetailResult(BaseModel):
     updated_at: datetime
 
 
+class PublicPersonaResult(BaseModel):
+    identity: UUID
+    name: str
+    bio: str
+    avatar_url: str | None
+    is_public: bool
+    is_owner: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 class FindUserPersonaListResult(BaseModel):
     personas: list[PersonaDetailResult]
 

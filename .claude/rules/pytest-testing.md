@@ -442,8 +442,9 @@ the persona and blog post reads and `signed_in_admin` every permission, both wit
 | List (`GET` with a `FetchAllQueryDto`) | An invalid query value → 422 with `loc` starting `"query"`. Pagination and filter cases wait on the conventions `fastapi-structure.md` hasn't settled yet (`plans/plan.md` item 7 decides it) |
 | Write rolls back on failure   | Make the route fail after its first write; assert no row |
 | Protected route, signed out   | One test per protected route using plain `api_client`; assert 401 |
+| Open `/public` route          | Signed out with plain `api_client`; the owner, with `is_owner` true; another user, with `is_owner` false; a 404 for an entity hidden from others; a 401 for an invalid session cookie |
 | Signed in without the route's permission | Except on admin routes, one test per route whose permission a reader lacks, with `signed_in_reader`; assert 403, and for a write, select to prove nothing was written or changed. A read every role holds needs none: `test_dependencies.py` covers refusal |
-| Another user's rows           | Create them through `other_user_client`, the way a real second user would. Never insert them with a factory in a route test, except on an admin route (next row) |
+| Another user's rows           | Create them through `other_user_client`, the way a real second user would, in a private `_create_*` helper kept in that test module, never in `factories/`. Never insert them with a factory in a route test, except on an admin route (next row) |
 | Admin route                   | `signed_in_admin` for the happy path, `signed_in_user` (a creator) for the 403. Insert the target users with `insert_user_row`: an admin route acts on specific users with chosen values, such as a role, a balance or a `created_at`, which signing in through a second client can't set |
 | Not found → 404               | Use an id that was never inserted |
 | Redirect                      | Assert the status, then check `Location` with `urllib.parse` |

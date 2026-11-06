@@ -8,7 +8,11 @@ from libs.blog_posts.inputs import (
     CreateBlogPostInput,
     UpdateBlogPostInput,
 )
-from libs.blog_posts.results import BlogPostDetailResult, FindUserBlogPostListResult
+from libs.blog_posts.results import (
+    BlogPostDetailResult,
+    FindUserBlogPostListResult,
+    PublicBlogPostResult,
+)
 from libs.blog_posts.utils import BlogPostValidationUtils
 
 
@@ -123,6 +127,38 @@ class BlogPostResponseDto(BaseModel):
             published_at=content_item_result.published_at,
             created_at=blog_post_detail_result.created_at,
             updated_at=blog_post_detail_result.updated_at,
+        )
+
+
+class PublicBlogPostResponseDto(BaseModel):
+    identity: UUID
+    persona_identity: UUID
+    title: str
+    subtitle: str | None
+    body: str
+    is_public: bool
+    published_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    is_owner: bool
+
+    @classmethod
+    def from_result(
+        cls, public_blog_post_result: PublicBlogPostResult
+    ) -> PublicBlogPostResponseDto:
+        blog_post_detail_result = public_blog_post_result.blog_post
+        content_item_result = blog_post_detail_result.content_item
+        return cls(
+            identity=blog_post_detail_result.identity,
+            persona_identity=content_item_result.persona.identity,
+            title=blog_post_detail_result.title,
+            subtitle=blog_post_detail_result.subtitle,
+            body=blog_post_detail_result.body,
+            is_public=content_item_result.is_public,
+            published_at=content_item_result.published_at,
+            created_at=blog_post_detail_result.created_at,
+            updated_at=blog_post_detail_result.updated_at,
+            is_owner=public_blog_post_result.is_owner,
         )
 
 

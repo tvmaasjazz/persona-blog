@@ -1,3 +1,5 @@
+from unittest.mock import ANY
+
 import pytest
 from fastapi import Depends, FastAPI
 from httpx import AsyncClient
@@ -6,11 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.core.config import AppSettings
-from apps.api.core.dependencies import DbSessionDep, require_permissions
+from apps.api.core.dependencies import DbSessionDep, OptionalAuthUserDep, require_permissions
+from libs.auth.results import AuthUser
 from libs.auth.services import AuthSessionService
 from libs.database.orm import UserOrm
 from libs.permissions.types import PermissionType, RoleType
 from tests.factories.auth import build_auth_user
+from tests.factories.database import fetch_database_utc_now
 from tests.factories.users import insert_user_row
 
 
@@ -132,3 +136,66 @@ async def test_require_permissions_signed_out_returns_401(
     guarded_route_response = await api_client.post("/guarded-route")
 
     assert guarded_route_response.status_code == 401
+
+
+async def test_get_optional_auth_user_no_cookie_returns_none(
+    fastapi_app: FastAPI, api_client: AsyncClient
+) -> None:
+    @fastapi_app.get("/optional-auth-route")
+    async def optional_auth_route(auth_user: OptionalAuthUserDep) -> dict[str, bool]:
+        return {"is_signed_in": auth_user is not None}
+
+    optional_auth_response = await api_client.get("/optional-auth-route")
+
+    assert optional_auth_response.status_code == 200
+    assert optional_auth_response.json() == {"is_signed_in": False}
+
+
+async def test_get_optional_auth_user_invalid_session_id_returns_401(
+    fastapi_app: FastAPI, api_client: AsyncClient
+) -> None:
+    @fastapi_app.get("/optional-auth-route")
+    async def optional_auth_route(auth_user: OptionalAuthUserDep) -> dict[str, bool]:
+        return {"is_signed_in": auth_user is not None}
+
+    api_client.cookies.set("sid", "not-a-real-session-id")
+
+    optional_auth_response = await api_client.get("/optional-auth-route")
+
+    assert optional_auth_response.status_code == 401
+
+
+async def test_get_optional_auth_user_valid_session_returns_auth_user(
+    fastapi_app: FastAPI, api_client: AsyncClient, signed_in_user: UserOrm
+) -> None:
+    @fastapi_app.get("/optional-auth-route")
+    async def optional_auth_route(auth_user: OptionalAuthUserDep) -> AuthUser | None:
+        return auth_user
+
+    optional_auth_response = await api_client.get("/optional-auth-route")
+
+    assert optional_auth_response.status_code == 200
+    assert optional_auth_response.json() == {
+        "id": signed_in_user.id,
+        "identity": str(signed_in_user.identity),
+        "role": "CREATOR",
+        "permissions": ANY,
+    }
+
+
+async def test_get_optional_auth_user_valid_session_records_user_activity(
+    fastapi_app: FastAPI,
+    api_client: AsyncClient,
+    signed_in_user: UserOrm,
+    db_session: AsyncSession,
+) -> None:
+    @fastapi_app.get("/optional-auth-route")
+    async def optional_auth_route(auth_user: OptionalAuthUserDep) -> dict[str, bool]:
+        return {"is_signed_in": auth_user is not None}
+
+    await api_client.get("/optional-auth-route")
+
+    database_utc_now = await fetch_database_utc_now(db_session)
+    last_activity_at_query = select(UserOrm.last_activity_at).where(UserOrm.id == signed_in_user.id)
+    persisted_last_activity_at = await db_session.scalar(last_activity_at_query)
+    assert persisted_last_activity_at == database_utc_now

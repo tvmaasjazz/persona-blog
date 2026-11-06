@@ -274,17 +274,17 @@ update_manual_post() {
 
 step "8. Publish now — the second user can read it but not change it"
 update_manual_post "$OWNER_SESSION" 200 "publish now" true "\"$NOW_ISO\""
-request "$OTHER_SESSION" 200 "second user reads it" "$API_URL/blog-posts/$MANUAL_POST_IDENTITY" >/dev/null
+request "$OTHER_SESSION" 200 "second user reads it" "$API_URL/blog-posts/$MANUAL_POST_IDENTITY/public" >/dev/null
 update_manual_post "$OTHER_SESSION" 403 "second user updates it" true "\"$NOW_ISO\""
 
 step "9. Schedule for the future — hidden from the second user until then"
 update_manual_post "$OWNER_SESSION" 200 "schedule in 30 days" true "\"$FUTURE_ISO\""
-request "$OTHER_SESSION" 404 "second user reads a scheduled post" "$API_URL/blog-posts/$MANUAL_POST_IDENTITY" >/dev/null
+request "$OTHER_SESSION" 404 "second user reads a scheduled post" "$API_URL/blog-posts/$MANUAL_POST_IDENTITY/public" >/dev/null
 request "$OWNER_SESSION" 200 "you still read it" "$API_URL/blog-posts/$MANUAL_POST_IDENTITY" >/dev/null
 
 step "10. Unpublish — a draft again"
 update_manual_post "$OWNER_SESSION" 200 "unpublish" true null
-request "$OTHER_SESSION" 404 "second user reads a draft" "$API_URL/blog-posts/$MANUAL_POST_IDENTITY" >/dev/null
+request "$OTHER_SESSION" 404 "second user reads a draft" "$API_URL/blog-posts/$MANUAL_POST_IDENTITY/public" >/dev/null
 
 step "11. Delete the hand-written post"
 request "$OWNER_SESSION" 200 "delete" -X DELETE "$API_URL/blog-posts/$MANUAL_POST_IDENTITY" >/dev/null

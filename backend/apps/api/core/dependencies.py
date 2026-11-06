@@ -54,6 +54,17 @@ async def get_auth_user(request: Request, after_response_tasks: BackgroundTasks)
     return auth_user
 
 
+async def get_optional_auth_user(
+    request: Request, after_response_tasks: BackgroundTasks
+) -> AuthUser | None:
+    """Returns None when the request has no session cookie; otherwise resolves it like
+    get_auth_user, so an expired or invalid session still raises UnauthorizedException
+    and activity is still recorded."""
+    if request.cookies.get(SESSION_COOKIE_NAME) is None:
+        return None
+    return await get_auth_user(request, after_response_tasks)
+
+
 def require_permissions(*permission_types: PermissionType) -> Callable[[AuthUser], Awaitable[None]]:
     """Builds a dependency that raises ForbiddenException unless the signed-in user holds
     every permission named, and records them on `required_permissions`."""
@@ -91,4 +102,5 @@ LlmServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 
 AppSettingsDep = Annotated[AppSettings, Depends(get_app_settings)]
 AuthUserDep = Annotated[AuthUser, Depends(get_auth_user)]
+OptionalAuthUserDep = Annotated[AuthUser | None, Depends(get_optional_auth_user)]
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]

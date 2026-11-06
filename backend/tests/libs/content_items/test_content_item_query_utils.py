@@ -14,7 +14,7 @@ FUTURE_PUBLISHED_AT = datetime(2999, 1, 1, tzinfo=UTC)
 
 
 async def _find_accessible_content_item_ids(
-    db_session: AsyncSession, auth_user_id: int
+    db_session: AsyncSession, auth_user_id: int | None
 ) -> list[int]:
     query = (
         select(ContentItemOrm.id)
@@ -217,3 +217,129 @@ async def test_build_accessible_condition_inactive_owner_still_sees_own_content_
     )
 
     assert content_item_record.id in accessible_content_item_ids
+
+
+async def test_build_accessible_condition_no_user_sees_published_content_on_public_persona(
+    db_session: AsyncSession,
+) -> None:
+    owner_record = await insert_user_row(db_session)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=owner_record.id, is_public=True
+    )
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=PAST_PUBLISHED_AT,
+    )
+    await db_session.commit()
+
+    accessible_content_item_ids = await _find_accessible_content_item_ids(db_session, None)
+
+    assert content_item_record.id in accessible_content_item_ids
+
+
+async def test_build_accessible_condition_no_user_does_not_see_private_content_item(
+    db_session: AsyncSession,
+) -> None:
+    owner_record = await insert_user_row(db_session)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=owner_record.id, is_public=True
+    )
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=owner_record.id,
+        persona_id=persona_record.id,
+        is_public=False,
+        published_at=PAST_PUBLISHED_AT,
+    )
+    await db_session.commit()
+
+    accessible_content_item_ids = await _find_accessible_content_item_ids(db_session, None)
+
+    assert content_item_record.id not in accessible_content_item_ids
+
+
+async def test_build_accessible_condition_no_user_does_not_see_unpublished_content_item(
+    db_session: AsyncSession,
+) -> None:
+    owner_record = await insert_user_row(db_session)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=owner_record.id, is_public=True
+    )
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=None,
+    )
+    await db_session.commit()
+
+    accessible_content_item_ids = await _find_accessible_content_item_ids(db_session, None)
+
+    assert content_item_record.id not in accessible_content_item_ids
+
+
+async def test_build_accessible_condition_no_user_does_not_see_future_published_content_item(
+    db_session: AsyncSession,
+) -> None:
+    owner_record = await insert_user_row(db_session)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=owner_record.id, is_public=True
+    )
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=FUTURE_PUBLISHED_AT,
+    )
+    await db_session.commit()
+
+    accessible_content_item_ids = await _find_accessible_content_item_ids(db_session, None)
+
+    assert content_item_record.id not in accessible_content_item_ids
+
+
+async def test_build_accessible_condition_no_user_does_not_see_content_on_private_persona(
+    db_session: AsyncSession,
+) -> None:
+    owner_record = await insert_user_row(db_session)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=owner_record.id, is_public=False
+    )
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=PAST_PUBLISHED_AT,
+    )
+    await db_session.commit()
+
+    accessible_content_item_ids = await _find_accessible_content_item_ids(db_session, None)
+
+    assert content_item_record.id not in accessible_content_item_ids
+
+
+async def test_build_accessible_condition_no_user_does_not_see_content_of_inactive_creator(
+    db_session: AsyncSession,
+) -> None:
+    suspended_owner_record = await insert_user_row(db_session, is_active=False)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=suspended_owner_record.id, is_public=True
+    )
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=suspended_owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=PAST_PUBLISHED_AT,
+    )
+    await db_session.commit()
+
+    accessible_content_item_ids = await _find_accessible_content_item_ids(db_session, None)
+
+    assert content_item_record.id not in accessible_content_item_ids

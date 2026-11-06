@@ -2,7 +2,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
-from apps.api.core.dependencies import AuthUserDep, require_permissions
+from apps.api.core.dependencies import (
+    AuthUserDep,
+    OptionalAuthUserDep,
+    require_permissions,
+)
 from apps.api.core.dtos import EmptyResponseDto, IdentityResponseDto
 from apps.api.domains.personas.dependencies import (
     PersonaServiceDep,
@@ -13,6 +17,7 @@ from apps.api.domains.personas.dtos import (
     PersonaDto,
     PersonaListResponseDto,
     PersonaResponseDto,
+    PublicPersonaResponseDto,
 )
 from libs.permissions.types import PermissionType
 
@@ -42,9 +47,21 @@ async def find_user_persona_list(
 async def find_persona(
     persona_identity: UUID, auth_user: AuthUserDep, persona_service: PersonaServiceDep
 ) -> PersonaResponseDto:
-    """Returns one persona, or 404 when it doesn't exist or the user can't access it."""
+    """Returns one of the signed-in user's own personas in full, or 404 for anyone else's."""
     find_persona_result = await persona_service.find_persona(persona_identity, auth_user)
     return PersonaResponseDto.from_result(find_persona_result)
+
+
+@persona_router.get("/{persona_identity}/public")
+async def find_public_persona(
+    persona_identity: UUID, auth_user: OptionalAuthUserDep, persona_service: PersonaServiceDep
+) -> PublicPersonaResponseDto:
+    """Returns a persona's public view to anyone, signed in or not; 404 unless it is public
+    or the signed-in user's own."""
+    find_public_persona_result = await persona_service.find_public_persona(
+        persona_identity, auth_user
+    )
+    return PublicPersonaResponseDto.from_result(find_public_persona_result)
 
 
 @persona_router.post(

@@ -16,6 +16,7 @@ from libs.blog_posts.results import (
     BlogPostDetailResult,
     CreateBlogPostResult,
     FindUserBlogPostListResult,
+    PublicBlogPostResult,
 )
 from libs.blog_posts.utils import BlogPostValidationUtils
 from libs.content_items.inputs import CreateContentItemInput, UpdateContentItemInput
@@ -109,14 +110,14 @@ class BlogPostService:
     async def find_blog_post(
         self, blog_post_identity: UUID, auth_user: AuthUser
     ) -> BlogPostDetailResult:
-        """The caller's own post or anyone's published public one; NotFoundException otherwise."""
+        """The caller's own post; NotFoundException for anyone else's, published or not."""
         query = (
             select(BlogPostOrm)
             .join(ContentItemOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
             .join(PersonaOrm, ContentItemOrm.persona_id == PersonaOrm.id)
             .where(
                 BlogPostOrm.identity == blog_post_identity,
-                ContentItemQueryUtils.build_accessible_condition(auth_user.id),
+                ContentItemQueryUtils.build_owned_condition(auth_user.id),
             )
             .options(
                 contains_eager(BlogPostOrm.content_item).contains_eager(ContentItemOrm.persona)
@@ -128,6 +129,34 @@ class BlogPostService:
         if blog_post_record is None:
             raise NotFoundException("Blog post not found")
         return BlogPostDetailResult.model_validate(blog_post_record, from_attributes=True)
+
+    async def find_public_blog_post(
+        self, blog_post_identity: UUID, auth_user: AuthUser | None
+    ) -> PublicBlogPostResult:
+        """The caller's own post or anyone's published public one, flagged with whether the
+        caller owns it; NotFoundException otherwise."""
+        auth_user_id = auth_user.id if auth_user is not None else None
+        query = (
+            select(BlogPostOrm)
+            .join(ContentItemOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
+            .join(PersonaOrm, ContentItemOrm.persona_id == PersonaOrm.id)
+            .where(
+                BlogPostOrm.identity == blog_post_identity,
+                ContentItemQueryUtils.build_accessible_condition(auth_user_id),
+            )
+            .options(
+                contains_eager(BlogPostOrm.content_item).contains_eager(ContentItemOrm.persona)
+            )
+        )
+        query_result = await self._db_session.execute(query)
+        blog_post_record = query_result.scalar_one_or_none()
+
+        if blog_post_record is None:
+            raise NotFoundException("Blog post not found")
+        return PublicBlogPostResult(
+            blog_post=BlogPostDetailResult.model_validate(blog_post_record, from_attributes=True),
+            is_owner=auth_user_id is not None and blog_post_record.created_by_id == auth_user_id,
+        )
 
     async def find_user_blog_post_list(
         self, auth_user: AuthUser, persona_identity: UUID | None

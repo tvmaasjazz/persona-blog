@@ -13,6 +13,7 @@ from libs.personas.results import (
     FindUserPersonaListResult,
     FindUserPersonaResult,
     PersonaDetailResult,
+    PublicPersonaResult,
 )
 
 
@@ -51,10 +52,34 @@ class PersonaService:
     async def find_persona(
         self, persona_identity: UUID, auth_user: AuthUser
     ) -> PersonaDetailResult:
-        """Returns the caller's own persona or anyone's public one; NotFoundException
-        otherwise."""
-        persona_record = await self._find_accessible_persona_record(persona_identity, auth_user)
+        """Returns the caller's own persona; NotFoundException for anyone else's, public or not."""
+        persona_query = select(PersonaOrm).where(
+            PersonaOrm.identity == persona_identity,
+            PersonaOrm.created_by_id == auth_user.id,
+        )
+        persona_query_result = await self._db_session.execute(persona_query)
+        persona_record = persona_query_result.scalar_one_or_none()
+
+        if persona_record is None:
+            raise NotFoundException("Persona not found")
         return PersonaDetailResult.model_validate(persona_record, from_attributes=True)
+
+    async def find_public_persona(
+        self, persona_identity: UUID, auth_user: AuthUser | None
+    ) -> PublicPersonaResult:
+        """Returns the caller's own persona or anyone's public one without its owner-only
+        fields; NotFoundException otherwise."""
+        persona_record = await self._find_accessible_persona_record(persona_identity, auth_user)
+        return PublicPersonaResult(
+            identity=persona_record.identity,
+            name=persona_record.name,
+            bio=persona_record.bio,
+            avatar_url=persona_record.avatar_url,
+            is_public=persona_record.is_public,
+            is_owner=auth_user is not None and persona_record.created_by_id == auth_user.id,
+            created_at=persona_record.created_at,
+            updated_at=persona_record.updated_at,
+        )
 
     async def find_user_persona_list(self, auth_user: AuthUser) -> FindUserPersonaListResult:
         """The caller's own personas, newest first; empty when they have none."""
@@ -125,21 +150,25 @@ class PersonaService:
         await self._db_session.execute(persona_soft_delete_update)
 
     async def _find_accessible_persona_record(
-        self, persona_identity: UUID, auth_user: AuthUser
+        self, persona_identity: UUID, auth_user: AuthUser | None
     ) -> PersonaOrm:
         """Finds the caller's own or any public persona of an active creator; someone else's
-        private one, or a suspended creator's public one, is not found."""
+        private one, or a suspended creator's public one, is not found. With no caller,
+        only public ones."""
         is_creator_active = (
             select(UserOrm.id)
             .where(UserOrm.id == PersonaOrm.created_by_id, UserOrm.is_active)
             .exists()
         )
+        is_public_and_creator_active = and_(PersonaOrm.is_public, is_creator_active)
+        if auth_user is None:
+            access_condition = is_public_and_creator_active
+        else:
+            access_condition = or_(
+                PersonaOrm.created_by_id == auth_user.id, is_public_and_creator_active
+            )
         persona_query = select(PersonaOrm).where(
-            PersonaOrm.identity == persona_identity,
-            or_(
-                PersonaOrm.created_by_id == auth_user.id,
-                and_(PersonaOrm.is_public, is_creator_active),
-            ),
+            PersonaOrm.identity == persona_identity, access_condition
         )
         persona_query_result = await self._db_session.execute(persona_query)
         persona_record = persona_query_result.scalar_one_or_none()

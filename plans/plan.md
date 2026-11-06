@@ -237,13 +237,27 @@ went to.
 One PR. A shared link to a persona or a post works for anyone, signed in or not. It
 pages nothing, so a reviewer only has to think about who can see what.
 
-- **Open routes:** `GET /personas/{persona_identity}` and
-  `GET /blog-posts/{blog_post_identity}` take no permission, and signing in is
-  optional. A signed-in owner still sees their own private persona or post, and anyone
-  else gets a 404 for one, as `find_persona` and `find_blog_post` do today. They join
-  the open routes list in `fastapi-structure.md` › The acting user and
-  `test_app_factory.py`. The owner's own lists, writes and generation keep their
-  permissions.
+- **Two routes for each, one shape each.** The owner's route returns the full record
+  for the edit page; an open `/public` route beside it, in the same router, returns
+  what a reader sees:
+
+  | Route | Who | Returns |
+  | --- | --- | --- |
+  | `GET /personas/{persona_identity}` | The owner, `PERSONA_READ`; 404 for anyone else | Every field |
+  | `GET /personas/{persona_identity}/public` | Anyone, signing in optional | Name, bio, avatar, `is_public`, dates and `is_owner`; not the background or writing settings |
+  | `GET /blog-posts/{blog_post_identity}` | The owner, `BLOG_POST_READ`; 404 for anyone else | The post |
+  | `GET /blog-posts/{blog_post_identity}/public` | Anyone, signing in optional | The post and `is_owner` |
+
+  A `/public` route shows the signed-in owner their own private persona or post, and
+  anyone else gets a 404 for one. `is_owner` tells the view page whether to show an
+  edit link. The frontend's URL picks the route, so a pasted link or a refresh never
+  has to guess: the view page (`/personas/:id`) always calls `/public`, and the edit
+  page (`/personas/:id/edit`) the owner's route. The `/public` routes join
+  `OPEN_ROUTES` in `test_app_factory.py`. The owner's own lists, writes and generation
+  keep their permissions.
+- **Optional sign-in:** with no session cookie the caller is signed out. A cookie
+  whose session is expired or invalid is still a 401, as on every other route, and the
+  frontend sends the reader to sign in again.
 - **The read permissions stay.** Every role that signs in keeps `PERSONA_READ` and
   `BLOG_POST_READ`, but the open routes don't check them for now. They're kept for
   later rules that may check them again, such as showing a signed-out reader only half
@@ -253,10 +267,16 @@ pages nothing, so a reviewer only has to think about who can see what.
   private, so they leave the feed and a link to one returns a 404 to anyone but the
   owner. Making the persona public again brings back exactly the posts that were public,
   at once. Every query that shows posts to others checks both flags, as
-  `ContentItemQueryUtils.build_accessible_condition` does today. A private persona
-  still can't make a post public, as today. The frontend warns when a persona with
-  public posts is made private: "Its 4 public posts will be hidden until the persona is
-  public again."
+  `ContentItemQueryUtils.build_accessible_condition` does today.
+- **Editing a post under a private persona:** a private persona can't make a post
+  public, but a post that's already public stays editable and keeps `is_public = true`;
+  only a change from private to public is refused. A post's response returns
+  `is_public` as stored, so the owner sees which posts come back, and the frontend,
+  which already has the persona, labels one "Public · hidden while the persona is
+  private".
+- **The frontend warns** when a persona is made private: "Its public posts will be
+  hidden until the persona is public again." The number of them comes later, from item
+  7's paging with a public filter and a total.
 - A suspended owner's personas and posts stay hidden from others (item 4).
 
 ### 7. Paging and search (backend)

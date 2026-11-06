@@ -5,7 +5,11 @@ from uuid import UUID
 from pydantic import BaseModel, StringConstraints
 
 from libs.personas.inputs import PersonaInput
-from libs.personas.results import FindUserPersonaListResult, PersonaDetailResult
+from libs.personas.results import (
+    FindUserPersonaListResult,
+    PersonaDetailResult,
+    PublicPersonaResult,
+)
 
 PersonaNameStr = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
@@ -73,6 +77,30 @@ class PersonaResponseDto(BaseModel):
             is_public=persona_detail_result.is_public,
             created_at=persona_detail_result.created_at,
             updated_at=persona_detail_result.updated_at,
+        )
+
+
+class PublicPersonaResponseDto(BaseModel):
+    identity: UUID
+    name: str
+    bio: str
+    avatar_url: str | None
+    is_public: bool
+    is_owner: bool
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_result(cls, public_persona_result: PublicPersonaResult) -> PublicPersonaResponseDto:
+        return cls(
+            identity=public_persona_result.identity,
+            name=public_persona_result.name,
+            bio=public_persona_result.bio,
+            avatar_url=public_persona_result.avatar_url,
+            is_public=public_persona_result.is_public,
+            is_owner=public_persona_result.is_owner,
+            created_at=public_persona_result.created_at,
+            updated_at=public_persona_result.updated_at,
         )
 
 
