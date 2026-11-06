@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
 
 from libs.auth.results import AuthUser
-from libs.blog_posts.constants import PUBLIC_BLOG_POST_LIST_SPEC
+from libs.blog_posts.constants import PUBLIC_BLOG_POST_LIST_CONFIG
 from libs.blog_posts.exceptions import BlogPostGenerateTextRunOutputInvalidException
 from libs.blog_posts.inputs import (
     CreateBlogPostFromGenerateTextRunInput,
@@ -183,7 +183,7 @@ class BlogPostService:
         )
         find_page_result = await self._page_query_service.find_page(
             all_records_query,
-            PUBLIC_BLOG_POST_LIST_SPEC,
+            PUBLIC_BLOG_POST_LIST_CONFIG,
             find_public_blog_post_list_input,
             load_options=(
                 contains_eager(BlogPostOrm.content_item).contains_eager(ContentItemOrm.persona),

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.interfaces import ExecutableOption
 
 from libs.core.inputs import ListInput
-from libs.database.list_query_spec import ListQuerySpec
+from libs.database.list_query_config import ListQueryConfig
 from libs.database.results import FindPageResult
 from libs.database.utils import PageQueryUtils
 
@@ -20,7 +20,7 @@ class PageQueryService:
     async def find_page(
         self,
         all_records_query: Select[Any],
-        list_query_spec: ListQuerySpec,
+        list_query_config: ListQueryConfig,
         list_input: ListInput,
         load_options: Sequence[ExecutableOption] = (),
     ) -> FindPageResult:
@@ -29,10 +29,10 @@ class PageQueryService:
 
         # Filter and search the records, then slice out the page with a window total
         filtered_query = PageQueryUtils.build_filtered_query(
-            all_records_query, list_query_spec, list_input
+            all_records_query, list_query_config, list_input
         )
         page_query = PageQueryUtils.build_page_query(
-            filtered_query, list_query_spec, list_input
+            filtered_query, list_query_config, list_input
         ).options(*load_options)
         page_query_result = await self._db_session.execute(page_query)
         page_rows = page_query_result.all()

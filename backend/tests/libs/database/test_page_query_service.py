@@ -7,7 +7,7 @@ from sqlalchemy.orm import contains_eager
 from libs.core.inputs import ListInput, PageInput
 from libs.core.results import PageInfoResult
 from libs.core.types import SortDirectionType
-from libs.database.list_query_spec import ListQuerySpec
+from libs.database.list_query_config import ListQueryConfig
 from libs.database.orm import ContentItemOrm, PersonaOrm, UserOrm
 from libs.database.results import FindPageResult
 from libs.database.services import PageQueryService
@@ -33,14 +33,14 @@ class UserListInput(ListInput):
     sort_by: UserSortType = UserSortType.EMAIL
 
 
-USER_LIST_SPEC = ListQuerySpec(
+USER_LIST_CONFIG = ListQueryConfig(
     search_columns=(UserOrm.email,),
     sort_columns={UserSortType.EMAIL: UserOrm.email},
     filters={},
     tiebreak_column=UserOrm.id,
 )
 
-CONTENT_ITEM_LIST_SPEC = ListQuerySpec(
+CONTENT_ITEM_LIST_CONFIG = ListQueryConfig(
     search_columns=(PersonaOrm.name,),
     sort_columns={ContentItemSortType.CREATED: ContentItemOrm.id},
     filters={},
@@ -75,7 +75,7 @@ async def test_find_page_returns_the_page_records_in_order_with_page_info(
     )
 
     find_page_result = await page_query_service.find_page(
-        _build_user_base_query(), USER_LIST_SPEC, user_list_input
+        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
     )
 
     assert find_page_result == FindPageResult(
@@ -89,7 +89,7 @@ async def test_find_page_empty_first_page_returns_total_zero(db_session: AsyncSe
     user_list_input = _build_user_list_input(build_page_input(page=1, page_size=2))
 
     find_page_result = await page_query_service.find_page(
-        _build_user_base_query(), USER_LIST_SPEC, user_list_input
+        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
     )
 
     assert find_page_result == FindPageResult(
@@ -105,7 +105,7 @@ async def test_find_page_empty_page_past_the_end_returns_the_full_total(
     user_list_input = _build_user_list_input(build_page_input(page=9, page_size=2))
 
     find_page_result = await page_query_service.find_page(
-        _build_user_base_query(), USER_LIST_SPEC, user_list_input
+        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
     )
 
     assert find_page_result == FindPageResult(
@@ -121,7 +121,7 @@ async def test_find_page_search_counts_only_matching_rows(db_session: AsyncSessi
     )
 
     find_page_result = await page_query_service.find_page(
-        _build_user_base_query(), USER_LIST_SPEC, user_list_input
+        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
     )
 
     assert [user_record.email for user_record in find_page_result.records] == [
@@ -154,7 +154,7 @@ async def test_find_page_load_options_load_the_relationship_on_the_records(
 
     find_page_result = await page_query_service.find_page(
         all_records_query,
-        CONTENT_ITEM_LIST_SPEC,
+        CONTENT_ITEM_LIST_CONFIG,
         content_item_list_input,
         load_options=(contains_eager(ContentItemOrm.persona),),
     )

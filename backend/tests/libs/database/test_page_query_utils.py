@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from libs.core.inputs import ListInput, PageInput
 from libs.core.results import PageInfoResult
 from libs.core.types import FilterOperatorType, SortDirectionType
-from libs.database.list_query_spec import ListFilter, ListQuerySpec
+from libs.database.list_query_config import ListFilterConfig, ListQueryConfig
 from libs.database.orm import UserOrm
 from libs.database.utils import PageQueryUtils
 from tests.factories.core import build_page_input
@@ -30,18 +30,22 @@ class UserListInput(ListInput):
     has_last_login_at: bool | None = None
 
 
-USER_LIST_SPEC = ListQuerySpec(
+USER_LIST_CONFIG = ListQueryConfig(
     search_columns=(UserOrm.email, UserOrm.display_name),
     sort_columns={
         UserSortType.EMAIL: UserOrm.email,
         UserSortType.CREDIT_BALANCE: UserOrm.credit_balance_usd,
     },
     filters={
-        "email": ListFilter(UserOrm.email, FilterOperatorType.EQUALS),
-        "emails": ListFilter(UserOrm.email, FilterOperatorType.IN),
-        "min_credit_balance_usd": ListFilter(UserOrm.credit_balance_usd, FilterOperatorType.GTE),
-        "max_credit_balance_usd": ListFilter(UserOrm.credit_balance_usd, FilterOperatorType.LT),
-        "has_last_login_at": ListFilter(UserOrm.last_login_at, FilterOperatorType.HAS_VALUE),
+        "email": ListFilterConfig(UserOrm.email, FilterOperatorType.EQUALS),
+        "emails": ListFilterConfig(UserOrm.email, FilterOperatorType.IN),
+        "min_credit_balance_usd": ListFilterConfig(
+            UserOrm.credit_balance_usd, FilterOperatorType.GTE
+        ),
+        "max_credit_balance_usd": ListFilterConfig(
+            UserOrm.credit_balance_usd, FilterOperatorType.LT
+        ),
+        "has_last_login_at": ListFilterConfig(UserOrm.last_login_at, FilterOperatorType.HAS_VALUE),
     },
     tiebreak_column=UserOrm.id,
 )
@@ -97,9 +101,9 @@ async def _find_filtered_emails(
     db_session: AsyncSession, user_list_input: UserListInput
 ) -> list[str]:
     filtered_query = PageQueryUtils.build_filtered_query(
-        _build_user_base_query(), USER_LIST_SPEC, user_list_input
+        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
     )
-    page_query = PageQueryUtils.build_page_query(filtered_query, USER_LIST_SPEC, user_list_input)
+    page_query = PageQueryUtils.build_page_query(filtered_query, USER_LIST_CONFIG, user_list_input)
     page_query_result = await db_session.execute(page_query)
     return [page_row[0].email for page_row in page_query_result.all()]
 
@@ -178,7 +182,7 @@ async def test_build_filtered_query_search_matches_any_search_column_for_every_w
     user_list_input = _build_user_list_input(page_input=build_page_input(search=search))
 
     filtered_query = PageQueryUtils.build_filtered_query(
-        base_query, USER_LIST_SPEC, user_list_input
+        base_query, USER_LIST_CONFIG, user_list_input
     )
 
     filtered_query_result = await db_session.execute(filtered_query.order_by(UserOrm.email))
@@ -215,7 +219,7 @@ async def test_build_page_query_orders_by_the_sort_column_in_the_direction(
     )
 
     page_query = PageQueryUtils.build_page_query(
-        _build_user_base_query(), USER_LIST_SPEC, user_list_input
+        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
     )
 
     page_query_result = await db_session.execute(page_query)
@@ -233,7 +237,7 @@ async def test_build_page_query_offset_is_page_minus_one_times_page_size(
     )
 
     page_query = PageQueryUtils.build_page_query(
-        _build_user_base_query(), USER_LIST_SPEC, user_list_input
+        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
     )
 
     page_query_result = await db_session.execute(page_query)
@@ -252,7 +256,7 @@ async def test_build_page_query_total_column_counts_all_filtered_rows_on_every_r
     )
 
     page_query = PageQueryUtils.build_page_query(
-        _build_user_base_query(), USER_LIST_SPEC, user_list_input
+        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
     )
 
     page_query_result = await db_session.execute(page_query)
@@ -277,7 +281,7 @@ async def test_build_page_query_equal_sort_values_break_ties_by_tiebreak_column_
     )
 
     page_query = PageQueryUtils.build_page_query(
-        _build_user_base_query(), USER_LIST_SPEC, user_list_input
+        _build_user_base_query(), USER_LIST_CONFIG, user_list_input
     )
 
     page_query_result = await db_session.execute(page_query)
@@ -293,7 +297,7 @@ async def test_build_count_query_counts_every_matching_row(db_session: AsyncSess
     await _insert_page_query_users(db_session)
     filtered_query = PageQueryUtils.build_filtered_query(
         _build_user_base_query(),
-        USER_LIST_SPEC,
+        USER_LIST_CONFIG,
         _build_user_list_input(min_credit_balance_usd=Decimal("2.00")),
     )
 

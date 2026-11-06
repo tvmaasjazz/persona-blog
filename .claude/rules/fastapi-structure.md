@@ -20,7 +20,7 @@ backend/
 │   ├── core/            # domain-free: exceptions.py, inputs.py, results.py, types.py,
 │   │                    #   services/, utils/
 │   ├── database/        # BaseOrm, session factory, orm/: see database.md;
-│   │                    #   list_query_spec.py, results.py, services/ (PageQueryService),
+│   │                    #   list_query_config.py, results.py, services/ (PageQueryService),
 │   │                    #   utils/ (DatabaseClockUtils, PageQueryUtils)
 │   └── <domain>/        # services.py or services/, inputs.py, results.py, settings.py,
 │                        #   types.py, constants.py; as needed: exceptions.py, utils/,
@@ -285,7 +285,7 @@ calls `set_cookie()` or `delete_cookie()` on it, and still returns its `Response
 
 Every list pages, sorts, filters and searches the same way. The pattern is
 `find_public_blog_post_list`, from `apps/api/domains/blog_posts/router.py` down to
-`PUBLIC_BLOG_POST_LIST_SPEC`.
+`PUBLIC_BLOG_POST_LIST_CONFIG`.
 
 - The `<Entity>FetchAllQueryDto` extends `PageQueryDto` and adds `sort_by`, typed as
   the list's `<Entity>SortType` with its default, plus the list's filters. Its
@@ -302,12 +302,12 @@ Every list pages, sorts, filters and searches the same way. The pattern is
   | Has a value | `has_<field>`                    | `HAS_VALUE`  |
 
 - Filters only narrow. Who may see what stays in the service's all-records query.
-- A `ListQuerySpec` in the lib's `constants.py` names the search columns, each sort
-  value's column, each filter field's column and operator, and the tiebreak column.
-  Add each new spec and its `Input` to the spec guard (`pytest-testing.md` › What to
-  write for each source file).
+- A `ListQueryConfig` in the lib's `constants.py` names the search columns, each sort
+  value's column, each filter field's `ListFilterConfig` (column and operator), and the
+  tiebreak column. Add each new one and its `Input` to the config guard test
+  (`pytest-testing.md` › What to write for each source file).
 - The service builds its all-records query (the joins and who may see what) and makes
-  one call, `PageQueryService.find_page`, passing the spec, its `Input`, and its loader
+  one call, `PageQueryService.find_page`, passing the `ListQueryConfig`, its `Input`, and its loader
   options as `load_options`. `find_page` counts with `count(*) OVER ()` on the page
   query, and runs a separate count only for an empty page past the first.
 - The `<Entity>ListResponseDto` extends `PageResponseDto`, and its `Result` carries

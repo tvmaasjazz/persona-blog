@@ -18,7 +18,8 @@ Every class ends in the suffix for what it is:
 | Suffix       | Use for                                      | Example                          |
 | ------------ | -------------------------------------------- | -------------------------------- |
 | `Type`       | Enums                                        | `TextType.BLOG_POST`             |
-| `Settings`   | Config models: the root `AppSettings` (`BaseSettings`) and each domain's frozen `BaseModel` | `HumanizerSettings` |
+| `Settings`   | Values loaded from `config.toml` and env vars: the root `AppSettings` (`BaseSettings`) and each domain's frozen `BaseModel` | `HumanizerSettings` |
+| `Config`     | A fixed declaration in code that a `Utils` or service reads, such as which columns a list searches (`libs/` only) | `ListQueryConfig` |
 | `Prompt`     | Builds one step's system and user prompt     | `BlogPostDraftPrompt`            |
 | `OutputFormat` | Normalizes and validates one step's LLM output | `BlogPostBodyOutputFormat`     |
 | `Input`      | A service method's payload (`libs/` only)    | `CreateUserInput`                |

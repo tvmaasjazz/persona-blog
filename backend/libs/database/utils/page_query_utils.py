@@ -8,7 +8,7 @@ from sqlalchemy.sql.elements import UnaryExpression
 from libs.core.inputs import ListInput, PageInput
 from libs.core.results import PageInfoResult
 from libs.core.types import FilterOperatorType, SortDirectionType
-from libs.database.list_query_spec import ListQuerySpec
+from libs.database.list_query_config import ListQueryConfig
 
 MAX_SEARCH_WORD_COUNT = 8
 
@@ -33,12 +33,12 @@ ORDER_BUILDER_BY_SORT_DIRECTION: dict[
 
 
 class PageQueryUtils:
-    """Builds the filtered, counted and paged queries of a list from its ListQuerySpec."""
+    """Builds the filtered, counted and paged queries of a list from its ListQueryConfig."""
 
     @staticmethod
     def build_filtered_query(
         all_records_query: Select[Any],
-        list_query_spec: ListQuerySpec,
+        list_query_config: ListQueryConfig,
         list_input: ListInput,
     ) -> Select[Any]:
         """Adds the list input's filters that are set and the search words to the query."""
@@ -46,12 +46,14 @@ class PageQueryUtils:
         filtered_query = all_records_query
 
         # Filters: an unset (None) field adds no condition
-        for field_name, list_filter in list_query_spec.filters.items():
+        for field_name, list_filter_config in list_query_config.filters.items():
             filter_value = getattr(list_input, field_name)
             if filter_value is None:
                 continue
-            build_condition = CONDITION_BUILDER_BY_OPERATOR[list_filter.operator]
-            filtered_query = filtered_query.where(build_condition(list_filter.column, filter_value))
+            build_condition = CONDITION_BUILDER_BY_OPERATOR[list_filter_config.operator]
+            filtered_query = filtered_query.where(
+                build_condition(list_filter_config.column, filter_value)
+            )
 
         # Search: every word must match at least one search column
         search_words = (page_input.search or "").split()[:MAX_SEARCH_WORD_COUNT]
@@ -61,7 +63,7 @@ class PageQueryUtils:
                     or_(
                         *[
                             search_column.icontains(search_word, autoescape=True)
-                            for search_column in list_query_spec.search_columns
+                            for search_column in list_query_config.search_columns
                         ]
                     )
                     for search_word in search_words
@@ -74,21 +76,21 @@ class PageQueryUtils:
     @staticmethod
     def build_page_query(
         filtered_query: Select[Any],
-        list_query_spec: ListQuerySpec,
+        list_query_config: ListQueryConfig,
         list_input: ListInput,
     ) -> Select[Any]:
         """Adds the total of all filtered rows, orders by the sort column then the tiebreak
         column, and slices out one page."""
         page_input = list_input.page_input
         build_order = ORDER_BUILDER_BY_SORT_DIRECTION[page_input.sort_direction]
-        sort_column = list_query_spec.sort_columns[list_input.sort_by]
+        sort_column = list_query_config.sort_columns[list_input.sort_by]
         offset = (page_input.page - 1) * page_input.page_size
         return (
             # The window runs before LIMIT and OFFSET, so each row carries the full total
             filtered_query.add_columns(func.count().over().label("total"))
             .order_by(
                 build_order(sort_column).nulls_last(),
-                build_order(list_query_spec.tiebreak_column),
+                build_order(list_query_config.tiebreak_column),
             )
             .limit(page_input.page_size)
             .offset(offset)

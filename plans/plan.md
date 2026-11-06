@@ -330,19 +330,21 @@ sentence in DTOs › Inbound, so items 9 and 10 follow it.
   (`ContentItemQueryUtils.build_accessible_condition`, ownership) stays in the
   service's base query and is never a filter. A user-built filter menu, if one comes,
   adds a `POST …/search` body of `{property, operator, value}` checked against the
-  same spec, with the flat fields kept for filters a page fixes.
+  same `ListQueryConfig`, with the flat fields kept for filters a page fixes.
 - **Search:** the phrase is split into words, at most 8, and each word must match at
   least one of the list's search fields, case-insensitively (`ILIKE`, with `%` and `_`
   escaped so they match themselves). No full-text search yet: a `pg_trgm` index speeds
   up the same query when lists grow, and full-text search, for ranking and stemming,
   would change nothing in the contract.
-- **One spec per list:** a `ListQuerySpec` in the lib's `constants.py` declares the
-  list's search columns, each sort value's column, each filter field's column and
-  operator, and the tiebreak column. A pure `PageQueryUtils` in
-  `libs/database/utils/` builds the page query and the count query from the service's
-  base `select()`, the spec and the list's `Input`; the service runs both, one after
-  the other on its session. A test checks that every filter key in a spec is a field
-  on its `Input`. `SortDirectionType` and `FilterOperatorType` live in
+- **One config per list:** a `ListQueryConfig` in the lib's `constants.py` declares
+  the list's search columns, each sort value's column, each filter field's column and
+  operator, and the tiebreak column. The service builds its all-records query (the
+  joins and who may see what) and makes one call, `PageQueryService.find_page`, which
+  filters, sorts and pages it. The total comes from `count(*) OVER ()` on the page
+  query itself, which Postgres computes before `LIMIT`; only an empty page past the
+  first runs a separate count. Running the count beside the page on a second session
+  would cost a second connection and could disagree with the page, to save one round
+  trip. A test checks that every filter key in a config is a field on its `Input`. `SortDirectionType` and `FilterOperatorType` live in
   `libs/core/types.py`, since the libs use them and can't import from `apps/`.
 - **A persona's page:** `GET /blog-posts/public`, an open route on `OPEN_ROUTES`,
   lists the posts its caller may see under `build_accessible_condition`: other
