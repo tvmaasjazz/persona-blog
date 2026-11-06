@@ -7,7 +7,7 @@
 # each response and the post's engagement row, and checks what it can. Run from
 # backend/:
 #
-#   ./scripts/e2e/blog_post_views.sh
+#   ./scripts/e2e/content_item_views.sh
 #
 # It signs in as the first non-system user, and as a dedicated second user
 # (verify-second-user@persona-blog.invalid) that it creates in the local database the
@@ -283,6 +283,11 @@ PRIVATE_POST_BODY="$(request "$OWNER_SESSION" 201 "create private post" -X POST 
   -d "$(json_body persona_identity=@PERSONA_IDENTITY title=@PRIVATE_POST_TITLE body=@POST_BODY \
         is_public=false published_at=@NOW_ISO)")"
 PRIVATE_POST_IDENTITY="$(echo "$PRIVATE_POST_BODY" | read_json_field identity)"
+# A view is recorded against the post's content item, which the post's response names
+PUBLIC_CONTENT_ITEM_IDENTITY="$(request "$OWNER_SESSION" 200 "fetch public post" \
+  "$API_URL/blog-posts/$PUBLIC_POST_IDENTITY" | read_json_field content_item_identity)"
+PRIVATE_CONTENT_ITEM_IDENTITY="$(request "$OWNER_SESSION" 200 "fetch private post" \
+  "$API_URL/blog-posts/$PRIVATE_POST_IDENTITY" | read_json_field content_item_identity)"
 
 step "2. A new post has an engagement row and a score, with no views"
 expect_engagement "$PUBLIC_POST_IDENTITY" 0 0 0 0
@@ -290,7 +295,7 @@ STARTING_FEED_SCORE="$LAST_FEED_SCORE"
 [ "$STARTING_FEED_SCORE" != "None" ] || fail "a published post has no score"
 pass "the published post starts with a score"
 
-VIEW_URL="$API_URL/blog-posts/$PUBLIC_POST_IDENTITY/view"
+VIEW_URL="$API_URL/content-items/$PUBLIC_CONTENT_ITEM_IDENTITY/view"
 view_body() { json_body read_percent="$1"; }
 
 step "3. A signed-out reader opens the post — one view"
@@ -340,10 +345,10 @@ step "10. What can't be recorded"
 request_signed_out 422 "a read_percent that isn't a quarter" -X PUT "$VIEW_URL" \
   -H 'Content-Type: application/json' -d "$(view_body 30)" >/dev/null
 request_signed_out 404 "signed out views the private post" \
-  -X PUT "$API_URL/blog-posts/$PRIVATE_POST_IDENTITY/view" \
+  -X PUT "$API_URL/content-items/$PRIVATE_CONTENT_ITEM_IDENTITY/view" \
   -H 'Content-Type: application/json' -d "$(view_body 0)" >/dev/null
 request "$OTHER_SESSION" 404 "second user views the private post" \
-  -X PUT "$API_URL/blog-posts/$PRIVATE_POST_IDENTITY/view" \
+  -X PUT "$API_URL/content-items/$PRIVATE_CONTENT_ITEM_IDENTITY/view" \
   -H 'Content-Type: application/json' -d "$(view_body 0)" >/dev/null
 EXPIRED_STATUS="$(curl -s -o /dev/null -w '%{http_code}' -b "sid=not-a-real-session" -X PUT "$VIEW_URL" \
   -H 'Content-Type: application/json' -d "$(view_body 0)")"

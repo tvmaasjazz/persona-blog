@@ -46,8 +46,9 @@ class ContentViewService:
             updated_by_id=viewer_id,
         )
         content_item_view_upsert = content_item_view_insert.on_conflict_do_update(
-            # "Already viewed today" means a clash on the viewer kind's partial unique index.
-            # Postgres finds that index from its columns and its WHERE, so both are repeated
+            # The viewer already has a view today when a live row of their viewer kind has the
+            # same item, viewer and day. Postgres checks that with the viewer kind's partial
+            # unique index, found from its columns (index_elements) and WHERE (index_where)
             index_elements=[
                 ContentItemViewOrm.content_item_id,
                 viewer_column,

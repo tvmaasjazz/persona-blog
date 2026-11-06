@@ -14,6 +14,10 @@ class CreateContentItemInput(BaseModel):
     generate_text_run_identity: UUID | None
 
 
+class RecordContentItemViewInput(BaseModel):
+    read_percent: int
+
+
 class UpdateContentItemInput(BaseModel):
     is_public: bool
     published_at: datetime | None

@@ -27,10 +27,6 @@ class CreateBlogPostFromGenerateTextRunInput(BaseModel):
     published_at: datetime | None
 
 
-class RecordBlogPostViewInput(BaseModel):
-    read_percent: int
-
-
 class UpdateBlogPostInput(BaseModel):
     title: str
     subtitle: str | None

@@ -6,6 +6,7 @@ from apps.api.core.types import EnvironmentType
 from apps.api.domains.admin.router import admin_router
 from apps.api.domains.auth.router import auth_router
 from apps.api.domains.blog_posts.router import blog_post_router
+from apps.api.domains.content_items.router import content_item_router
 from apps.api.domains.dev_llm.router import dev_llm_router
 from apps.api.domains.generate_text.router import generate_text_router
 from apps.api.domains.google_auth.router import google_auth_router
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(user_router)
     fastapi_app.include_router(persona_router)
     fastapi_app.include_router(blog_post_router)
+    fastapi_app.include_router(content_item_router)
     fastapi_app.include_router(generate_text_router)
     fastapi_app.include_router(admin_router)
     if app_settings.environment is EnvironmentType.DEVELOPMENT:

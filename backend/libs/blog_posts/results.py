@@ -15,6 +15,7 @@ class BlogPostPersonaResult(BaseModel):
 
 
 class BlogPostContentItemResult(BaseModel):
+    identity: UUID
     is_public: bool
     published_at: datetime | None
     persona: BlogPostPersonaResult

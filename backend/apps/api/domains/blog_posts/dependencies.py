@@ -10,50 +10,12 @@ from apps.api.domains.blog_posts.dtos import (
     CreateBlogPostDto,
     CreateBlogPostFromGenerateTextRunDto,
 )
-from libs.blog_posts.services import (
-    BlogPostService,
-    BlogPostValidationService,
-    BlogPostViewService,
-)
-from libs.content_engagement.services import ContentEngagementService, ContentViewService
+from apps.api.domains.content_items.dependencies import ContentEngagementServiceDep
+from libs.blog_posts.services import BlogPostService, BlogPostValidationService
 from libs.content_items.services import ContentItemService, ContentItemValidationService
 from libs.database.services import PaginationService
 from libs.generate_text.services import GenerateTextRunService, GenerateTextStepService
 from libs.personas.services import PersonaService
-
-
-def get_content_engagement_service(
-    request: Request, db_session: DbSessionDep
-) -> ContentEngagementService:
-    app_settings: AppSettings = request.app.state.settings
-    return ContentEngagementService(
-        db_session=db_session, content_engagement_settings=app_settings.content_engagement
-    )
-
-
-ContentEngagementServiceDep = Annotated[
-    ContentEngagementService, Depends(get_content_engagement_service)
-]
-
-
-def get_content_view_service(
-    db_session: DbSessionDep, content_engagement_service: ContentEngagementServiceDep
-) -> ContentViewService:
-    return ContentViewService(
-        db_session=db_session, content_engagement_service=content_engagement_service
-    )
-
-
-ContentViewServiceDep = Annotated[ContentViewService, Depends(get_content_view_service)]
-
-
-def get_blog_post_view_service(
-    db_session: DbSessionDep, content_view_service: ContentViewServiceDep
-) -> BlogPostViewService:
-    return BlogPostViewService(db_session=db_session, content_view_service=content_view_service)
-
-
-BlogPostViewServiceDep = Annotated[BlogPostViewService, Depends(get_blog_post_view_service)]
 
 
 def get_content_item_service(

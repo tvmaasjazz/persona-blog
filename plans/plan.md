@@ -380,8 +380,9 @@ One PR. Simple counts of how posts are read, and a score to order the homepage b
     Readers who share an IP and browser count as one; that's accepted. The key is
     worked out by a dependency beside the optional auth user, not by anything
     content-specific, so another signed-out feature can use it.
-- **Recording:** one open route, `PUT /blog-posts/{blog_post_identity}/view` with
-  `read_percent` (0, 25, 50, 75 or 100). The frontend calls it with 0 when a post opens
+- **Recording:** one open route, `PUT /content-items/{content_item_identity}/view` with
+  `read_percent` (0, 25, 50, 75 or 100), for every content type. Blog post responses
+  return `content_item_identity` for it. The frontend calls it with 0 when a post opens
   and again at each quarter as the reader scrolls. It creates today's view or updates
   it, and the stored percent only goes up. Signed-out views can be inflated until rate
   limiting (Phase 2 › 3); that's accepted.
