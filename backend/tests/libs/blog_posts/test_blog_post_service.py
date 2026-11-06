@@ -24,6 +24,7 @@ from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.core.results import PageInfoResult
 from libs.core.types import SortDirectionType
 from libs.database.orm import BlogPostOrm, ContentItemOrm, GenerateTextRunOrm
+from libs.database.services import PageQueryService
 from libs.generate_text.services import GenerateTextRunService, GenerateTextStepService
 from libs.generate_text.types import GenerateTextRunStatusType, GenerateTextStepStatusType
 from libs.personas.services import PersonaService
@@ -57,6 +58,7 @@ def _build_blog_post_service(
         generate_text_step_service=GenerateTextStepService(
             db_session_factory=db_session_factory, credit_settings=build_credit_settings()
         ),
+        page_query_service=PageQueryService(db_session=db_session),
     )
 
 

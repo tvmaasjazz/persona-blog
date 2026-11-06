@@ -3,10 +3,10 @@ from decimal import Decimal
 from enum import StrEnum
 
 import pytest
-from pydantic import BaseModel
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from libs.core.inputs import ListInput, PageInput
 from libs.core.results import PageInfoResult
 from libs.core.types import FilterOperatorType, SortDirectionType
 from libs.database.list_query_spec import ListFilter, ListQuerySpec
@@ -21,7 +21,8 @@ class UserSortType(StrEnum):
     CREDIT_BALANCE = "CREDIT_BALANCE"
 
 
-class UserListInput(BaseModel):
+class UserListInput(ListInput):
+    sort_by: UserSortType = UserSortType.EMAIL
     email: str | None = None
     emails: list[str] | None = None
     min_credit_balance_usd: Decimal | None = None
@@ -44,6 +45,27 @@ USER_LIST_SPEC = ListQuerySpec(
     },
     tiebreak_column=UserOrm.id,
 )
+
+
+def _build_user_list_input(
+    *,
+    page_input: PageInput | None = None,
+    sort_by: UserSortType = UserSortType.EMAIL,
+    email: str | None = None,
+    emails: list[str] | None = None,
+    min_credit_balance_usd: Decimal | None = None,
+    max_credit_balance_usd: Decimal | None = None,
+    has_last_login_at: bool | None = None,
+) -> UserListInput:
+    return UserListInput(
+        page_input=page_input or build_page_input(sort_direction=SortDirectionType.ASC),
+        sort_by=sort_by,
+        email=email,
+        emails=emails,
+        min_credit_balance_usd=min_credit_balance_usd,
+        max_credit_balance_usd=max_credit_balance_usd,
+        has_last_login_at=has_last_login_at,
+    )
 
 
 def _build_user_base_query() -> Select[tuple[UserOrm]]:
@@ -75,58 +97,53 @@ async def _find_filtered_emails(
     db_session: AsyncSession, user_list_input: UserListInput
 ) -> list[str]:
     filtered_query = PageQueryUtils.build_filtered_query(
-        _build_user_base_query(), USER_LIST_SPEC, user_list_input, build_page_input()
+        _build_user_base_query(), USER_LIST_SPEC, user_list_input
     )
-    page_query = PageQueryUtils.build_page_query(
-        filtered_query,
-        USER_LIST_SPEC,
-        UserSortType.EMAIL,
-        build_page_input(sort_direction=SortDirectionType.ASC),
-    )
+    page_query = PageQueryUtils.build_page_query(filtered_query, USER_LIST_SPEC, user_list_input)
     page_query_result = await db_session.execute(page_query)
-    return [user_record.email for user_record in page_query_result.scalars().all()]
+    return [page_row[0].email for page_row in page_query_result.all()]
 
 
 @pytest.mark.parametrize(
     ("user_list_input", "expected_emails"),
     [
         pytest.param(
-            UserListInput(email="page-query-b@example.com"),
+            _build_user_list_input(email="page-query-b@example.com"),
             ["page-query-b@example.com"],
             id="equals",
         ),
         pytest.param(
-            UserListInput(emails=["page-query-a@example.com", "page-query-c@example.com"]),
+            _build_user_list_input(emails=["page-query-a@example.com", "page-query-c@example.com"]),
             ["page-query-a@example.com", "page-query-c@example.com"],
             id="in",
         ),
         pytest.param(
-            UserListInput(min_credit_balance_usd=Decimal("2.00")),
+            _build_user_list_input(min_credit_balance_usd=Decimal("2.00")),
             ["page-query-b@example.com", "page-query-c@example.com"],
             id="gte_includes_boundary",
         ),
         pytest.param(
-            UserListInput(max_credit_balance_usd=Decimal("2.00")),
+            _build_user_list_input(max_credit_balance_usd=Decimal("2.00")),
             ["page-query-a@example.com"],
             id="lt_excludes_boundary",
         ),
         pytest.param(
-            UserListInput(has_last_login_at=True),
+            _build_user_list_input(has_last_login_at=True),
             ["page-query-a@example.com", "page-query-c@example.com"],
             id="has_value_true",
         ),
         pytest.param(
-            UserListInput(has_last_login_at=False),
+            _build_user_list_input(has_last_login_at=False),
             ["page-query-b@example.com"],
             id="has_value_false",
         ),
         pytest.param(
-            UserListInput(),
+            _build_user_list_input(),
             ["page-query-a@example.com", "page-query-b@example.com", "page-query-c@example.com"],
             id="none_values_add_no_condition",
         ),
         pytest.param(
-            UserListInput(min_credit_balance_usd=Decimal("2.00"), has_last_login_at=True),
+            _build_user_list_input(min_credit_balance_usd=Decimal("2.00"), has_last_login_at=True),
             ["page-query-c@example.com"],
             id="filters_combine_with_and",
         ),
@@ -158,8 +175,10 @@ async def test_build_filtered_query_search_matches_any_search_column_for_every_w
     await insert_user_row(db_session, email="page-query-b@example.com", display_name="Grace Hopper")
     base_query = _build_user_base_query()
 
+    user_list_input = _build_user_list_input(page_input=build_page_input(search=search))
+
     filtered_query = PageQueryUtils.build_filtered_query(
-        base_query, USER_LIST_SPEC, UserListInput(), build_page_input(search=search)
+        base_query, USER_LIST_SPEC, user_list_input
     )
 
     filtered_query_result = await db_session.execute(filtered_query.order_by(UserOrm.email))
@@ -191,14 +210,16 @@ async def test_build_page_query_orders_by_the_sort_column_in_the_direction(
     expected_emails: list[str],
 ) -> None:
     await _insert_page_query_users(db_session)
-    page_input = build_page_input(sort_direction=sort_direction)
+    user_list_input = _build_user_list_input(
+        page_input=build_page_input(sort_direction=sort_direction), sort_by=sort_by
+    )
 
     page_query = PageQueryUtils.build_page_query(
-        _build_user_base_query(), USER_LIST_SPEC, sort_by, page_input
+        _build_user_base_query(), USER_LIST_SPEC, user_list_input
     )
 
     page_query_result = await db_session.execute(page_query)
-    page_emails = [user_record.email for user_record in page_query_result.scalars().all()]
+    page_emails = [page_row[0].email for page_row in page_query_result.all()]
     assert page_emails == expected_emails
 
 
@@ -207,15 +228,40 @@ async def test_build_page_query_offset_is_page_minus_one_times_page_size(
 ) -> None:
     for letter in "abcde":
         await insert_user_row(db_session, email=f"page-query-{letter}@example.com")
-    page_input = build_page_input(page=2, page_size=2, sort_direction=SortDirectionType.ASC)
+    user_list_input = _build_user_list_input(
+        page_input=build_page_input(page=2, page_size=2, sort_direction=SortDirectionType.ASC)
+    )
 
     page_query = PageQueryUtils.build_page_query(
-        _build_user_base_query(), USER_LIST_SPEC, UserSortType.EMAIL, page_input
+        _build_user_base_query(), USER_LIST_SPEC, user_list_input
     )
 
     page_query_result = await db_session.execute(page_query)
-    page_emails = [user_record.email for user_record in page_query_result.scalars().all()]
+    page_emails = [page_row[0].email for page_row in page_query_result.all()]
     assert page_emails == ["page-query-c@example.com", "page-query-d@example.com"]
+
+
+async def test_build_page_query_total_column_counts_all_filtered_rows_on_every_row_of_a_middle_page(
+    db_session: AsyncSession,
+) -> None:
+    for letter in "abcde":
+        await insert_user_row(db_session, email=f"page-query-{letter}@example.com")
+    await insert_user_row(db_session, email="other@example.com")
+    user_list_input = _build_user_list_input(
+        page_input=build_page_input(page=2, page_size=2, sort_direction=SortDirectionType.ASC)
+    )
+
+    page_query = PageQueryUtils.build_page_query(
+        _build_user_base_query(), USER_LIST_SPEC, user_list_input
+    )
+
+    page_query_result = await db_session.execute(page_query)
+    page_rows = page_query_result.all()
+    assert [page_row[0].email for page_row in page_rows] == [
+        "page-query-c@example.com",
+        "page-query-d@example.com",
+    ]
+    assert [page_row.total for page_row in page_rows] == [5, 5]
 
 
 async def test_build_page_query_equal_sort_values_break_ties_by_tiebreak_column_in_direction(
@@ -225,14 +271,17 @@ async def test_build_page_query_equal_sort_values_break_ties_by_tiebreak_column_
         await insert_user_row(
             db_session, email=f"page-query-{letter}@example.com", credit_balance_usd=Decimal("1.00")
         )
-    page_input = build_page_input(sort_direction=SortDirectionType.DESC)
+    user_list_input = _build_user_list_input(
+        page_input=build_page_input(sort_direction=SortDirectionType.DESC),
+        sort_by=UserSortType.CREDIT_BALANCE,
+    )
 
     page_query = PageQueryUtils.build_page_query(
-        _build_user_base_query(), USER_LIST_SPEC, UserSortType.CREDIT_BALANCE, page_input
+        _build_user_base_query(), USER_LIST_SPEC, user_list_input
     )
 
     page_query_result = await db_session.execute(page_query)
-    page_emails = [user_record.email for user_record in page_query_result.scalars().all()]
+    page_emails = [page_row[0].email for page_row in page_query_result.all()]
     assert page_emails == [
         "page-query-c@example.com",
         "page-query-b@example.com",
@@ -245,8 +294,7 @@ async def test_build_count_query_counts_every_matching_row(db_session: AsyncSess
     filtered_query = PageQueryUtils.build_filtered_query(
         _build_user_base_query(),
         USER_LIST_SPEC,
-        UserListInput(min_credit_balance_usd=Decimal("2.00")),
-        build_page_input(),
+        _build_user_list_input(min_credit_balance_usd=Decimal("2.00")),
     )
 
     count_query = PageQueryUtils.build_count_query(filtered_query)
