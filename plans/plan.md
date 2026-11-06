@@ -281,10 +281,10 @@ pages nothing, so a reviewer only has to think about who can see what.
 
 ### 7. Paging and search (backend)
 
-One PR. One way of paging, searching, sorting and filtering every list in the app,
-built here and used first by a persona's page. Item 10 moves today's lists onto it.
-The pattern goes in `fastapi-structure.md`, replacing the "nested filter object"
-sentence in DTOs › Inbound, so items 9 and 10 follow it.
+Built in #46, with a validation fix in #47. One way of paging, searching, sorting and
+filtering every collection in the app, used first by a persona's page. Item 10 moves
+today's lists onto it. The pattern is in `fastapi-structure.md` › Paged routes, so
+items 9 and 10 follow it.
 
 - **Request:** a `GET` with flat query params. Every paged route's `<Entity>PageQueryDto`
   extends a shared `BasePageQueryDto`:
