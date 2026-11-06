@@ -6,13 +6,22 @@ from httpx import AsyncClient
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from apps.api.core.config import AppSettings
-from apps.api.core.dependencies import DbSessionDep, OptionalAuthUserDep, require_permissions
+from apps.api.core.dependencies import (
+    AnonymousUserKeyDep,
+    ClientIpDep,
+    DbSessionDep,
+    OptionalAuthUserDep,
+    get_client_ip,
+    require_permissions,
+)
 from libs.auth.results import AuthUser
 from libs.auth.services import AuthSessionService
 from libs.database.orm import UserOrm
 from libs.permissions.types import PermissionType, RoleType
+from libs.users.settings import UserSettings
 from tests.factories.auth import build_auth_user
 from tests.factories.database import fetch_database_utc_now
 from tests.factories.users import insert_user_row
@@ -199,3 +208,92 @@ async def test_get_optional_auth_user_valid_session_records_user_activity(
     last_activity_at_query = select(UserOrm.last_activity_at).where(UserOrm.id == signed_in_user.id)
     persisted_last_activity_at = await db_session.scalar(last_activity_at_query)
     assert persisted_last_activity_at == database_utc_now
+
+
+async def test_get_client_ip_header_unset_returns_connection_address(
+    fastapi_app: FastAPI, api_client: AsyncClient, app_settings: AppSettings
+) -> None:
+    fastapi_app.state.settings = app_settings.model_copy(update={"users": UserSettings()})
+
+    @fastapi_app.get("/client-ip-route")
+    async def client_ip_route(client_ip: ClientIpDep) -> dict[str, str]:
+        return {"client_ip": client_ip}
+
+    client_ip_response = await api_client.get(
+        "/client-ip-route", headers={"X-Forwarded-For": "1.1.1.1"}
+    )
+
+    assert client_ip_response.json() == {"client_ip": "127.0.0.1"}
+
+
+async def test_get_client_ip_header_set_returns_last_entry(
+    fastapi_app: FastAPI, api_client: AsyncClient, app_settings: AppSettings
+) -> None:
+    fastapi_app.state.settings = app_settings.model_copy(
+        update={"users": UserSettings(client_ip_header="X-Forwarded-For")}
+    )
+
+    @fastapi_app.get("/client-ip-route")
+    async def client_ip_route(client_ip: ClientIpDep) -> dict[str, str]:
+        return {"client_ip": client_ip}
+
+    client_ip_response = await api_client.get(
+        "/client-ip-route", headers={"X-Forwarded-For": "1.1.1.1, 2.2.2.2"}
+    )
+
+    assert client_ip_response.json() == {"client_ip": "2.2.2.2"}
+
+
+async def test_get_client_ip_header_set_but_missing_returns_connection_address(
+    fastapi_app: FastAPI, api_client: AsyncClient, app_settings: AppSettings
+) -> None:
+    fastapi_app.state.settings = app_settings.model_copy(
+        update={"users": UserSettings(client_ip_header="X-Forwarded-For")}
+    )
+
+    @fastapi_app.get("/client-ip-route")
+    async def client_ip_route(client_ip: ClientIpDep) -> dict[str, str]:
+        return {"client_ip": client_ip}
+
+    client_ip_response = await api_client.get("/client-ip-route")
+
+    assert client_ip_response.json() == {"client_ip": "127.0.0.1"}
+
+
+def test_get_client_ip_no_client_returns_unknown(
+    fastapi_app: FastAPI, app_settings: AppSettings
+) -> None:
+    fastapi_app.state.settings = app_settings.model_copy(update={"users": UserSettings()})
+    request = Request({"type": "http", "headers": [], "client": None, "app": fastapi_app})
+
+    client_ip = get_client_ip(request)
+
+    assert client_ip == "unknown"
+
+
+async def test_get_anonymous_user_key_signed_out_returns_key_string(
+    fastapi_app: FastAPI, api_client: AsyncClient
+) -> None:
+    @fastapi_app.get("/anonymous-user-key-route")
+    async def anonymous_user_key_route(anonymous_user_key: AnonymousUserKeyDep) -> dict[str, str]:
+        return {"anonymous_user_key": anonymous_user_key or ""}
+
+    anonymous_user_key_response = await api_client.get("/anonymous-user-key-route")
+
+    response_body = anonymous_user_key_response.json()
+    assert anonymous_user_key_response.status_code == 200
+    assert len(response_body["anonymous_user_key"]) == 64
+
+
+@pytest.mark.usefixtures("signed_in_user")
+async def test_get_anonymous_user_key_signed_in_returns_none(
+    fastapi_app: FastAPI, api_client: AsyncClient
+) -> None:
+    @fastapi_app.get("/anonymous-user-key-route")
+    async def anonymous_user_key_route(anonymous_user_key: AnonymousUserKeyDep) -> dict[str, None]:
+        return {"anonymous_user_key": anonymous_user_key}
+
+    anonymous_user_key_response = await api_client.get("/anonymous-user-key-route")
+
+    assert anonymous_user_key_response.status_code == 200
+    assert anonymous_user_key_response.json() == {"anonymous_user_key": None}
