@@ -123,8 +123,8 @@ class ExecutionEngine:
     def _execute_start(self) -> None: ...
 ```
 
-In a static-only `Utils` class, the map is a module-level constant named
-`<VALUE>_BY_<KEY>`, such as `CONDITION_BUILDER_BY_OPERATOR`.
+In a static-only `Utils` class, the map is a module-level constant beside the class,
+named as `fastapi-structure.md` › Constants names a lookup map.
 
 A member with no entry fails loudly at call time.
 

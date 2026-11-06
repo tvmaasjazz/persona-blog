@@ -58,8 +58,9 @@ choices).
 | `apps/api/core/*.py`, `app_factory.py`, `lifespan.py`, `migrations/` | The existing test file | Extend it (§7, §8, §10) |
 
 No test file for: a domain's `dtos.py` (unless a mapper has logic, §1), a domain's
-`dependencies.py`, `exceptions.py`, `libs/database/orm/*.py`, `constants.py`. Route,
-service and app-factory tests and CI's drift check cover them.
+`dependencies.py`, `exceptions.py`, `libs/database/orm/*.py`, `constants.py` (beyond
+the spec guard above). Route, service and app-factory tests and CI's drift check cover
+them.
 
 ## Conventions for every test
 
@@ -442,7 +443,7 @@ the persona and blog post reads and `signed_in_admin` every permission, both wit
 | Create (`POST`)               | Select the row by the returned `identity` and assert its columns. The body is `{"identity": "<uuid>"}` |
 | Malformed identity → 422      | One test per route with an identity path parameter: a non-UUID value returns 422 |
 | Update (`PUT`) or `DELETE`    | Assert the body `== {}`, then select to prove the row changed or is gone. `await db_session.refresh(<entity>_record)` before reading a row the test already holds: `expire_on_commit=False` leaves its copy stale |
-| List (`GET` with a `FetchAllQueryDto`) | An invalid query value → 422 with `loc` starting `"query"`. Pagination and filter cases wait on the conventions `fastapi-structure.md` hasn't settled yet (`plans/plan.md` item 7 decides it) |
+| List (`GET` with a `FetchAllQueryDto`) | An invalid query value → 422 with `loc` starting `"query"`: an out-of-range `page` or `page_size`, and a `sort_by` the list doesn't allow. One test per filter in the spec, one search case, and `page_info` in a whole-response comparison (`fastapi-structure.md` › Paged lists) |
 | Write rolls back on failure   | Make the route fail after its first write; assert no row |
 | Protected route, signed out   | One test per protected route using plain `api_client`; assert 401 |
 | Open `/public` route          | Signed out with plain `api_client`; the owner, with `is_owner` true; another user, with `is_owner` false; a 404 for an entity hidden from others; a 401 for an invalid session cookie |

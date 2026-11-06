@@ -19,7 +19,8 @@ backend/
 ├── libs/
 │   ├── core/            # domain-free: exceptions.py, inputs.py, results.py, types.py,
 │   │                    #   services/, utils/
-│   ├── database/        # BaseOrm, session factory, DatabaseClockUtils, orm/: see database.md
+│   ├── database/        # BaseOrm, session factory, orm/: see database.md;
+│   │                    #   list_query_spec.py, utils/ (DatabaseClockUtils, PageQueryUtils)
 │   └── <domain>/        # services.py or services/, inputs.py, results.py, settings.py,
 │                        #   types.py, constants.py; as needed: exceptions.py, utils/,
 │                        #   after_response_tasks.py; LLM work: see langgraph.md
@@ -196,9 +197,9 @@ write, commit, close.
 
 ## DTOs
 
-HTTP payload classes are DTOs, in the domain's `dtos.py` under `apps/`. The response
-DTOs every domain shares, and the `UsdDecimal` field type, live in
-`apps/api/core/dtos.py`. One `dtos.py` per domain holds both directions; never split
+HTTP payload classes are DTOs, in the domain's `dtos.py` under `apps/`. The DTOs and
+field types every domain shares, such as `IdentityResponseDto`, `PageQueryDto`,
+`PageResponseDto` and `UsdDecimal`, live in `apps/api/core/dtos.py`. One `dtos.py` per domain holds both directions; never split
 into `requests.py` / `responses.py`. Split by sub-feature only, once a domain's file
 gets unwieldy.
 
@@ -286,7 +287,8 @@ Every list pages, sorts, filters and searches the same way. The pattern is
 `PUBLIC_BLOG_POST_LIST_SPEC`.
 
 - The `<Entity>FetchAllQueryDto` extends `PageQueryDto` and adds `sort_by`, typed as
-  the list's `<Entity>SortType` with its default, plus the list's filters.
+  the list's `<Entity>SortType` with its default, plus the list's filters. Its
+  `to_input()` carries `to_page_input()` as the list `Input`'s `page_input`.
 - Filters are flat, typed fields, one value each, never a nested object. A missing
   field filters nothing.
 
@@ -305,7 +307,7 @@ Every list pages, sorts, filters and searches the same way. The pattern is
 - The service runs the count, then the page, and adds loader options to the page
   query only.
 - The `<Entity>ListResponseDto` extends `PageResponseDto`, and its `Result` carries
-  `page_info: PageInfoResult`.
+  `page_info: PageInfoResult`, mapped with `PageInfoResponseDto.from_result()`.
 
 ### Identifiers
 
