@@ -496,6 +496,11 @@ class HumanizerSettings(BaseModel):
   carries only what differs between environments; a setting no environment overrides
   never appears in it.
 - Secrets are env-var only, declared on `AppSettings`, never in TOML.
+- **Whether an integration is on is a setting of its own,** overridable like any other
+  (`config.toml` or an env var: `<DOMAIN>__IS_ENABLED=true`). It's `is_enabled` when
+  the integration is on or off, or a `<Thing>Type` enum when it chooses between backends
+  (`<DOMAIN>__<FIELD>=<MEMBER>`). Never infer it from whether the integration's key is
+  set. On with what it needs missing, such as its key or endpoint, refuses to start.
 - `libs/` never reads a file, never reads `os.environ`, never imports `AppSettings`.
 - **A settings instance is always injected, never constructed inside a lib.** A lib
   calling `HumanizerSettings()` itself gets defaults and silently ignores every

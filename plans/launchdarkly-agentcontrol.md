@@ -258,16 +258,22 @@ as it does today.
    wrote it. Calls that used the code default leave them null.
 6. **Settings and wiring:**
    - **Whether LaunchDarkly is used is an explicit setting,** never inferred from
-     whether a key is present. `LaunchDarklySettings` has `is_enabled` (default `false`
-     in `config.toml`) and `sdk_key`, overridden by `LAUNCHDARKLY__IS_ENABLED` and
-     `LAUNCHDARKLY__SDK_KEY`.
+     whether a key is present (`fastapi-structure.md` › Settings).
+     - `LaunchDarklySettings.is_enabled` defaults to `false` in code, and is overridden
+       by `LAUNCHDARKLY__IS_ENABLED`.
+     - The SDK key is a secret, so it lives on `AppSettings` as `launchdarkly_sdk_key`,
+       set only by the env var `LAUNCHDARKLY_SDK_KEY`.
+     - `LaunchDarklySettings` and `TelemetrySettings` belong to no single domain, so they
+       live in `libs/core/settings.py` beside `BackgroundJobSettings`.
      - Enabled with no key refuses to start.
      - Disabled means no client is created and every step uses its default.
    - **Tests always run with it off.** The test settings set it off, so a developer's
      `.env` with LaunchDarkly on never makes the suite connect.
    - The client is created in `lifespan.py` with a short init timeout, and closed (which
      flushes events) on shutdown.
-   - A startup failure logs and carries on with defaults. It never stops the app.
+   - **If LaunchDarkly can't be reached at startup,** with a key set, the app logs it and
+     carries on with defaults; it never stops. A missing key is the refuse-to-start case
+     above, since that's a configuration mistake rather than an outage.
 7. **The prompt content is kept out of telemetry:** `capture_content=False` on the
    handler, and generative AI message content capture stays off in OpenTelemetry. Prompts
    carry persona text and briefs, and `pb_llm_call` already holds them. LaunchDarkly also
@@ -412,11 +418,12 @@ never wired up, so nothing has to be removed. Building it is plan.md › Phase 2
     present. `TelemetrySettings.exporter` is a `TelemetryExporterType`, overridden by
     `TELEMETRY__EXPORTER`:
     - `NONE`: nothing is exported, and logs only go to the terminal. This is the
-      default in `config.toml`, and what tests use.
+      default in code (`TelemetrySettings`), and what tests use.
     - `LAUNCHDARKLY`: registers the plugin on the client. Settings refuse it unless
       LaunchDarkly is enabled.
     - `OTLP`: plain OpenTelemetry to `TelemetrySettings.otlp_endpoint`, with the `ldotel`
-      hook on the client when there is one.
+      hook on the client when there is one. With no endpoint set, it refuses to start.
+    - `TelemetryExporterType` lives in `libs/core/types.py`.
   - **The two settings are independent.** For example, LaunchDarkly can be on for flags
     and AgentControl while telemetry is `NONE` locally. Production sets both by env
     var, and so does a local `.env` while developing against LaunchDarkly.
