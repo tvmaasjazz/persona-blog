@@ -16,6 +16,7 @@ from libs.database.orm import (
 )
 from libs.generate_text.types import GenerateTextRunStatusType, GenerateTextStepStatusType
 from tests.factories.blog_posts import VALID_BLOG_POST_BODY, insert_blog_post_row
+from tests.factories.content_engagement import insert_content_item_engagement_row
 from tests.factories.content_items import insert_content_item_row
 from tests.factories.generate_text import (
     insert_generate_text_run_row,
@@ -23,6 +24,7 @@ from tests.factories.generate_text import (
 )
 from tests.factories.llm import build_llm_completion_result
 from tests.factories.personas import insert_persona_row
+from tests.factories.users import find_system_user_row
 from tests.stubs.llm import LlmServiceStub
 
 DRAIN_TIMEOUT_SECONDS = 30
@@ -1428,6 +1430,7 @@ async def _insert_own_blog_post(
     body: str = VALID_BLOG_POST_BODY,
     is_public: bool = True,
     published_at: datetime | None = datetime(2020, 1, 1, tzinfo=UTC),
+    feed_score: float | None = None,
 ) -> BlogPostOrm:
     content_item_record = await insert_content_item_row(
         db_session,
@@ -1435,6 +1438,13 @@ async def _insert_own_blog_post(
         persona_id=persona_id,
         is_public=is_public,
         published_at=published_at,
+    )
+    system_user_record = await find_system_user_row(db_session)
+    await insert_content_item_engagement_row(
+        db_session,
+        content_item_id=content_item_record.id,
+        system_user_id=system_user_record.id,
+        feed_score=feed_score,
     )
     return await insert_blog_post_row(
         db_session,
@@ -1465,6 +1475,8 @@ async def test_find_public_blog_post_page_signed_out_returns_other_users_publish
                 "identity": other_blog_post_identity,
                 "content_item_identity": other_content_item_identity,
                 "persona_identity": other_persona_identity,
+                "persona_name": "Public Persona",
+                "persona_avatar_url": None,
                 "title": "Public Post",
                 "subtitle": None,
                 "is_public": True,
@@ -1509,7 +1521,7 @@ async def test_find_public_blog_post_page_signed_out_hidden_post_is_not_listed(
     }
 
 
-async def test_find_public_blog_post_page_signed_in_lists_own_draft_and_others_published(
+async def test_find_public_blog_post_page_signed_in_does_not_list_own_draft_or_private_post(
     api_client: AsyncClient,
     signed_in_user: UserOrm,
     db_session: AsyncSession,
@@ -1526,6 +1538,13 @@ async def test_find_public_blog_post_page_signed_in_lists_own_draft_and_others_p
         is_public=False,
         published_at=None,
     )
+    await _insert_own_blog_post(
+        db_session,
+        user_record=signed_in_user,
+        persona_id=private_persona_record.id,
+        title="My Private Post",
+        is_public=False,
+    )
     await db_session.commit()
     await _create_other_users_blog_post(
         other_user_client, published_at="2020-01-01T00:00:00+00:00", title="Their Post"
@@ -1535,11 +1554,8 @@ async def test_find_public_blog_post_page_signed_in_lists_own_draft_and_others_p
 
     response_body = find_public_blog_post_page_response.json()
     assert find_public_blog_post_page_response.status_code == 200
-    assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == [
-        "Their Post",
-        "My Draft",
-    ]
-    assert response_body["pagination"] == {"page": 1, "page_size": 20, "total": 2}
+    assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == ["Their Post"]
+    assert response_body["pagination"] == {"page": 1, "page_size": 20, "total": 1}
 
 
 async def test_find_public_blog_post_page_signed_in_does_not_list_others_drafts(
@@ -1633,6 +1649,63 @@ async def test_find_public_blog_post_page_page_past_the_end_returns_no_rows_and_
         "blog_posts": [],
         "pagination": {"page": 5, "page_size": 20, "total": 1},
     }
+
+
+@pytest.mark.parametrize(
+    ("sort_direction", "expected_titles"),
+    [
+        pytest.param("DESC", ["High", "Low", "Unscored"], id="descending"),
+        pytest.param("ASC", ["Low", "High", "Unscored"], id="ascending"),
+    ],
+)
+async def test_find_public_blog_post_page_sorted_by_feed_score(
+    api_client: AsyncClient,
+    signed_in_user: UserOrm,
+    db_session: AsyncSession,
+    sort_direction: str,
+    expected_titles: list[str],
+) -> None:
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_user.id, is_public=True
+    )
+    for title, feed_score in [("Low", 1.5), ("Unscored", None), ("High", 9.5)]:
+        await _insert_own_blog_post(
+            db_session,
+            user_record=signed_in_user,
+            persona_id=persona_record.id,
+            title=title,
+            feed_score=feed_score,
+        )
+    await db_session.commit()
+
+    find_public_blog_post_page_response = await api_client.get(
+        "/blog-posts/public", params={"sort_by": "FEED_SCORE", "sort_direction": sort_direction}
+    )
+
+    response_body = find_public_blog_post_page_response.json()
+    assert find_public_blog_post_page_response.status_code == 200
+    assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == expected_titles
+
+
+async def test_find_public_blog_post_page_search_matches_persona_name(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    for persona_name, title in [("Slow Mornings Sam", "Toast"), ("Night Owl Nora", "Tea")]:
+        persona_record = await insert_persona_row(
+            db_session, created_by_id=signed_in_user.id, name=persona_name, is_public=True
+        )
+        await _insert_own_blog_post(
+            db_session, user_record=signed_in_user, persona_id=persona_record.id, title=title
+        )
+    await db_session.commit()
+
+    find_public_blog_post_page_response = await api_client.get(
+        "/blog-posts/public", params={"search": "night owl"}
+    )
+
+    response_body = find_public_blog_post_page_response.json()
+    assert [blog_post["title"] for blog_post in response_body["blog_posts"]] == ["Tea"]
+    assert response_body["blog_posts"][0]["persona_name"] == "Night Owl Nora"
 
 
 @pytest.mark.parametrize(

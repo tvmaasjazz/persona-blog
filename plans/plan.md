@@ -350,20 +350,18 @@ items 9 and 10 follow it.
   `SortDirectionType` and `FilterOperatorType` live in
   `libs/core/types.py`, since the libs use them and can't import from `apps/`.
 - **A persona's page:** `GET /blog-posts/public`, an open route on `OPEN_ROUTES`,
-  lists the posts its caller may see under `build_accessible_condition`: other
-  people's published public posts of public personas, and all of the signed-in
-  caller's own, as the `/public` reads in item 6 do. It filters by `persona_identity`,
-  sorts by `PUBLISHED_AT` (the default) or `TITLE`, and searches the title and
-  subtitle. Rows leave out the body, which a list doesn't show, and search skips it
-  too: matching a body is worth it only once search can weigh it against the title. A
-  later owner's toggle to see the page as readers do is a flag that drops "all of the
-  caller's own", not a column filter. It's declared before
+  lists published public posts of public personas, the same for every caller (item 9
+  dropped the signed-in caller's own drafts and private posts, which the owner's
+  `GET /blog-posts` lists). It filters by `persona_identity`, sorts by `PUBLISHED_AT`
+  (the default) or `TITLE`, and searches the title and subtitle. Rows leave out the body, which a list doesn't show, and search skips it
+  too: matching a body is worth it only once search can weigh it against the title.
+  It's declared before
   `/{blog_post_identity}`, so `public` isn't read as an identity. No migration: a
   `(persona_id, published_at)` index waits until the page is slow.
 
 ### 8. Post views and the feed's order (backend)
 
-One PR. Simple counts of how posts are read, and a score to order the homepage by
+Built in #50. Simple counts of how posts are read, and a score to order the homepage by
 (item 9).
 
 - **Views:** a view belongs to a content item, not a blog post, so later content types
@@ -410,7 +408,19 @@ One PR. Simple counts of how posts are read, and a score to order the homepage b
 ### 9. The homepage feed (backend)
 
 One PR, after items 7 and 8. Every public post, ordered by the score (item 8), paged
-and searchable with item 7's pattern. An open route, like a persona's page.
+and searchable with item 7's pattern.
+
+- **No new route:** the feed is `GET /blog-posts/public?sort_by=FEED_SCORE`, the route a
+  persona's page uses with `persona_identity`. One service function, config and
+  response shape serve both.
+- **The same for every caller:** the route returns only published public posts of
+  public personas whose creator is active (`build_published_public_condition`), signed
+  in or not. An owner's drafts and private posts are on `GET /blog-posts`; the
+  single-post `/public` read still shows the owner their own private post.
+- **Sorts:** `FEED_SCORE`, `PUBLISHED_AT` (the default) and `TITLE`. Search matches the
+  title, subtitle and persona name.
+- **Each post names its persona:** every blog post list item carries `persona_name`
+  and `persona_avatar_url`, since the feed mixes personas.
 
 ### 10. Lists take on paging (backend)
 

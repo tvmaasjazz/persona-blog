@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -343,3 +344,94 @@ async def test_build_accessible_condition_no_user_does_not_see_content_of_inacti
     accessible_content_item_ids = await _find_accessible_content_item_ids(db_session, None)
 
     assert content_item_record.id not in accessible_content_item_ids
+
+
+async def _find_published_public_content_item_ids(db_session: AsyncSession) -> list[int]:
+    query = (
+        select(ContentItemOrm.id)
+        .join(PersonaOrm, ContentItemOrm.persona_id == PersonaOrm.id)
+        .where(ContentItemQueryUtils.build_published_public_condition())
+    )
+    query_result = await db_session.execute(query)
+    return list(query_result.scalars().all())
+
+
+async def test_build_published_public_condition_matches_published_content_on_public_persona(
+    db_session: AsyncSession,
+) -> None:
+    owner_record = await insert_user_row(db_session)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=owner_record.id, is_public=True
+    )
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=PAST_PUBLISHED_AT,
+    )
+    await db_session.commit()
+
+    published_public_content_item_ids = await _find_published_public_content_item_ids(db_session)
+
+    assert content_item_record.id in published_public_content_item_ids
+
+
+@pytest.mark.parametrize(
+    ("is_persona_public", "is_public", "published_at", "is_creator_active"),
+    [
+        pytest.param(True, False, PAST_PUBLISHED_AT, True, id="private_content_item"),
+        pytest.param(True, True, None, True, id="draft"),
+        pytest.param(True, True, FUTURE_PUBLISHED_AT, True, id="future_published_at"),
+        pytest.param(False, True, PAST_PUBLISHED_AT, True, id="private_persona"),
+        pytest.param(True, True, PAST_PUBLISHED_AT, False, id="inactive_creator"),
+    ],
+)
+async def test_build_published_public_condition_hidden_content_item_not_matched_even_for_its_owner(
+    db_session: AsyncSession,
+    is_persona_public: bool,
+    is_public: bool,
+    published_at: datetime | None,
+    is_creator_active: bool,
+) -> None:
+    owner_record = await insert_user_row(db_session, is_active=is_creator_active)
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=owner_record.id, is_public=is_persona_public
+    )
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=owner_record.id,
+        persona_id=persona_record.id,
+        is_public=is_public,
+        published_at=published_at,
+    )
+    await db_session.commit()
+
+    published_public_content_item_ids = await _find_published_public_content_item_ids(db_session)
+
+    assert content_item_record.id not in published_public_content_item_ids
+
+
+async def test_build_published_public_condition_soft_deleted_persona_not_matched(
+    db_session: AsyncSession,
+) -> None:
+    owner_record = await insert_user_row(db_session)
+    persona_record = await insert_persona_row(
+        db_session,
+        created_by_id=owner_record.id,
+        is_public=True,
+        deleted_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        deleted_by_id=owner_record.id,
+    )
+    content_item_record = await insert_content_item_row(
+        db_session,
+        created_by_id=owner_record.id,
+        persona_id=persona_record.id,
+        is_public=True,
+        published_at=PAST_PUBLISHED_AT,
+    )
+    await db_session.commit()
+
+    published_public_content_item_ids = await _find_published_public_content_item_ids(db_session)
+
+    assert content_item_record.id not in published_public_content_item_ids

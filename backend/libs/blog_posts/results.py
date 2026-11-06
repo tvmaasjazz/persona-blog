@@ -12,6 +12,8 @@ class CreateBlogPostResult(BaseModel):
 
 class BlogPostPersonaResult(BaseModel):
     identity: UUID
+    name: str
+    avatar_url: str | None
 
 
 class BlogPostContentItemResult(BaseModel):

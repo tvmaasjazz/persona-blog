@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from apps.api.core.dependencies import (
     AuthUserDep,
     OptionalAuthUserDep,
+    get_optional_auth_user,
     require_permissions,
 )
 from apps.api.core.dtos import EmptyResponseDto, IdentityResponseDto
@@ -50,16 +51,18 @@ async def find_user_blog_post_list(
     return BlogPostListResponseDto.from_result(find_user_blog_post_list_result)
 
 
-@blog_post_router.get("/public")
+# The page is the same for every caller, so the user isn't passed on, but an expired
+# session is still a 401 as on every open route
+@blog_post_router.get("/public", dependencies=[Depends(get_optional_auth_user)])
 async def find_public_blog_post_page(
     query_dto: Annotated[PublicBlogPostPageQueryDto, Query()],
-    auth_user: OptionalAuthUserDep,
     blog_post_service: BlogPostServiceDep,
 ) -> PublicBlogPostPageResponseDto:
-    """Returns a page of published public blog posts to anyone, signed in or not, plus the
-    signed-in user's own posts; searchable by title and subtitle, and sortable."""
+    """Returns a page of published public blog posts, the same to anyone, signed in or not:
+    the homepage feed sorted by FEED_SCORE, or a persona's page filtered by persona;
+    searchable by title, subtitle and persona name."""
     find_public_blog_post_page_result = await blog_post_service.find_public_blog_post_page(
-        query_dto.to_input(), auth_user
+        query_dto.to_input()
     )
     return PublicBlogPostPageResponseDto.from_result(find_public_blog_post_page_result)
 
