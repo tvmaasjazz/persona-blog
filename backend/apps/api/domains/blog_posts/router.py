@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from apps.api.core.dependencies import (
+    AnonymousUserKeyDep,
     AuthUserDep,
     OptionalAuthUserDep,
     require_permissions,
@@ -11,6 +12,7 @@ from apps.api.core.dependencies import (
 from apps.api.core.dtos import EmptyResponseDto, IdentityResponseDto
 from apps.api.domains.blog_posts.dependencies import (
     BlogPostServiceDep,
+    BlogPostViewServiceDep,
     validate_new_blog_post_from_run_availability,
     validate_new_blog_post_from_run_visibility,
     validate_new_blog_post_visibility,
@@ -26,6 +28,7 @@ from apps.api.domains.blog_posts.dtos import (
     PublicBlogPostPageQueryDto,
     PublicBlogPostPageResponseDto,
     PublicBlogPostResponseDto,
+    RecordBlogPostViewDto,
 )
 from libs.permissions.types import PermissionType
 
@@ -144,6 +147,22 @@ async def update_blog_post(
 ) -> EmptyResponseDto:
     """Updates a blog post, or 404 when it is missing and 403 when the user isn't its creator."""
     await blog_post_service.update_blog_post(blog_post_identity, dto.to_input(), auth_user)
+    return EmptyResponseDto()
+
+
+@blog_post_router.put("/{blog_post_identity}/view")
+async def record_blog_post_view(
+    blog_post_identity: UUID,
+    dto: RecordBlogPostViewDto,
+    auth_user: OptionalAuthUserDep,
+    anonymous_user_key: AnonymousUserKeyDep,
+    blog_post_view_service: BlogPostViewServiceDep,
+) -> EmptyResponseDto:
+    """Records a view of a blog post, once per reader per day, with how far it was read;
+    404 when the reader can't see the post, and nothing is recorded for its own creator."""
+    await blog_post_view_service.record_blog_post_view(
+        blog_post_identity, dto.to_input(), anonymous_user_key, auth_user
+    )
     return EmptyResponseDto()
 
 

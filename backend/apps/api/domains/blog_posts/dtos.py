@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, field_validator
@@ -8,6 +9,7 @@ from libs.blog_posts.inputs import (
     CreateBlogPostFromGenerateTextRunInput,
     CreateBlogPostInput,
     FindPublicBlogPostPageInput,
+    RecordBlogPostViewInput,
     UpdateBlogPostInput,
 )
 from libs.blog_posts.results import (
@@ -19,6 +21,8 @@ from libs.blog_posts.results import (
 )
 from libs.blog_posts.types import PublicBlogPostSortType
 from libs.blog_posts.utils import BlogPostValidationUtils
+
+ReadPercentInt = Literal[0, 25, 50, 75, 100]
 
 
 def _validate_body(body: str) -> str:
@@ -106,6 +110,13 @@ class BlogPostDto(BaseModel):
             is_public=self.is_public,
             published_at=self.published_at.astimezone(UTC) if self.published_at else None,
         )
+
+
+class RecordBlogPostViewDto(BaseModel):
+    read_percent: ReadPercentInt
+
+    def to_input(self) -> RecordBlogPostViewInput:
+        return RecordBlogPostViewInput(read_percent=self.read_percent)
 
 
 class BlogPostResponseDto(BaseModel):
