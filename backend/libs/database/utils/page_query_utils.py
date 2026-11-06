@@ -1,13 +1,11 @@
 from collections.abc import Callable
-from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel
 from sqlalchemy import ColumnElement, Select, and_, func, or_, select
 from sqlalchemy.orm import QueryableAttribute
 from sqlalchemy.sql.elements import UnaryExpression
 
-from libs.core.inputs import PageInput
+from libs.core.inputs import ListInput, PageInput
 from libs.core.results import PageInfoResult
 from libs.core.types import FilterOperatorType, SortDirectionType
 from libs.database.list_query_spec import ListQuerySpec
@@ -39,13 +37,13 @@ class PageQueryUtils:
 
     @staticmethod
     def build_filtered_query(
-        base_query: Select[Any],
+        all_records_query: Select[Any],
         list_query_spec: ListQuerySpec,
-        list_input: BaseModel,
-        page_input: PageInput,
+        list_input: ListInput,
     ) -> Select[Any]:
         """Adds the list input's filters that are set and the search words to the query."""
-        filtered_query = base_query
+        page_input = list_input.page_input
+        filtered_query = all_records_query
 
         # Filters: an unset (None) field adds no condition
         for field_name, list_filter in list_query_spec.filters.items():
@@ -77,15 +75,18 @@ class PageQueryUtils:
     def build_page_query(
         filtered_query: Select[Any],
         list_query_spec: ListQuerySpec,
-        sort_by: StrEnum,
-        page_input: PageInput,
+        list_input: ListInput,
     ) -> Select[Any]:
-        """Orders the query by the sort column then the tiebreak column, and slices out one page."""
+        """Adds the total of all filtered rows, orders by the sort column then the tiebreak
+        column, and slices out one page."""
+        page_input = list_input.page_input
         build_order = ORDER_BUILDER_BY_SORT_DIRECTION[page_input.sort_direction]
-        sort_column = list_query_spec.sort_columns[sort_by]
+        sort_column = list_query_spec.sort_columns[list_input.sort_by]
         offset = (page_input.page - 1) * page_input.page_size
         return (
-            filtered_query.order_by(
+            # The window runs before LIMIT and OFFSET, so each row carries the full total
+            filtered_query.add_columns(func.count().over().label("total"))
+            .order_by(
                 build_order(sort_column).nulls_last(),
                 build_order(list_query_spec.tiebreak_column),
             )
