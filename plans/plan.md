@@ -336,15 +336,13 @@ sentence in DTOs › Inbound, so items 9 and 10 follow it.
   escaped so they match themselves). No full-text search yet: a `pg_trgm` index speeds
   up the same query when lists grow, and full-text search, for ranking and stemming,
   would change nothing in the contract.
-- **One config per list:** a `ListQueryConfig` in the lib's `constants.py` declares
-  the list's search columns, each sort value's column, each filter field's column and
-  operator, and the tiebreak column. The service builds its all-records query (the
-  joins and who may see what) and makes one call, `PageQueryService.find_page`, which
-  filters, sorts and pages it. The total comes from `count(*) OVER ()` on the page
-  query itself, which Postgres computes before `LIMIT`; only an empty page past the
-  first runs a separate count. Running the count beside the page on a second session
-  would cost a second connection and could disagree with the page, to save one round
-  trip. A test checks that every filter key in a config is a field on its `Input`. `SortDirectionType` and `FilterOperatorType` live in
+- **One config per list, one call per service:** a `ListQueryConfig` declares what a
+  list searches, sorts and filters by, and the service makes one
+  `PageQueryService.find_page` call (`fastapi-structure.md` › Paged lists). The total
+  comes from `count(*) OVER ()` on the page query, which Postgres computes before
+  `LIMIT`. Running a count beside the page on a second session would cost a second
+  connection and could disagree with the page, to save one round trip.
+  `SortDirectionType` and `FilterOperatorType` live in
   `libs/core/types.py`, since the libs use them and can't import from `apps/`.
 - **A persona's page:** `GET /blog-posts/public`, an open route on `OPEN_ROUTES`,
   lists the posts its caller may see under `build_accessible_condition`: other

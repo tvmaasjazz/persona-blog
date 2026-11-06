@@ -139,7 +139,7 @@ session, client, and config in this codebase:
 | ---------- | ------------------------------------------- |
 | `session`  | `db_session`                                |
 | `client`   | `http_client`, `llm_client`, `storage_client` |
-| `config`   | `humanizer_settings`                        |
+| `config`   | `humanizer_settings`, `list_query_config`   |
 | `result`   | `query_result`, `humanize_result`           |
 | `service`  | `user_service`, `humanizer_service`         |
 | `data`     | name the actual contents                    |
@@ -264,7 +264,7 @@ The same applies to chained attribute access into a call:
   route's docstring is also its API description. Ruff's `D101`-`D103` enforce it.
 - Exempt from the requirement: tests, migrations, the shapes and declarations in
   `dtos.py`, `results.py`, `inputs.py`, `settings.py`, `types.py`, `exceptions.py`,
-  the Orm modules in `libs/database/orm/` and `__init__.py`, and the app wiring
+  `list_query_config.py`, the Orm modules in `libs/database/orm/` and `__init__.py`, and the app wiring
   (`dependencies.py`, `app_factory.py`, `lifespan.py`, `core/config.py`,
   `core/logging.py`, `core/exception_handlers.py`) and `scripts/`. There, and on a
   private helper, a docstring is written only when the name isn't enough, such as a
