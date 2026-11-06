@@ -95,6 +95,8 @@ pattern is `migrations/sql/pb_persona/0001_create_pb_persona.up.sql`.
 - If a generated name would pass 63 characters, name the constraint explicitly in both
   the SQL and the Orm class (Postgres truncates; SQLAlchemy shortens differently).
 - Text is `TEXT`, never `VARCHAR(n)`. Case-insensitive text is `CITEXT`.
+- A calendar day is `DATE`, mapped to `Mapped[date]`. Its default is the UTC date,
+  `((now() AT TIME ZONE 'utc')::date)`, mirrored with `server_default`.
 - Postgres doesn't index foreign keys. Add an index for each one you query by.
 - A unique constraint on a soft-deletable table is usually a partial unique index,
   `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL`, so a soft-deleted row doesn't

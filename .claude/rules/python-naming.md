@@ -252,8 +252,8 @@ The same applies to chained attribute access into a call:
   `GenerateTextRunPickupService`, `pick_up_expired_runs()`,
   `run_pickup_interval_seconds` and `run_pickup_failed`, never "pickup" in one place
   and "sweep" in another.
-- A `StringConstraints` alias for a DTO field is named for what it holds and ends in
-  `Str`: `PersonaNameStr`, `AvatarUrlStr`.
+- A constrained-value alias for a DTO field (`StringConstraints`, `Literal`) is named
+  for what it holds and ends in its base type: `PersonaNameStr`, `ReadPercentInt`.
 - A `Dto` name leads with its entity or domain: `PersonaListResponseDto`, never
   `ListPersonasResponseDto`. A `Result` is still named for its function
   (`FindUserPersonaListResult`).
