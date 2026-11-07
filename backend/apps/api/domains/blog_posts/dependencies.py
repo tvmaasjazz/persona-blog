@@ -40,8 +40,17 @@ ContentItemValidationServiceDep = Annotated[
 ]
 
 
-def get_persona_service(db_session: DbSessionDep) -> PersonaService:
-    return PersonaService(db_session=db_session)
+def get_pagination_service(db_session: DbSessionDep) -> PaginationService:
+    return PaginationService(db_session=db_session)
+
+
+PaginationServiceDep = Annotated[PaginationService, Depends(get_pagination_service)]
+
+
+def get_persona_service(
+    db_session: DbSessionDep, pagination_service: PaginationServiceDep
+) -> PersonaService:
+    return PersonaService(db_session=db_session, pagination_service=pagination_service)
 
 
 PersonaServiceDep = Annotated[PersonaService, Depends(get_persona_service)]
@@ -70,13 +79,6 @@ def get_generate_text_step_service(request: Request) -> GenerateTextStepService:
 GenerateTextStepServiceDep = Annotated[
     GenerateTextStepService, Depends(get_generate_text_step_service)
 ]
-
-
-def get_pagination_service(db_session: DbSessionDep) -> PaginationService:
-    return PaginationService(db_session=db_session)
-
-
-PaginationServiceDep = Annotated[PaginationService, Depends(get_pagination_service)]
 
 
 def get_blog_post_service(

@@ -407,7 +407,7 @@ Built in #50. Simple counts of how posts are read, and a score to order the home
 
 ### 9. The homepage feed (backend)
 
-One PR, after items 7 and 8. Every public post, ordered by the score (item 8), paged
+Built in #51. Every public post, ordered by the score (item 8), paged
 and searchable with item 7's pattern.
 
 - **No new route:** the feed is `GET /blog-posts/public?sort_by=FEED_SCORE`, the route a
@@ -434,8 +434,25 @@ against:
 - `GET /personas`, the signed-in user's own personas
 - `GET /blog-posts`, the signed-in user's own posts
 
-Which fields each list searches, and whether the ledger needs a search at all, are
-decided with item 7's pattern in hand.
+Each keeps its path, permission and list key, and adds `pagination`:
+
+| Route | Search | Sorts (default first) | Filters |
+| --- | --- | --- | --- |
+| `GET /admin/users` | email, display name | `CREATED_AT`, `EMAIL`, `LAST_ACTIVITY_AT` | none |
+| `GET /admin/invites` | name | `CREATED_AT`, `NAME`, `EXPIRES_AT` | none |
+| `GET /admin/users/{user_identity}/credit-ledger` | note | `CREATED_AT` | none |
+| `GET /personas` | name | `CREATED_AT`, `NAME` | none |
+| `GET /blog-posts` | title, subtitle | `CREATED_AT`, `PUBLISHED_AT`, `TITLE` | `persona_identity` |
+
+- **Column queries page too:** the admin lists select columns and labels rather than
+  one Orm entity, so they page with `PaginationService.find_mapping_page`, which
+  returns each row as a mapping and shares `find_page`'s filtering, sorting and count.
+- **One shape for every blog post list:** `GET /blog-posts` returns the same summary
+  items as `/blog-posts/public`, without the body.
+- **A route's search is what its config lists.** The frontend uses as much of it as a
+  page needs; nothing rejects a search a page doesn't show.
+- **The frontend breaks until item 11:** the personas and blog post lists it calls
+  today read the old shape.
 
 ### 11. Frontend
 
@@ -460,7 +477,11 @@ Everything the backend-only PRs added, before the deploy:
 - **A persona's page:** its public posts (item 7), reached from a post or the feed, and
   readable signed out (item 6). Making a persona with public posts private warns that
   they'll be hidden.
-- The table, search box and pager every list shares (items 7 and 10).
+- The table, search box and pager every list shares (items 7 and 10), built against
+  the paged routes' query params (`page`, `page_size`, `search`, `sort_by`,
+  `sort_direction` and each route's filters). Item 10 broke the personas and blog post
+  list hooks (`persona-list-query.ts`, `blog-post-list-query.ts`), which still read
+  the old list shape; they move to it here.
 
 Probably more than one PR, split by area: the shared pieces and roles and credits first,
 then the admin panel and invites, then the homepage and persona pages.

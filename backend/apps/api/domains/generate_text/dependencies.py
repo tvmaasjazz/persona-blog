@@ -13,6 +13,7 @@ from apps.api.core.dependencies import (
 from apps.api.domains.generate_text.dtos import GenerateBlogPostDto
 from libs.core.exceptions import ServiceUnavailableException
 from libs.credits.services import CreditValidationService
+from libs.database.services import PaginationService
 from libs.generate_text.graphs.generate_text_graph_builder_registry import (
     GenerateTextGraphBuilderRegistry,
 )
@@ -117,7 +118,9 @@ async def get_generate_text_persona(
     """Loads the requested persona on its own short session, closed before the route runs."""
     db_session_factory = request.app.state.db_session_factory
     async with db_session_factory() as db_session:
-        persona_service = PersonaService(db_session=db_session)
+        persona_service = PersonaService(
+            db_session=db_session, pagination_service=PaginationService(db_session=db_session)
+        )
         return await persona_service.find_user_persona(dto.persona_identity, auth_user)
 
 

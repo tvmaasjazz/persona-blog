@@ -8,16 +8,17 @@ from libs.blog_posts.inputs import (
     CreateBlogPostFromGenerateTextRunInput,
     CreateBlogPostInput,
     FindPublicBlogPostPageInput,
+    FindUserBlogPostPageInput,
     UpdateBlogPostInput,
 )
 from libs.blog_posts.results import (
     BlogPostDetailResult,
     BlogPostSummaryResult,
     FindPublicBlogPostPageResult,
-    FindUserBlogPostListResult,
+    FindUserBlogPostPageResult,
     PublicBlogPostResult,
 )
-from libs.blog_posts.types import PublicBlogPostSortType
+from libs.blog_posts.types import PublicBlogPostSortType, UserBlogPostSortType
 from libs.blog_posts.utils import BlogPostValidationUtils
 
 
@@ -171,23 +172,16 @@ class PublicBlogPostResponseDto(BaseModel):
         )
 
 
-class BlogPostListResponseDto(BaseModel):
-    blog_posts: list[BlogPostResponseDto]
-
-    @classmethod
-    def from_result(
-        cls, find_user_blog_post_list_result: FindUserBlogPostListResult
-    ) -> BlogPostListResponseDto:
-        return cls(
-            blog_posts=[
-                BlogPostResponseDto.from_result(blog_post_detail_result)
-                for blog_post_detail_result in find_user_blog_post_list_result.blog_posts
-            ]
-        )
-
-
-class BlogPostFetchAllQueryDto(BaseModel):
+class UserBlogPostPageQueryDto(BasePageQueryDto):
+    sort_by: UserBlogPostSortType = UserBlogPostSortType.CREATED_AT
     persona_identity: UUID | None = None
+
+    def to_input(self) -> FindUserBlogPostPageInput:
+        return FindUserBlogPostPageInput(
+            pagination_input=self.to_pagination_input(),
+            sort_by=self.sort_by,
+            persona_identity=self.persona_identity,
+        )
 
 
 class PublicBlogPostPageQueryDto(BasePageQueryDto):
@@ -232,6 +226,24 @@ class BlogPostSummaryResponseDto(BaseModel):
             published_at=content_item_result.published_at,
             created_at=blog_post_summary_result.created_at,
             updated_at=blog_post_summary_result.updated_at,
+        )
+
+
+class UserBlogPostPageResponseDto(BasePageResponseDto):
+    blog_posts: list[BlogPostSummaryResponseDto]
+
+    @classmethod
+    def from_result(
+        cls, find_user_blog_post_page_result: FindUserBlogPostPageResult
+    ) -> UserBlogPostPageResponseDto:
+        return cls(
+            blog_posts=[
+                BlogPostSummaryResponseDto.from_result(blog_post_summary_result)
+                for blog_post_summary_result in find_user_blog_post_page_result.blog_posts
+            ],
+            pagination=PaginationResponseDto.from_result(
+                find_user_blog_post_page_result.pagination
+            ),
         )
 
 

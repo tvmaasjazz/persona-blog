@@ -6,11 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from libs.auth.results import AuthUser
 from libs.core.exceptions import ForbiddenException, NotFoundException
 from libs.database.orm import PersonaOrm, UserOrm
+from libs.database.services import PaginationService
 from libs.database.utils import DatabaseClockUtils
-from libs.personas.inputs import PersonaInput
+from libs.personas.constants import USER_PERSONA_PAGINATION_CONFIG
+from libs.personas.inputs import FindUserPersonaPageInput, PersonaInput
 from libs.personas.results import (
     CreatePersonaResult,
-    FindUserPersonaListResult,
+    FindUserPersonaPageResult,
     FindUserPersonaResult,
     PersonaDetailResult,
     PublicPersonaResult,
@@ -20,8 +22,9 @@ from libs.personas.results import (
 class PersonaService:
     """Creates, reads, updates and soft-deletes personas."""
 
-    def __init__(self, db_session: AsyncSession) -> None:
+    def __init__(self, db_session: AsyncSession, pagination_service: PaginationService) -> None:
         self._db_session = db_session
+        self._pagination_service = pagination_service
 
     async def create_persona(
         self, persona_input: PersonaInput, auth_user: AuthUser
@@ -81,21 +84,25 @@ class PersonaService:
             updated_at=persona_record.updated_at,
         )
 
-    async def find_user_persona_list(self, auth_user: AuthUser) -> FindUserPersonaListResult:
-        """The caller's own personas, newest first; empty when they have none."""
-        persona_query = (
-            select(PersonaOrm)
-            .where(PersonaOrm.created_by_id == auth_user.id)
-            .order_by(PersonaOrm.created_at.desc())
+    async def find_user_persona_page(
+        self, find_user_persona_page_input: FindUserPersonaPageInput, auth_user: AuthUser
+    ) -> FindUserPersonaPageResult:
+        """One page of the caller's own personas, searched and sorted per the input; empty
+        when they have none."""
+        # The caller's own personas; find_page searches, sorts and pages them
+        all_records_query = select(PersonaOrm).where(PersonaOrm.created_by_id == auth_user.id)
+        find_page_result = await self._pagination_service.find_page(
+            all_records_query,
+            USER_PERSONA_PAGINATION_CONFIG,
+            find_user_persona_page_input,
         )
-        persona_query_result = await self._db_session.execute(persona_query)
-        persona_records = persona_query_result.scalars().all()
 
-        return FindUserPersonaListResult(
+        return FindUserPersonaPageResult(
             personas=[
                 PersonaDetailResult.model_validate(persona_record, from_attributes=True)
-                for persona_record in persona_records
-            ]
+                for persona_record in find_page_result.records
+            ],
+            pagination=find_page_result.pagination,
         )
 
     async def find_user_persona(

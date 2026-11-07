@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from libs.core.results import PaginationResult
+
 
 class CreatePersonaResult(BaseModel):
     identity: UUID
@@ -34,8 +36,9 @@ class PublicPersonaResult(BaseModel):
     updated_at: datetime
 
 
-class FindUserPersonaListResult(BaseModel):
+class FindUserPersonaPageResult(BaseModel):
     personas: list[PersonaDetailResult]
+    pagination: PaginationResult
 
 
 class FindUserPersonaResult(BaseModel):

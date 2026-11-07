@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from libs.core.results import PaginationResult
 from libs.credits.types import CreditLedgerEntryType
 from libs.invites.types import InviteStatusType
 from libs.permissions.types import RoleType
@@ -20,8 +21,9 @@ class AdminUserDetailResult(BaseModel):
     last_activity_at: datetime | None
 
 
-class AdminFindUserListResult(BaseModel):
+class AdminFindUserPageResult(BaseModel):
     users: list[AdminUserDetailResult]
+    pagination: PaginationResult
 
 
 class AdminCreditLedgerEntryResult(BaseModel):
@@ -34,8 +36,9 @@ class AdminCreditLedgerEntryResult(BaseModel):
     created_at: datetime
 
 
-class AdminFindUserCreditLedgerResult(BaseModel):
+class AdminFindUserCreditLedgerPageResult(BaseModel):
     credit_ledger_entries: list[AdminCreditLedgerEntryResult]
+    pagination: PaginationResult
 
 
 class AdminGrantUserCreditsResult(BaseModel):
@@ -74,5 +77,6 @@ class AdminInviteDetailResult(BaseModel):
     created_by_email: str
 
 
-class AdminFindInviteListResult(BaseModel):
+class AdminFindInvitePageResult(BaseModel):
     invites: list[AdminInviteDetailResult]
+    pagination: PaginationResult

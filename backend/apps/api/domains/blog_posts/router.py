@@ -19,14 +19,14 @@ from apps.api.domains.blog_posts.dependencies import (
 )
 from apps.api.domains.blog_posts.dtos import (
     BlogPostDto,
-    BlogPostFetchAllQueryDto,
-    BlogPostListResponseDto,
     BlogPostResponseDto,
     CreateBlogPostDto,
     CreateBlogPostFromGenerateTextRunDto,
     PublicBlogPostPageQueryDto,
     PublicBlogPostPageResponseDto,
     PublicBlogPostResponseDto,
+    UserBlogPostPageQueryDto,
+    UserBlogPostPageResponseDto,
 )
 from libs.permissions.types import PermissionType
 
@@ -39,16 +39,17 @@ blog_post_router = APIRouter(prefix="/blog-posts", tags=["blog-posts"])
         Depends(require_permissions(PermissionType.BLOG_POST_READ)),
     ],
 )
-async def find_user_blog_post_list(
-    query_dto: Annotated[BlogPostFetchAllQueryDto, Query()],
+async def find_user_blog_post_page(
+    query_dto: Annotated[UserBlogPostPageQueryDto, Query()],
     auth_user: AuthUserDep,
     blog_post_service: BlogPostServiceDep,
-) -> BlogPostListResponseDto:
-    """Lists the signed-in user's blog posts, optionally only those of one persona."""
-    find_user_blog_post_list_result = await blog_post_service.find_user_blog_post_list(
-        auth_user, query_dto.persona_identity
+) -> UserBlogPostPageResponseDto:
+    """Returns a page of the signed-in user's blog posts without their bodies, newest first by
+    default, optionally only those of one persona; searchable by title and subtitle."""
+    find_user_blog_post_page_result = await blog_post_service.find_user_blog_post_page(
+        query_dto.to_input(), auth_user
     )
-    return BlogPostListResponseDto.from_result(find_user_blog_post_list_result)
+    return UserBlogPostPageResponseDto.from_result(find_user_blog_post_page_result)
 
 
 # The page is the same for every caller, so the user isn't passed on, but an expired

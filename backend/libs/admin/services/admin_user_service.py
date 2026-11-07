@@ -3,10 +3,15 @@ from uuid import UUID
 from sqlalchemy import Select, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from libs.admin.constants import ADMIN_USER_PAGINATION_CONFIG
 from libs.admin.exceptions import AdminUserNotChangeableException
-from libs.admin.inputs import AdminSetUserActiveInput, AdminSetUserRoleInput
+from libs.admin.inputs import (
+    AdminFindUserPageInput,
+    AdminSetUserActiveInput,
+    AdminSetUserRoleInput,
+)
 from libs.admin.results import (
-    AdminFindUserListResult,
+    AdminFindUserPageResult,
     AdminSetUserActiveResult,
     AdminSetUserRoleResult,
     AdminUserDetailResult,
@@ -14,6 +19,7 @@ from libs.admin.results import (
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.database.orm import RoleOrm, UserOrm
+from libs.database.services import PaginationService
 from libs.permissions.types import RoleType
 
 
@@ -21,21 +27,27 @@ class AdminUserService:
     """Reads any user's account and sets their role or suspension for the admin, skipping the
     ownership checks other services make; the system user is never shown."""
 
-    def __init__(self, db_session: AsyncSession) -> None:
+    def __init__(self, db_session: AsyncSession, pagination_service: PaginationService) -> None:
         self._db_session = db_session
+        self._pagination_service = pagination_service
 
-    async def find_user_list(self) -> AdminFindUserListResult:
-        """Every user but the system user, newest first, with their role and balance."""
-        user_query = (
-            self._build_admin_user_query()
-            .where(UserOrm.is_system_user.is_(False))
-            .order_by(UserOrm.created_at.desc(), UserOrm.id.desc())
+    async def find_user_page(
+        self, admin_find_user_page_input: AdminFindUserPageInput
+    ) -> AdminFindUserPageResult:
+        """One page of users but the system user, with their role and balance, searched and
+        sorted per the input."""
+        # Every user but the system user; find_mapping_page searches, sorts and pages them
+        all_records_query = self._build_admin_user_query().where(UserOrm.is_system_user.is_(False))
+        find_page_result = await self._pagination_service.find_mapping_page(
+            all_records_query, ADMIN_USER_PAGINATION_CONFIG, admin_find_user_page_input
         )
-        user_query_result = await self._db_session.execute(user_query)
-        user_rows = user_query_result.mappings().all()
 
-        return AdminFindUserListResult(
-            users=[AdminUserDetailResult.model_validate(user_row) for user_row in user_rows]
+        return AdminFindUserPageResult(
+            users=[
+                AdminUserDetailResult.model_validate(user_record)
+                for user_record in find_page_result.records
+            ],
+            pagination=find_page_result.pagination,
         )
 
     async def find_user(self, user_identity: UUID) -> AdminUserDetailResult:

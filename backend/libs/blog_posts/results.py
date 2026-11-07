@@ -52,5 +52,6 @@ class PublicBlogPostResult(BaseModel):
     is_owner: bool
 
 
-class FindUserBlogPostListResult(BaseModel):
-    blog_posts: list[BlogPostDetailResult]
+class FindUserBlogPostPageResult(BaseModel):
+    blog_posts: list[BlogPostSummaryResult]
+    pagination: PaginationResult

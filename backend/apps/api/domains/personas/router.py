@@ -1,6 +1,7 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from apps.api.core.dependencies import (
     AuthUserDep,
@@ -15,9 +16,10 @@ from apps.api.domains.personas.dependencies import (
 )
 from apps.api.domains.personas.dtos import (
     PersonaDto,
-    PersonaListResponseDto,
     PersonaResponseDto,
     PublicPersonaResponseDto,
+    UserPersonaPageQueryDto,
+    UserPersonaPageResponseDto,
 )
 from libs.permissions.types import PermissionType
 
@@ -30,12 +32,17 @@ persona_router = APIRouter(prefix="/personas", tags=["personas"])
         Depends(require_permissions(PermissionType.PERSONA_READ)),
     ],
 )
-async def find_user_persona_list(
-    auth_user: AuthUserDep, persona_service: PersonaServiceDep
-) -> PersonaListResponseDto:
-    """Lists the signed-in user's own personas, newest first."""
-    find_user_persona_list_result = await persona_service.find_user_persona_list(auth_user)
-    return PersonaListResponseDto.from_result(find_user_persona_list_result)
+async def find_user_persona_page(
+    query_dto: Annotated[UserPersonaPageQueryDto, Query()],
+    auth_user: AuthUserDep,
+    persona_service: PersonaServiceDep,
+) -> UserPersonaPageResponseDto:
+    """Returns a page of the signed-in user's own personas, newest first by default;
+    searchable by name."""
+    find_user_persona_page_result = await persona_service.find_user_persona_page(
+        query_dto.to_input(), auth_user
+    )
+    return UserPersonaPageResponseDto.from_result(find_user_persona_page_result)
 
 
 @persona_router.get(

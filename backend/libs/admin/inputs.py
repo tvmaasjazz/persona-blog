@@ -2,7 +2,21 @@ from decimal import Decimal
 
 from pydantic import BaseModel
 
+from libs.admin.types import AdminCreditLedgerSortType, AdminInviteSortType, AdminUserSortType
+from libs.core.inputs import BasePageInput
 from libs.permissions.types import RoleType
+
+
+class AdminFindUserPageInput(BasePageInput):
+    sort_by: AdminUserSortType
+
+
+class AdminFindInvitePageInput(BasePageInput):
+    sort_by: AdminInviteSortType
+
+
+class AdminFindUserCreditLedgerPageInput(BasePageInput):
+    sort_by: AdminCreditLedgerSortType
 
 
 class AdminGrantUserCreditsInput(BaseModel):

@@ -5,16 +5,18 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from libs.admin.constants import ADMIN_INVITE_PAGINATION_CONFIG
 from libs.admin.exceptions import AdminInviteUsedException
-from libs.admin.inputs import AdminCreateInviteInput
+from libs.admin.inputs import AdminCreateInviteInput, AdminFindInvitePageInput
 from libs.admin.results import (
     AdminCreateInviteResult,
-    AdminFindInviteListResult,
+    AdminFindInvitePageResult,
     AdminInviteDetailResult,
 )
 from libs.auth.results import AuthUser
 from libs.core.exceptions import NotFoundException
 from libs.database.orm import InviteOrm, UserOrm
+from libs.database.services import PaginationService
 from libs.database.utils import DatabaseClockUtils
 from libs.invites.utils import InviteUtils
 
@@ -23,9 +25,15 @@ class AdminInviteService:
     """Creates, lists and revokes invites for the admin; the invite's code is shown once, in
     the link a create returns."""
 
-    def __init__(self, db_session: AsyncSession, frontend_url: str) -> None:
+    def __init__(
+        self,
+        db_session: AsyncSession,
+        frontend_url: str,
+        pagination_service: PaginationService,
+    ) -> None:
         self._db_session = db_session
         self._frontend_url = frontend_url
+        self._pagination_service = pagination_service
 
     async def create_invite(
         self, admin_create_invite_input: AdminCreateInviteInput, auth_user: AuthUser
@@ -52,11 +60,15 @@ class AdminInviteService:
         invite_url = InviteUtils.build_invite_url(self._frontend_url, code)
         return AdminCreateInviteResult(identity=invite_identity, invite_url=invite_url)
 
-    async def find_invite_list(self) -> AdminFindInviteListResult:
-        """Every invite, newest first, with its status and who used it."""
+    async def find_invite_page(
+        self, admin_find_invite_page_input: AdminFindInvitePageInput
+    ) -> AdminFindInvitePageResult:
+        """One page of invites with their status and who used them, searched and sorted per
+        the input."""
+        # Every invite; find_mapping_page searches, sorts and pages them
         used_by_user = aliased(UserOrm)
         created_by_user = aliased(UserOrm)
-        invite_query = (
+        all_records_query = (
             select(
                 InviteOrm.identity,
                 InviteOrm.name,
@@ -74,30 +86,33 @@ class AdminInviteService:
             )
             .outerjoin(used_by_user, used_by_user.id == InviteOrm.used_by_user_id)
             .join(created_by_user, created_by_user.id == InviteOrm.created_by_id)
-            .order_by(InviteOrm.created_at.desc(), InviteOrm.id.desc())
         )
-        invite_query_result = await self._db_session.execute(invite_query)
-        invite_rows = invite_query_result.all()
+        find_page_result = await self._pagination_service.find_mapping_page(
+            all_records_query, ADMIN_INVITE_PAGINATION_CONFIG, admin_find_invite_page_input
+        )
 
-        return AdminFindInviteListResult(
+        return AdminFindInvitePageResult(
             invites=[
                 AdminInviteDetailResult(
-                    identity=invite_row.identity,
-                    name=invite_row.name,
-                    credit_amount_usd=invite_row.credit_amount_usd,
-                    note=invite_row.note,
+                    identity=invite_record["identity"],
+                    name=invite_record["name"],
+                    credit_amount_usd=invite_record["credit_amount_usd"],
+                    note=invite_record["note"],
                     status=InviteUtils.build_status_type(
-                        invite_row.revoked_at, invite_row.used_at, invite_row.is_expired
+                        invite_record["revoked_at"],
+                        invite_record["used_at"],
+                        invite_record["is_expired"],
                     ),
-                    expires_at=invite_row.expires_at,
-                    used_at=invite_row.used_at,
-                    used_by_email=invite_row.used_by_email,
-                    revoked_at=invite_row.revoked_at,
-                    created_at=invite_row.created_at,
-                    created_by_email=invite_row.created_by_email,
+                    expires_at=invite_record["expires_at"],
+                    used_at=invite_record["used_at"],
+                    used_by_email=invite_record["used_by_email"],
+                    revoked_at=invite_record["revoked_at"],
+                    created_at=invite_record["created_at"],
+                    created_by_email=invite_record["created_by_email"],
                 )
-                for invite_row in invite_rows
-            ]
+                for invite_record in find_page_result.records
+            ],
+            pagination=find_page_result.pagination,
         )
 
     async def revoke_invite(self, invite_identity: UUID, auth_user: AuthUser) -> None:
