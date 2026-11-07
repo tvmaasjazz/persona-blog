@@ -317,9 +317,9 @@ down to `PUBLIC_BLOG_POST_PAGINATION_CONFIG`.
 - The service builds its all-records query (the joins and who may see what) and makes
   one call, `PaginationService.find_page`, passing the `PaginationConfig`, its `Input`,
   and its loader options as `load_options`. A query that selects columns rather than
-  one Orm entity calls `find_mapping_page` instead, which returns each row as a mapping
-  of its labels. `find_page` counts with `count(*) OVER ()`
-  on the page query, and runs a separate count only for an empty page past the first.
+  one Orm entity calls `find_mapping_page` instead, with no `load_options`, which
+  returns each row as a mapping of its labels. Both count with `count(*) OVER ()` on
+  the page query, and run a separate count only for an empty page past the first.
 - The `<Entity>PageResponseDto` extends `BasePageResponseDto`, and its `Result` carries
   `pagination: PaginationResult`, mapped with `PaginationResponseDto.from_result()`.
 

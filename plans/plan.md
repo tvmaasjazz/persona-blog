@@ -343,7 +343,8 @@ items 9 and 10 follow it.
   a route that returns everything at once.
 - **One config per paged route, one call per service:** a `PaginationConfig` declares
   what a route searches, sorts and filters by, and the service makes one
-  `PaginationService.find_page` call (`fastapi-structure.md` › Paged routes). The total
+  `PaginationService.find_page` call, or `find_mapping_page` for a query that selects
+  columns (`fastapi-structure.md` › Paged routes). The total
   comes from `count(*) OVER ()` on the page query, which Postgres computes before
   `LIMIT`. Running a count beside the page on a second session would cost a second
   connection and could disagree with the page, to save one round trip.
