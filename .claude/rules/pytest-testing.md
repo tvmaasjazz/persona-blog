@@ -48,7 +48,7 @@ choices).
 | `prompts.py`, or each module in a `prompts/` package | The mirrored module | Each builder: the inputs land in the prompt they belong in (§1) |
 | A graph variant's `<variant>_<what>_output_format.py` | The mirrored module | `normalize_output`: each fix it makes and what it leaves alone. `validate_output`: each problem on its own, and a valid document with none (§1) |
 | `utils/*.py` | `test_<utils>.py` | Every branch of every static method. A `Utils` that builds queries runs them against the test DB (§3); compare compiled SQL only for what a result can't show, such as a dropped `ORDER BY`. A `Utils` whose only output is a wall-clock measurement gets no file |
-| `libs/database/pagination_config.py` | `tests/libs/database/test_pagination_config.py` | One parametrized test over every (pagination config, input class) pair: each `filters` key is a field of the input class |
+| `libs/database/pagination_config.py` | `tests/libs/database/test_pagination_config.py` | Each mismatch `PaginationConfig` refuses when it's built, and a config that matches its input class. A lib's config needs no test: it's built when the app imports |
 | `inputs.py`, `results.py`, `settings.py` | The mirrored module | Only models with a validator or declared constraint: accepted and rejected values (§1) |
 | `states.py` | `test_states.py` | Only a method that does more than group stored fields |
 | Class with an enum dispatch map | That class's test file | Every enum member has a handler (§1) |
@@ -58,9 +58,8 @@ choices).
 | `apps/api/core/*.py`, `app_factory.py`, `lifespan.py`, `migrations/` | The existing test file | Extend it (§7, §8, §10) |
 
 No test file for: a domain's `dtos.py` (unless a mapper has logic, §1), a domain's
-`dependencies.py`, `exceptions.py`, `libs/database/orm/*.py`, `constants.py` (beyond
-the pagination config guard above). Route, service and app-factory tests and CI's
-drift check cover them.
+`dependencies.py`, `exceptions.py`, `libs/database/orm/*.py`, `constants.py`. Route,
+service and app-factory tests and CI's drift check cover them.
 
 ## Conventions for every test
 

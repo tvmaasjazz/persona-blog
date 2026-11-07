@@ -310,10 +310,11 @@ down to `PUBLIC_BLOG_POST_PAGINATION_CONFIG`.
 - A datetime filter is an `AwareDatetime`, so a time without a zone is a 422. An any-of
   `list[...]` filter takes a `max_length`.
 - Filters only narrow. Who may see what stays in the service's all-records query.
-- A `PaginationConfig` in the lib's `constants.py` names the search columns, each sort
-  value's column, each filter field's `PaginationFilterConfig` (column and operator),
-  and the tiebreak column. Add each new one and its `Input` to the config guard test
-  (`pytest-testing.md` › What to write for each source file).
+- A `PaginationConfig` in the lib's `constants.py` names its `Input` class, the search
+  columns, each sort value's column, each filter field's `PaginationFilterConfig`
+  (column and operator), and the tiebreak column. It raises when it's built unless it
+  sorts by every value of the `Input`'s sort type and filters by exactly the `Input`'s
+  filter fields, so a mismatch stops the app importing.
 - The service builds its all-records query (the joins and who may see what) and makes
   one call, `PaginationService.find_page`, passing the `PaginationConfig`, its `Input`,
   and its loader options as `load_options`. A query that selects columns rather than
