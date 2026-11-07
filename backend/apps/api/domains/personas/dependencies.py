@@ -4,12 +4,15 @@ from uuid import UUID
 from fastapi import Depends
 
 from apps.api.core.dependencies import AuthUserDep, DbSessionDep
+from apps.api.domains.blog_posts.dependencies import PaginationServiceDep
 from apps.api.domains.personas.dtos import PersonaDto
 from libs.personas.services import PersonaService, PersonaValidationService
 
 
-def get_persona_service(db_session: DbSessionDep) -> PersonaService:
-    return PersonaService(db_session=db_session)
+def get_persona_service(
+    db_session: DbSessionDep, pagination_service: PaginationServiceDep
+) -> PersonaService:
+    return PersonaService(db_session=db_session, pagination_service=pagination_service)
 
 
 PersonaServiceDep = Annotated[PersonaService, Depends(get_persona_service)]

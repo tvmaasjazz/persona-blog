@@ -4,12 +4,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, StringConstraints
 
-from libs.personas.inputs import PersonaInput
+from apps.api.core.dtos import BasePageQueryDto, BasePageResponseDto, PaginationResponseDto
+from libs.personas.inputs import FindUserPersonaPageInput, PersonaInput
 from libs.personas.results import (
-    FindUserPersonaListResult,
+    FindUserPersonaPageResult,
     PersonaDetailResult,
     PublicPersonaResult,
 )
+from libs.personas.types import UserPersonaSortType
 
 PersonaNameStr = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
@@ -104,16 +106,26 @@ class PublicPersonaResponseDto(BaseModel):
         )
 
 
-class PersonaListResponseDto(BaseModel):
+class UserPersonaPageQueryDto(BasePageQueryDto):
+    sort_by: UserPersonaSortType = UserPersonaSortType.CREATED_AT
+
+    def to_input(self) -> FindUserPersonaPageInput:
+        return FindUserPersonaPageInput(
+            pagination_input=self.to_pagination_input(), sort_by=self.sort_by
+        )
+
+
+class UserPersonaPageResponseDto(BasePageResponseDto):
     personas: list[PersonaResponseDto]
 
     @classmethod
     def from_result(
-        cls, find_user_persona_list_result: FindUserPersonaListResult
-    ) -> PersonaListResponseDto:
+        cls, find_user_persona_page_result: FindUserPersonaPageResult
+    ) -> UserPersonaPageResponseDto:
         return cls(
             personas=[
                 PersonaResponseDto.from_result(persona_detail_result)
-                for persona_detail_result in find_user_persona_list_result.personas
-            ]
+                for persona_detail_result in find_user_persona_page_result.personas
+            ],
+            pagination=PaginationResponseDto.from_result(find_user_persona_page_result.pagination),
         )

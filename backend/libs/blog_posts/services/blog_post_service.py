@@ -6,12 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
 
 from libs.auth.results import AuthUser
-from libs.blog_posts.constants import PUBLIC_BLOG_POST_PAGINATION_CONFIG
+from libs.blog_posts.constants import (
+    PUBLIC_BLOG_POST_PAGINATION_CONFIG,
+    USER_BLOG_POST_PAGINATION_CONFIG,
+)
 from libs.blog_posts.exceptions import BlogPostGenerateTextRunOutputInvalidException
 from libs.blog_posts.inputs import (
     CreateBlogPostFromGenerateTextRunInput,
     CreateBlogPostInput,
     FindPublicBlogPostPageInput,
+    FindUserBlogPostPageInput,
     UpdateBlogPostInput,
 )
 from libs.blog_posts.results import (
@@ -19,7 +23,7 @@ from libs.blog_posts.results import (
     BlogPostSummaryResult,
     CreateBlogPostResult,
     FindPublicBlogPostPageResult,
-    FindUserBlogPostListResult,
+    FindUserBlogPostPageResult,
     PublicBlogPostResult,
 )
 from libs.blog_posts.utils import BlogPostValidationUtils
@@ -199,31 +203,33 @@ class BlogPostService:
             pagination=find_page_result.pagination,
         )
 
-    async def find_user_blog_post_list(
-        self, auth_user: AuthUser, persona_identity: UUID | None
-    ) -> FindUserBlogPostListResult:
-        """The caller's own posts, newest first, optionally limited to one persona."""
-        query = (
+    async def find_user_blog_post_page(
+        self, find_user_blog_post_page_input: FindUserBlogPostPageInput, auth_user: AuthUser
+    ) -> FindUserBlogPostPageResult:
+        """One page of the caller's own posts, without their bodies, searched, filtered and
+        sorted per the input."""
+        # The caller's own posts; find_page filters, sorts and pages them
+        all_records_query = (
             select(BlogPostOrm)
             .join(ContentItemOrm, BlogPostOrm.content_item_id == ContentItemOrm.id)
             .join(PersonaOrm, ContentItemOrm.persona_id == PersonaOrm.id)
             .where(ContentItemQueryUtils.build_owned_condition(auth_user.id))
-            .order_by(ContentItemOrm.created_at.desc())
-            .options(
-                contains_eager(BlogPostOrm.content_item).contains_eager(ContentItemOrm.persona)
-            )
         )
-        if persona_identity is not None:
-            query = query.where(PersonaOrm.identity == persona_identity)
+        find_page_result = await self._pagination_service.find_page(
+            all_records_query,
+            USER_BLOG_POST_PAGINATION_CONFIG,
+            find_user_blog_post_page_input,
+            load_options=(
+                contains_eager(BlogPostOrm.content_item).contains_eager(ContentItemOrm.persona),
+            ),
+        )
 
-        query_result = await self._db_session.execute(query)
-        blog_post_records = query_result.scalars().all()
-
-        return FindUserBlogPostListResult(
+        return FindUserBlogPostPageResult(
             blog_posts=[
-                BlogPostDetailResult.model_validate(blog_post_record, from_attributes=True)
-                for blog_post_record in blog_post_records
-            ]
+                BlogPostSummaryResult.model_validate(blog_post_record, from_attributes=True)
+                for blog_post_record in find_page_result.records
+            ],
+            pagination=find_page_result.pagination,
         )
 
     async def update_blog_post(

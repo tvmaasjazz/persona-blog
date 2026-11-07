@@ -4,11 +4,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from libs.admin.constants import ADMIN_CREDIT_LEDGER_PAGINATION_CONFIG
 from libs.admin.exceptions import AdminCreditGrantSystemUserException
-from libs.admin.inputs import AdminGrantUserCreditsInput
+from libs.admin.inputs import AdminFindUserCreditLedgerPageInput, AdminGrantUserCreditsInput
 from libs.admin.results import (
     AdminCreditLedgerEntryResult,
-    AdminFindUserCreditLedgerResult,
+    AdminFindUserCreditLedgerPageResult,
     AdminGrantUserCreditsResult,
 )
 from libs.auth.results import AuthUser
@@ -16,6 +17,7 @@ from libs.core.exceptions import NotFoundException
 from libs.credits.inputs import GrantCreditsInput
 from libs.credits.services import CreditLedgerService
 from libs.database.orm import CreditLedgerOrm, GenerateTextRunOrm, UserOrm
+from libs.database.services import PaginationService
 from libs.users.services import UserService
 
 
@@ -28,19 +30,26 @@ class AdminCreditService:
         db_session: AsyncSession,
         credit_ledger_service: CreditLedgerService,
         user_service: UserService,
+        pagination_service: PaginationService,
     ) -> None:
         self._db_session = db_session
+        self._pagination_service = pagination_service
         self._credit_ledger_service = credit_ledger_service
         self._user_service = user_service
 
-    async def find_user_credit_ledger(self, user_identity: UUID) -> AdminFindUserCreditLedgerResult:
-        """The user's ledger rows, newest first, empty when they have none; NotFoundException
-        for an unknown identity or the system user."""
+    async def find_user_credit_ledger_page(
+        self,
+        user_identity: UUID,
+        admin_find_user_credit_ledger_page_input: AdminFindUserCreditLedgerPageInput,
+    ) -> AdminFindUserCreditLedgerPageResult:
+        """One page of the user's ledger rows, searched and sorted per the input, empty when
+        they have none; NotFoundException for an unknown identity or the system user."""
         user_id = await self._find_user_id(user_identity)
 
-        # A charge or refund names its run; a grant names none
+        # A charge or refund names its run; a grant names none. find_mapping_page searches,
+        # sorts and pages the user's rows
         created_by_user = aliased(UserOrm)
-        credit_ledger_query = (
+        all_records_query = (
             select(
                 CreditLedgerOrm.identity,
                 CreditLedgerOrm.entry_type,
@@ -55,16 +64,19 @@ class AdminCreditService:
             )
             .join(created_by_user, created_by_user.id == CreditLedgerOrm.created_by_id)
             .where(CreditLedgerOrm.user_id == user_id)
-            .order_by(CreditLedgerOrm.created_at.desc(), CreditLedgerOrm.id.desc())
         )
-        credit_ledger_query_result = await self._db_session.execute(credit_ledger_query)
-        credit_ledger_rows = credit_ledger_query_result.mappings().all()
+        find_page_result = await self._pagination_service.find_mapping_page(
+            all_records_query,
+            ADMIN_CREDIT_LEDGER_PAGINATION_CONFIG,
+            admin_find_user_credit_ledger_page_input,
+        )
 
-        return AdminFindUserCreditLedgerResult(
+        return AdminFindUserCreditLedgerPageResult(
             credit_ledger_entries=[
-                AdminCreditLedgerEntryResult.model_validate(credit_ledger_row)
-                for credit_ledger_row in credit_ledger_rows
-            ]
+                AdminCreditLedgerEntryResult.model_validate(credit_ledger_record)
+                for credit_ledger_record in find_page_result.records
+            ],
+            pagination=find_page_result.pagination,
         )
 
     async def grant_user_credits(

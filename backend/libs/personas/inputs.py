@@ -1,5 +1,12 @@
 from pydantic import BaseModel
 
+from libs.core.inputs import BasePageInput
+from libs.personas.types import UserPersonaSortType
+
+
+class FindUserPersonaPageInput(BasePageInput):
+    sort_by: UserPersonaSortType
+
 
 class PersonaInput(BaseModel):
     name: str

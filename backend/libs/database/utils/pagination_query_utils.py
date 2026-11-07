@@ -11,6 +11,7 @@ from libs.core.types import FilterOperatorType, SortDirectionType
 from libs.database.pagination_config import PaginationConfig
 
 MAX_SEARCH_WORD_COUNT = 8
+PAGE_TOTAL_LABEL = "total"
 
 CONDITION_BUILDER_BY_OPERATOR: dict[
     FilterOperatorType, Callable[[QueryableAttribute[Any], Any], ColumnElement[bool]]
@@ -87,7 +88,7 @@ class PaginationQueryUtils:
         offset = (pagination_input.page - 1) * pagination_input.page_size
         return (
             # The window runs before LIMIT and OFFSET, so each row carries the full total
-            filtered_query.add_columns(func.count().over().label("total"))
+            filtered_query.add_columns(func.count().over().label(PAGE_TOTAL_LABEL))
             .order_by(
                 build_order(sort_column).nulls_last(),
                 build_order(pagination_config.tiebreak_column),

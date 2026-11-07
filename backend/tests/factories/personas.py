@@ -3,9 +3,12 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from libs.core.types import SortDirectionType
 from libs.database.orm import PersonaOrm
-from libs.personas.inputs import PersonaInput
+from libs.personas.inputs import FindUserPersonaPageInput, PersonaInput
 from libs.personas.results import FindUserPersonaResult
+from libs.personas.types import UserPersonaSortType
+from tests.factories.core import build_pagination_input
 
 
 def build_persona_input(
@@ -30,6 +33,22 @@ def build_persona_input(
         default_target_audience=default_target_audience,
         sample_writing=sample_writing,
         is_public=is_public,
+    )
+
+
+def build_find_user_persona_page_input(
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    search: str | None = None,
+    sort_by: UserPersonaSortType = UserPersonaSortType.CREATED_AT,
+    sort_direction: SortDirectionType = SortDirectionType.DESC,
+) -> FindUserPersonaPageInput:
+    return FindUserPersonaPageInput(
+        pagination_input=build_pagination_input(
+            page=page, page_size=page_size, search=search, sort_direction=sort_direction
+        ),
+        sort_by=sort_by,
     )
 
 

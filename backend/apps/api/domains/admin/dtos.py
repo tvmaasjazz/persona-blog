@@ -5,10 +5,18 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints
 
-from apps.api.core.dtos import UsdDecimal
+from apps.api.core.dtos import (
+    BasePageQueryDto,
+    BasePageResponseDto,
+    PaginationResponseDto,
+    UsdDecimal,
+)
 from libs.admin.constants import MAX_CREDIT_GRANT_USD
 from libs.admin.inputs import (
     AdminCreateInviteInput,
+    AdminFindInvitePageInput,
+    AdminFindUserCreditLedgerPageInput,
+    AdminFindUserPageInput,
     AdminGrantUserCreditsInput,
     AdminSetUserActiveInput,
     AdminSetUserRoleInput,
@@ -16,12 +24,13 @@ from libs.admin.inputs import (
 from libs.admin.results import (
     AdminCreateInviteResult,
     AdminCreditLedgerEntryResult,
-    AdminFindInviteListResult,
-    AdminFindUserCreditLedgerResult,
-    AdminFindUserListResult,
+    AdminFindInvitePageResult,
+    AdminFindUserCreditLedgerPageResult,
+    AdminFindUserPageResult,
     AdminInviteDetailResult,
     AdminUserDetailResult,
 )
+from libs.admin.types import AdminCreditLedgerSortType, AdminInviteSortType, AdminUserSortType
 from libs.credits.types import CreditLedgerEntryType
 from libs.invites.constants import DEFAULT_INVITE_EXPIRES_IN_DAYS, MAX_INVITE_EXPIRES_IN_DAYS
 from libs.invites.types import InviteStatusType
@@ -80,6 +89,33 @@ class AdminUserActiveDto(BaseModel):
         return AdminSetUserActiveInput(is_active=self.is_active)
 
 
+class AdminUserPageQueryDto(BasePageQueryDto):
+    sort_by: AdminUserSortType = AdminUserSortType.CREATED_AT
+
+    def to_input(self) -> AdminFindUserPageInput:
+        return AdminFindUserPageInput(
+            pagination_input=self.to_pagination_input(), sort_by=self.sort_by
+        )
+
+
+class AdminInvitePageQueryDto(BasePageQueryDto):
+    sort_by: AdminInviteSortType = AdminInviteSortType.CREATED_AT
+
+    def to_input(self) -> AdminFindInvitePageInput:
+        return AdminFindInvitePageInput(
+            pagination_input=self.to_pagination_input(), sort_by=self.sort_by
+        )
+
+
+class AdminCreditLedgerPageQueryDto(BasePageQueryDto):
+    sort_by: AdminCreditLedgerSortType = AdminCreditLedgerSortType.CREATED_AT
+
+    def to_input(self) -> AdminFindUserCreditLedgerPageInput:
+        return AdminFindUserCreditLedgerPageInput(
+            pagination_input=self.to_pagination_input(), sort_by=self.sort_by
+        )
+
+
 class AdminUserResponseDto(BaseModel):
     identity: UUID
     email: str
@@ -104,18 +140,19 @@ class AdminUserResponseDto(BaseModel):
         )
 
 
-class AdminUserListResponseDto(BaseModel):
+class AdminUserPageResponseDto(BasePageResponseDto):
     users: list[AdminUserResponseDto]
 
     @classmethod
     def from_result(
-        cls, find_user_list_result: AdminFindUserListResult
-    ) -> AdminUserListResponseDto:
+        cls, admin_find_user_page_result: AdminFindUserPageResult
+    ) -> AdminUserPageResponseDto:
         return cls(
             users=[
                 AdminUserResponseDto.from_result(admin_user_detail_result)
-                for admin_user_detail_result in find_user_list_result.users
-            ]
+                for admin_user_detail_result in admin_find_user_page_result.users
+            ],
+            pagination=PaginationResponseDto.from_result(admin_find_user_page_result.pagination),
         )
 
 
@@ -165,18 +202,19 @@ class AdminInviteResponseDto(BaseModel):
         )
 
 
-class AdminInviteListResponseDto(BaseModel):
+class AdminInvitePageResponseDto(BasePageResponseDto):
     invites: list[AdminInviteResponseDto]
 
     @classmethod
     def from_result(
-        cls, find_invite_list_result: AdminFindInviteListResult
-    ) -> AdminInviteListResponseDto:
+        cls, admin_find_invite_page_result: AdminFindInvitePageResult
+    ) -> AdminInvitePageResponseDto:
         return cls(
             invites=[
                 AdminInviteResponseDto.from_result(admin_invite_detail_result)
-                for admin_invite_detail_result in find_invite_list_result.invites
-            ]
+                for admin_invite_detail_result in admin_find_invite_page_result.invites
+            ],
+            pagination=PaginationResponseDto.from_result(admin_find_invite_page_result.pagination),
         )
 
 
@@ -204,18 +242,21 @@ class AdminCreditLedgerEntryResponseDto(BaseModel):
         )
 
 
-class AdminCreditLedgerResponseDto(BaseModel):
+class AdminCreditLedgerPageResponseDto(BasePageResponseDto):
     credit_ledger_entries: list[AdminCreditLedgerEntryResponseDto]
 
     @classmethod
     def from_result(
-        cls, find_user_credit_ledger_result: AdminFindUserCreditLedgerResult
-    ) -> AdminCreditLedgerResponseDto:
+        cls, admin_find_user_credit_ledger_page_result: AdminFindUserCreditLedgerPageResult
+    ) -> AdminCreditLedgerPageResponseDto:
         return cls(
             credit_ledger_entries=[
                 AdminCreditLedgerEntryResponseDto.from_result(credit_ledger_entry_result)
                 for credit_ledger_entry_result in (
-                    find_user_credit_ledger_result.credit_ledger_entries
+                    admin_find_user_credit_ledger_page_result.credit_ledger_entries
                 )
-            ]
+            ],
+            pagination=PaginationResponseDto.from_result(
+                admin_find_user_credit_ledger_page_result.pagination
+            ),
         )

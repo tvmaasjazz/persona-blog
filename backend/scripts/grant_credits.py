@@ -19,6 +19,7 @@ from libs.admin.services import AdminCreditService
 from libs.auth.results import AuthUser
 from libs.credits.services import CreditLedgerService
 from libs.database.orm import UserOrm
+from libs.database.services import PaginationService
 from libs.database.session import create_db_session_factory
 from libs.permissions.types import RoleType
 from libs.users.services import UserService
@@ -72,6 +73,7 @@ async def _grant_credits(email: str, amount_usd: Decimal, note: str) -> None:
                 db_session=db_session,
                 credit_ledger_service=credit_ledger_service,
                 user_service=user_service,
+                pagination_service=PaginationService(db_session=db_session),
             )
             grant_user_credits_input = AdminGrantUserCreditsInput(amount_usd=amount_usd, note=note)
             grant_user_credits_result = await admin_credit_service.grant_user_credits(

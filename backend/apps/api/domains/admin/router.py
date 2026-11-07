@@ -1,6 +1,7 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 
 from apps.api.core.config import AppSettings
 from apps.api.core.dependencies import AuthUserDep, require_permissions
@@ -12,12 +13,15 @@ from apps.api.domains.admin.dependencies import (
 )
 from apps.api.domains.admin.dtos import (
     AdminCreditGrantDto,
-    AdminCreditLedgerResponseDto,
+    AdminCreditLedgerPageQueryDto,
+    AdminCreditLedgerPageResponseDto,
     AdminInviteCreateResponseDto,
     AdminInviteDto,
-    AdminInviteListResponseDto,
+    AdminInvitePageQueryDto,
+    AdminInvitePageResponseDto,
     AdminUserActiveDto,
-    AdminUserListResponseDto,
+    AdminUserPageQueryDto,
+    AdminUserPageResponseDto,
     AdminUserResponseDto,
     AdminUserRoleDto,
 )
@@ -38,10 +42,14 @@ admin_router = APIRouter(prefix="/admin", tags=["admin"])
     "/users",
     dependencies=[Depends(require_permissions(PermissionType.USER_READ))],
 )
-async def find_user_list(admin_user_service: AdminUserServiceDep) -> AdminUserListResponseDto:
-    """Lists every user, newest first, with their role and balance."""
-    find_user_list_result = await admin_user_service.find_user_list()
-    return AdminUserListResponseDto.from_result(find_user_list_result)
+async def find_user_page(
+    query_dto: Annotated[AdminUserPageQueryDto, Query()],
+    admin_user_service: AdminUserServiceDep,
+) -> AdminUserPageResponseDto:
+    """Returns one page of users with their role and balance, newest first unless sorted
+    otherwise."""
+    admin_find_user_page_result = await admin_user_service.find_user_page(query_dto.to_input())
+    return AdminUserPageResponseDto.from_result(admin_find_user_page_result)
 
 
 @admin_router.get(
@@ -60,14 +68,17 @@ async def find_user(
     "/users/{user_identity}/credit-ledger",
     dependencies=[Depends(require_permissions(PermissionType.CREDIT_READ))],
 )
-async def find_user_credit_ledger(
-    user_identity: UUID, admin_credit_service: AdminCreditServiceDep
-) -> AdminCreditLedgerResponseDto:
-    """Lists the user's credit ledger, newest first; 404 for an unknown user."""
-    find_user_credit_ledger_result = await admin_credit_service.find_user_credit_ledger(
-        user_identity
+async def find_user_credit_ledger_page(
+    user_identity: UUID,
+    query_dto: Annotated[AdminCreditLedgerPageQueryDto, Query()],
+    admin_credit_service: AdminCreditServiceDep,
+) -> AdminCreditLedgerPageResponseDto:
+    """Returns one page of the user's credit ledger, newest first unless sorted otherwise; 404
+    for an unknown user."""
+    admin_find_user_credit_ledger_page_result = (
+        await admin_credit_service.find_user_credit_ledger_page(user_identity, query_dto.to_input())
     )
-    return AdminCreditLedgerResponseDto.from_result(find_user_credit_ledger_result)
+    return AdminCreditLedgerPageResponseDto.from_result(admin_find_user_credit_ledger_page_result)
 
 
 @admin_router.post(
@@ -105,12 +116,16 @@ async def grant_user_credits(
     "/invites",
     dependencies=[Depends(require_permissions(PermissionType.INVITE_READ))],
 )
-async def find_invite_list(
+async def find_invite_page(
+    query_dto: Annotated[AdminInvitePageQueryDto, Query()],
     admin_invite_service: AdminInviteServiceDep,
-) -> AdminInviteListResponseDto:
-    """Lists every invite, newest first, with its status and who used it."""
-    find_invite_list_result = await admin_invite_service.find_invite_list()
-    return AdminInviteListResponseDto.from_result(find_invite_list_result)
+) -> AdminInvitePageResponseDto:
+    """Returns one page of invites with their status and who used them, newest first unless
+    sorted otherwise."""
+    admin_find_invite_page_result = await admin_invite_service.find_invite_page(
+        query_dto.to_input()
+    )
+    return AdminInvitePageResponseDto.from_result(admin_find_invite_page_result)
 
 
 @admin_router.post(
