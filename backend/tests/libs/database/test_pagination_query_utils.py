@@ -31,6 +31,7 @@ class UserPageInput(BasePageInput):
 
 
 USER_PAGINATION_CONFIG = PaginationConfig(
+    page_input_class=UserPageInput,
     search_columns=(UserOrm.email, UserOrm.display_name),
     sort_columns={
         UserSortType.EMAIL: UserOrm.email,

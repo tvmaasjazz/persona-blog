@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+import pytest
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
@@ -34,6 +35,7 @@ class UserPageInput(BasePageInput):
 
 
 USER_PAGINATION_CONFIG = PaginationConfig(
+    page_input_class=UserPageInput,
     search_columns=(UserOrm.email,),
     sort_columns={UserSortType.EMAIL: UserOrm.email},
     filters={},
@@ -41,6 +43,7 @@ USER_PAGINATION_CONFIG = PaginationConfig(
 )
 
 CONTENT_ITEM_PAGINATION_CONFIG = PaginationConfig(
+    page_input_class=ContentItemPageInput,
     search_columns=(PersonaOrm.name,),
     sort_columns={ContentItemSortType.CREATED: ContentItemOrm.id},
     filters={},
@@ -82,6 +85,18 @@ async def test_find_page_returns_the_page_records_in_order_with_pagination(
         records=[user_records[2], user_records[3]],
         pagination=PaginationResult(page=2, page_size=2, total=5),
     )
+
+
+async def test_find_page_page_input_of_another_class_raises_type_error(
+    db_session: AsyncSession,
+) -> None:
+    pagination_service = PaginationService(db_session=db_session)
+    user_page_input = _build_user_page_input(build_pagination_input(page=1, page_size=2))
+
+    with pytest.raises(TypeError, match="UserPageInput is not the config's ContentItemPageInput"):
+        await pagination_service.find_page(
+            _build_user_base_query(), CONTENT_ITEM_PAGINATION_CONFIG, user_page_input
+        )
 
 
 async def test_find_page_empty_first_page_returns_total_zero(db_session: AsyncSession) -> None:

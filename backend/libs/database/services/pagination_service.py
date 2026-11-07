@@ -65,7 +65,13 @@ class PaginationService:
         page_input: BasePageInput,
         load_options: Sequence[ExecutableOption] = (),
     ) -> tuple[Sequence[Row[Any]], PaginationResult]:
-        """Runs one page of the query and finds its total."""
+        """Runs one page of the query and finds its total; TypeError for a page input of a
+        class other than the config's."""
+        if not isinstance(page_input, pagination_config.page_input_class):
+            raise TypeError(
+                f"{type(page_input).__name__} is not the config's "
+                f"{pagination_config.page_input_class.__name__}"
+            )
         pagination_input = page_input.pagination_input
 
         # Filter and search the records, then slice out the page with a window total
