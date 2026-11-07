@@ -2,6 +2,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.content_engagement.services import ContentEngagementService
+from libs.database.services import PaginationService
 from tests.factories.content_engagement import build_content_engagement_settings
 
 
@@ -10,3 +11,8 @@ def content_engagement_service(db_session: AsyncSession) -> ContentEngagementSer
     return ContentEngagementService(
         db_session=db_session, content_engagement_settings=build_content_engagement_settings()
     )
+
+
+@pytest.fixture
+def pagination_service(db_session: AsyncSession) -> PaginationService:
+    return PaginationService(db_session=db_session)

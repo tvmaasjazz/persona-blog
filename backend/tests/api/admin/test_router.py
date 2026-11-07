@@ -52,7 +52,7 @@ async def _create_sessions(
 # GET /admin/users
 
 
-async def test_find_user_list_returns_every_user_but_system_user_newest_first(
+async def test_find_user_page_returns_every_user_but_system_user_newest_first(
     api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
 ) -> None:
     older_user_record = await insert_user_row(
@@ -71,10 +71,10 @@ async def test_find_user_list_returns_every_user_but_system_user_newest_first(
         last_activity_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
     )
 
-    find_user_list_response = await api_client.get("/admin/users")
+    find_user_page_response = await api_client.get("/admin/users")
 
-    assert find_user_list_response.status_code == 200
-    assert find_user_list_response.json() == {
+    assert find_user_page_response.status_code == 200
+    assert find_user_page_response.json() == {
         "users": [
             {
                 "identity": str(newer_user_record.identity),
@@ -106,28 +106,192 @@ async def test_find_user_list_returns_every_user_but_system_user_newest_first(
                 "created_at": ANY,
                 "last_activity_at": None,
             },
-        ]
+        ],
+        "pagination": {"page": 1, "page_size": 20, "total": 3},
     }
 
 
-async def test_find_user_list_signed_out_returns_401(api_client: AsyncClient) -> None:
-    find_user_list_response = await api_client.get("/admin/users")
+async def test_find_user_page_signed_out_returns_401(api_client: AsyncClient) -> None:
+    find_user_page_response = await api_client.get("/admin/users")
 
-    assert find_user_list_response.status_code == 401
+    assert find_user_page_response.status_code == 401
 
 
 @pytest.mark.usefixtures("signed_in_user")
-async def test_find_user_list_creator_returns_403(api_client: AsyncClient) -> None:
-    find_user_list_response = await api_client.get("/admin/users")
+async def test_find_user_page_creator_returns_403(api_client: AsyncClient) -> None:
+    find_user_page_response = await api_client.get("/admin/users")
 
-    assert find_user_list_response.status_code == 403
+    assert find_user_page_response.status_code == 403
 
 
 @pytest.mark.usefixtures("signed_in_reader")
-async def test_find_user_list_reader_returns_403(api_client: AsyncClient) -> None:
-    find_user_list_response = await api_client.get("/admin/users")
+async def test_find_user_page_reader_returns_403(api_client: AsyncClient) -> None:
+    find_user_page_response = await api_client.get("/admin/users")
 
-    assert find_user_list_response.status_code == 403
+    assert find_user_page_response.status_code == 403
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("query_params", "expected_error_location"),
+    [
+        pytest.param({"page": "0"}, ["query", "page"], id="page_zero"),
+        pytest.param({"page": "10001"}, ["query", "page"], id="page_over_max"),
+        pytest.param({"page_size": "0"}, ["query", "page_size"], id="page_size_zero"),
+        pytest.param({"page_size": "101"}, ["query", "page_size"], id="page_size_over_max"),
+        pytest.param({"sort_by": "NAME"}, ["query", "sort_by"], id="unknown_sort_by"),
+        pytest.param(
+            {"sort_direction": "SIDEWAYS"}, ["query", "sort_direction"], id="unknown_sort_direction"
+        ),
+        pytest.param({"search": "a" * 201}, ["query", "search"], id="search_too_long"),
+        pytest.param({"search": "ada\x00"}, ["query", "search"], id="search_with_nul_byte"),
+    ],
+)
+async def test_find_user_page_invalid_query_returns_422(
+    api_client: AsyncClient, query_params: dict[str, str], expected_error_location: list[str]
+) -> None:
+    find_user_page_response = await api_client.get("/admin/users", params=query_params)
+
+    response_body = find_user_page_response.json()
+    assert find_user_page_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == expected_error_location
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_find_user_page_pages_and_reports_total_of_every_user(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    for day, email in enumerate(["u1", "u2", "u3"], start=1):
+        await insert_user_row(
+            db_session,
+            email=f"{email}@paged.test",
+            created_at=datetime(2026, 1, day, tzinfo=UTC),
+        )
+
+    find_user_page_response = await api_client.get(
+        "/admin/users", params={"page": "2", "page_size": "2", "search": "@paged.test"}
+    )
+
+    response_body = find_user_page_response.json()
+    assert [user["email"] for user in response_body["users"]] == ["u1@paged.test"]
+    assert response_body["pagination"] == {"page": 2, "page_size": 2, "total": 3}
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_find_user_page_page_past_the_end_returns_no_rows_and_same_total(
+    api_client: AsyncClient,
+) -> None:
+    find_user_page_response = await api_client.get("/admin/users", params={"page": "5"})
+
+    assert find_user_page_response.json() == {
+        "users": [],
+        "pagination": {"page": 5, "page_size": 20, "total": 1},
+    }
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("sort_by", "sort_direction", "expected_emails"),
+    [
+        pytest.param(
+            "CREATED_AT",
+            "ASC",
+            ["sort-b@example.com", "sort-c@example.com", "sort-a@example.com"],
+            id="created_at_ascending",
+        ),
+        pytest.param(
+            "CREATED_AT",
+            "DESC",
+            ["sort-a@example.com", "sort-c@example.com", "sort-b@example.com"],
+            id="created_at_descending",
+        ),
+        pytest.param(
+            "EMAIL",
+            "ASC",
+            ["sort-a@example.com", "sort-b@example.com", "sort-c@example.com"],
+            id="email_ascending",
+        ),
+        pytest.param(
+            "EMAIL",
+            "DESC",
+            ["sort-c@example.com", "sort-b@example.com", "sort-a@example.com"],
+            id="email_descending",
+        ),
+        pytest.param(
+            "LAST_ACTIVITY_AT",
+            "ASC",
+            ["sort-a@example.com", "sort-b@example.com", "sort-c@example.com"],
+            id="last_activity_at_ascending_never_active_last",
+        ),
+        pytest.param(
+            "LAST_ACTIVITY_AT",
+            "DESC",
+            ["sort-b@example.com", "sort-a@example.com", "sort-c@example.com"],
+            id="last_activity_at_descending_never_active_last",
+        ),
+    ],
+)
+async def test_find_user_page_sorted_by_each_sort_type_and_direction(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    sort_by: str,
+    sort_direction: str,
+    expected_emails: list[str],
+) -> None:
+    await insert_user_row(
+        db_session,
+        email="sort-a@example.com",
+        created_at=datetime(2026, 1, 3, tzinfo=UTC),
+        last_activity_at=datetime(2026, 2, 1, tzinfo=UTC),
+    )
+    await insert_user_row(
+        db_session,
+        email="sort-b@example.com",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        last_activity_at=datetime(2026, 3, 1, tzinfo=UTC),
+    )
+    await insert_user_row(
+        db_session,
+        email="sort-c@example.com",
+        created_at=datetime(2026, 1, 2, tzinfo=UTC),
+        last_activity_at=None,
+    )
+
+    # The search leaves the signed-in admin out of the order being checked
+    find_user_page_response = await api_client.get(
+        "/admin/users",
+        params={"sort_by": sort_by, "sort_direction": sort_direction, "search": "sort-"},
+    )
+
+    response_body = find_user_page_response.json()
+    assert find_user_page_response.status_code == 200
+    assert [user["email"] for user in response_body["users"]] == expected_emails
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("search", "expected_emails"),
+    [
+        pytest.param("ada@", ["ada@example.com"], id="email"),
+        pytest.param("hopper", ["ada@example.com"], id="display_name"),
+        pytest.param("linus", ["bob@example.com"], id="other_display_name"),
+        pytest.param("nobody", [], id="no_match"),
+    ],
+)
+async def test_find_user_page_search(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    search: str,
+    expected_emails: list[str],
+) -> None:
+    await insert_user_row(db_session, email="ada@example.com", display_name="Grace Hopper")
+    await insert_user_row(db_session, email="bob@example.com", display_name="Linus")
+
+    find_user_page_response = await api_client.get("/admin/users", params={"search": search})
+
+    response_body = find_user_page_response.json()
+    assert [user["email"] for user in response_body["users"]] == expected_emails
+    assert response_body["pagination"]["total"] == len(expected_emails)
 
 
 # GET /admin/users/{user_identity}
@@ -197,7 +361,7 @@ async def test_find_user_signed_out_returns_401(api_client: AsyncClient) -> None
 
 
 @pytest.mark.usefixtures("signed_in_admin")
-async def test_find_user_credit_ledger_returns_entries_newest_first(
+async def test_find_user_credit_ledger_page_returns_entries_newest_first(
     api_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     user_record = await insert_user_row(db_session, email="ada@example.com")
@@ -217,12 +381,12 @@ async def test_find_user_credit_ledger_returns_entries_newest_first(
         generate_text_run_id=run_record.id,
     )
 
-    find_user_credit_ledger_response = await api_client.get(
+    find_user_credit_ledger_page_response = await api_client.get(
         f"/admin/users/{user_record.identity}/credit-ledger"
     )
 
-    assert find_user_credit_ledger_response.status_code == 200
-    assert find_user_credit_ledger_response.json() == {
+    assert find_user_credit_ledger_page_response.status_code == 200
+    assert find_user_credit_ledger_page_response.json() == {
         "credit_ledger_entries": [
             {
                 "identity": str(charge_record.identity),
@@ -242,62 +406,205 @@ async def test_find_user_credit_ledger_returns_entries_newest_first(
                 "created_by_email": "ada@example.com",
                 "created_at": ANY,
             },
-        ]
+        ],
+        "pagination": {"page": 1, "page_size": 20, "total": 2},
     }
 
 
 @pytest.mark.usefixtures("signed_in_admin")
-async def test_find_user_credit_ledger_no_entries_returns_empty_list(
+async def test_find_user_credit_ledger_page_no_entries_returns_empty_page(
     api_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     user_record = await insert_user_row(db_session)
 
-    find_user_credit_ledger_response = await api_client.get(
+    find_user_credit_ledger_page_response = await api_client.get(
         f"/admin/users/{user_record.identity}/credit-ledger"
     )
 
-    assert find_user_credit_ledger_response.status_code == 200
-    assert find_user_credit_ledger_response.json() == {"credit_ledger_entries": []}
+    assert find_user_credit_ledger_page_response.status_code == 200
+    assert find_user_credit_ledger_page_response.json() == {
+        "credit_ledger_entries": [],
+        "pagination": {"page": 1, "page_size": 20, "total": 0},
+    }
 
 
 @pytest.mark.usefixtures("signed_in_admin")
-async def test_find_user_credit_ledger_unknown_user_returns_404(api_client: AsyncClient) -> None:
-    find_user_credit_ledger_response = await api_client.get(
+async def test_find_user_credit_ledger_page_unknown_user_returns_404(
+    api_client: AsyncClient,
+) -> None:
+    find_user_credit_ledger_page_response = await api_client.get(
         f"/admin/users/{UNKNOWN_USER_IDENTITY}/credit-ledger"
     )
 
-    assert find_user_credit_ledger_response.status_code == 404
+    assert find_user_credit_ledger_page_response.status_code == 404
 
 
 @pytest.mark.usefixtures("signed_in_admin")
-async def test_find_user_credit_ledger_system_user_returns_404(
+async def test_find_user_credit_ledger_page_system_user_returns_404(
     api_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     system_user_record = await find_system_user_row(db_session)
 
-    find_user_credit_ledger_response = await api_client.get(
+    find_user_credit_ledger_page_response = await api_client.get(
         f"/admin/users/{system_user_record.identity}/credit-ledger"
     )
 
-    assert find_user_credit_ledger_response.status_code == 404
+    assert find_user_credit_ledger_page_response.status_code == 404
 
 
-async def test_find_user_credit_ledger_creator_returns_403(
+async def test_find_user_credit_ledger_page_creator_returns_403(
     api_client: AsyncClient, signed_in_user: UserOrm
 ) -> None:
-    find_user_credit_ledger_response = await api_client.get(
+    find_user_credit_ledger_page_response = await api_client.get(
         f"/admin/users/{signed_in_user.identity}/credit-ledger"
     )
 
-    assert find_user_credit_ledger_response.status_code == 403
+    assert find_user_credit_ledger_page_response.status_code == 403
 
 
-async def test_find_user_credit_ledger_signed_out_returns_401(api_client: AsyncClient) -> None:
-    find_user_credit_ledger_response = await api_client.get(
+async def test_find_user_credit_ledger_page_signed_out_returns_401(
+    api_client: AsyncClient,
+) -> None:
+    find_user_credit_ledger_page_response = await api_client.get(
         f"/admin/users/{UNKNOWN_USER_IDENTITY}/credit-ledger"
     )
 
-    assert find_user_credit_ledger_response.status_code == 401
+    assert find_user_credit_ledger_page_response.status_code == 401
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("query_params", "expected_error_location"),
+    [
+        pytest.param({"page": "0"}, ["query", "page"], id="page_zero"),
+        pytest.param({"page": "10001"}, ["query", "page"], id="page_over_max"),
+        pytest.param({"page_size": "0"}, ["query", "page_size"], id="page_size_zero"),
+        pytest.param({"page_size": "101"}, ["query", "page_size"], id="page_size_over_max"),
+        pytest.param({"sort_by": "EMAIL"}, ["query", "sort_by"], id="unknown_sort_by"),
+        pytest.param(
+            {"sort_direction": "SIDEWAYS"}, ["query", "sort_direction"], id="unknown_sort_direction"
+        ),
+        pytest.param({"search": "a" * 201}, ["query", "search"], id="search_too_long"),
+        pytest.param({"search": "note\x00"}, ["query", "search"], id="search_with_nul_byte"),
+    ],
+)
+async def test_find_user_credit_ledger_page_invalid_query_returns_422(
+    api_client: AsyncClient, query_params: dict[str, str], expected_error_location: list[str]
+) -> None:
+    find_user_credit_ledger_page_response = await api_client.get(
+        f"/admin/users/{UNKNOWN_USER_IDENTITY}/credit-ledger", params=query_params
+    )
+
+    response_body = find_user_credit_ledger_page_response.json()
+    assert find_user_credit_ledger_page_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == expected_error_location
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_find_user_credit_ledger_page_pages_and_reports_total_of_the_users_rows(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user_record = await insert_user_row(db_session)
+    other_user_record = await insert_user_row(db_session)
+    for day, note in enumerate(["Entry 1", "Entry 2", "Entry 3"], start=1):
+        await insert_credit_ledger_row(
+            db_session,
+            user_id=user_record.id,
+            note=note,
+            created_at=datetime(2026, 1, day, tzinfo=UTC),
+        )
+    await insert_credit_ledger_row(db_session, user_id=other_user_record.id, note="Other user")
+
+    find_user_credit_ledger_page_response = await api_client.get(
+        f"/admin/users/{user_record.identity}/credit-ledger",
+        params={"page": "2", "page_size": "2"},
+    )
+
+    response_body = find_user_credit_ledger_page_response.json()
+    notes = [entry["note"] for entry in response_body["credit_ledger_entries"]]
+    assert notes == ["Entry 1"]
+    assert response_body["pagination"] == {"page": 2, "page_size": 2, "total": 3}
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_find_user_credit_ledger_page_page_past_the_end_returns_no_rows_and_same_total(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user_record = await insert_user_row(db_session)
+    await insert_credit_ledger_row(db_session, user_id=user_record.id)
+
+    find_user_credit_ledger_page_response = await api_client.get(
+        f"/admin/users/{user_record.identity}/credit-ledger", params={"page": "5"}
+    )
+
+    assert find_user_credit_ledger_page_response.json() == {
+        "credit_ledger_entries": [],
+        "pagination": {"page": 5, "page_size": 20, "total": 1},
+    }
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("sort_direction", "expected_notes"),
+    [
+        pytest.param("ASC", ["Oldest", "Middle", "Newest"], id="ascending"),
+        pytest.param("DESC", ["Newest", "Middle", "Oldest"], id="descending"),
+    ],
+)
+async def test_find_user_credit_ledger_page_sorted_by_created_at(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    sort_direction: str,
+    expected_notes: list[str],
+) -> None:
+    user_record = await insert_user_row(db_session)
+    for note, created_at in [
+        ("Middle", datetime(2026, 1, 2, tzinfo=UTC)),
+        ("Newest", datetime(2026, 1, 3, tzinfo=UTC)),
+        ("Oldest", datetime(2026, 1, 1, tzinfo=UTC)),
+    ]:
+        await insert_credit_ledger_row(
+            db_session, user_id=user_record.id, note=note, created_at=created_at
+        )
+
+    find_user_credit_ledger_page_response = await api_client.get(
+        f"/admin/users/{user_record.identity}/credit-ledger",
+        params={"sort_by": "CREATED_AT", "sort_direction": sort_direction},
+    )
+
+    response_body = find_user_credit_ledger_page_response.json()
+    assert find_user_credit_ledger_page_response.status_code == 200
+    notes = [entry["note"] for entry in response_body["credit_ledger_entries"]]
+    assert notes == expected_notes
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("search", "expected_notes"),
+    [
+        pytest.param("welcome", ["Welcome credit"], id="note"),
+        pytest.param("null", [], id="null_note_does_not_match"),
+        pytest.param("%", [], id="percent_is_literal"),
+    ],
+)
+async def test_find_user_credit_ledger_page_search(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    search: str,
+    expected_notes: list[str],
+) -> None:
+    user_record = await insert_user_row(db_session)
+    await insert_credit_ledger_row(db_session, user_id=user_record.id, note="Welcome credit")
+    await insert_credit_ledger_row(db_session, user_id=user_record.id, note=None)
+
+    find_user_credit_ledger_page_response = await api_client.get(
+        f"/admin/users/{user_record.identity}/credit-ledger", params={"search": search}
+    )
+
+    response_body = find_user_credit_ledger_page_response.json()
+    notes = [entry["note"] for entry in response_body["credit_ledger_entries"]]
+    assert notes == expected_notes
+    assert response_body["pagination"]["total"] == len(expected_notes)
 
 
 # POST /admin/users/{user_identity}/credit-grants
@@ -1237,7 +1544,7 @@ async def test_create_invite_creator_returns_403_and_writes_nothing(
 # GET /admin/invites
 
 
-async def test_find_invite_list_returns_invites_newest_first_with_status_and_emails(
+async def test_find_invite_page_returns_invites_newest_first_with_status_and_emails(
     api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
 ) -> None:
     user_record = await insert_user_row(db_session, email="ada@example.com")
@@ -1259,10 +1566,10 @@ async def test_find_invite_list_returns_invites_newest_first_with_status_and_ema
         created_at=datetime(2026, 1, 2, tzinfo=UTC),
     )
 
-    find_invite_list_response = await api_client.get("/admin/invites")
+    find_invite_page_response = await api_client.get("/admin/invites")
 
-    assert find_invite_list_response.status_code == 200
-    assert find_invite_list_response.json() == {
+    assert find_invite_page_response.status_code == 200
+    assert find_invite_page_response.json() == {
         "invites": [
             {
                 "identity": str(newer_invite_record.identity),
@@ -1290,11 +1597,12 @@ async def test_find_invite_list_returns_invites_newest_first_with_status_and_ema
                 "created_at": "2026-01-01T00:00:00Z",
                 "created_by_email": signed_in_admin.email,
             },
-        ]
+        ],
+        "pagination": {"page": 1, "page_size": 20, "total": 2},
     }
 
 
-async def test_find_invite_list_unused_and_revoked_invites_return_their_status(
+async def test_find_invite_page_unused_and_revoked_invites_return_their_status(
     api_client: AsyncClient, signed_in_admin: UserOrm, db_session: AsyncSession
 ) -> None:
     await insert_invite_row(
@@ -1311,25 +1619,159 @@ async def test_find_invite_list_unused_and_revoked_invites_return_their_status(
         created_at=datetime(2026, 1, 2, tzinfo=UTC),
     )
 
-    find_invite_list_response = await api_client.get("/admin/invites")
+    find_invite_page_response = await api_client.get("/admin/invites")
 
     invite_statuses = {
-        invite["name"]: invite["status"] for invite in find_invite_list_response.json()["invites"]
+        invite["name"]: invite["status"] for invite in find_invite_page_response.json()["invites"]
     }
     assert invite_statuses == {"Unused": "UNUSED", "Revoked": "REVOKED"}
 
 
-async def test_find_invite_list_signed_out_returns_401(api_client: AsyncClient) -> None:
-    find_invite_list_response = await api_client.get("/admin/invites")
+async def test_find_invite_page_signed_out_returns_401(api_client: AsyncClient) -> None:
+    find_invite_page_response = await api_client.get("/admin/invites")
 
-    assert find_invite_list_response.status_code == 401
+    assert find_invite_page_response.status_code == 401
 
 
 @pytest.mark.usefixtures("signed_in_user")
-async def test_find_invite_list_creator_returns_403(api_client: AsyncClient) -> None:
-    find_invite_list_response = await api_client.get("/admin/invites")
+async def test_find_invite_page_creator_returns_403(api_client: AsyncClient) -> None:
+    find_invite_page_response = await api_client.get("/admin/invites")
 
-    assert find_invite_list_response.status_code == 403
+    assert find_invite_page_response.status_code == 403
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("query_params", "expected_error_location"),
+    [
+        pytest.param({"page": "0"}, ["query", "page"], id="page_zero"),
+        pytest.param({"page": "10001"}, ["query", "page"], id="page_over_max"),
+        pytest.param({"page_size": "0"}, ["query", "page_size"], id="page_size_zero"),
+        pytest.param({"page_size": "101"}, ["query", "page_size"], id="page_size_over_max"),
+        pytest.param({"sort_by": "EMAIL"}, ["query", "sort_by"], id="unknown_sort_by"),
+        pytest.param(
+            {"sort_direction": "SIDEWAYS"}, ["query", "sort_direction"], id="unknown_sort_direction"
+        ),
+        pytest.param({"search": "a" * 201}, ["query", "search"], id="search_too_long"),
+        pytest.param({"search": "beta\x00"}, ["query", "search"], id="search_with_nul_byte"),
+    ],
+)
+async def test_find_invite_page_invalid_query_returns_422(
+    api_client: AsyncClient, query_params: dict[str, str], expected_error_location: list[str]
+) -> None:
+    find_invite_page_response = await api_client.get("/admin/invites", params=query_params)
+
+    response_body = find_invite_page_response.json()
+    assert find_invite_page_response.status_code == 422
+    assert response_body["detail"][0]["loc"] == expected_error_location
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_find_invite_page_pages_and_reports_total_of_every_invite(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    for day, name in enumerate(["Invite 1", "Invite 2", "Invite 3"], start=1):
+        await insert_invite_row(
+            db_session, name=name, created_at=datetime(2026, 1, day, tzinfo=UTC)
+        )
+
+    find_invite_page_response = await api_client.get(
+        "/admin/invites", params={"page": "2", "page_size": "2"}
+    )
+
+    response_body = find_invite_page_response.json()
+    assert [invite["name"] for invite in response_body["invites"]] == ["Invite 1"]
+    assert response_body["pagination"] == {"page": 2, "page_size": 2, "total": 3}
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+async def test_find_invite_page_page_past_the_end_returns_no_rows_and_same_total(
+    api_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await insert_invite_row(db_session)
+
+    find_invite_page_response = await api_client.get("/admin/invites", params={"page": "5"})
+
+    assert find_invite_page_response.json() == {
+        "invites": [],
+        "pagination": {"page": 5, "page_size": 20, "total": 1},
+    }
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("sort_by", "sort_direction", "expected_names"),
+    [
+        pytest.param("CREATED_AT", "ASC", ["Banana", "Cherry", "Apple"], id="created_at_ascending"),
+        pytest.param(
+            "CREATED_AT", "DESC", ["Apple", "Cherry", "Banana"], id="created_at_descending"
+        ),
+        pytest.param("NAME", "ASC", ["Apple", "Banana", "Cherry"], id="name_ascending"),
+        pytest.param("NAME", "DESC", ["Cherry", "Banana", "Apple"], id="name_descending"),
+        pytest.param("EXPIRES_AT", "ASC", ["Cherry", "Apple", "Banana"], id="expires_at_ascending"),
+        pytest.param(
+            "EXPIRES_AT", "DESC", ["Banana", "Apple", "Cherry"], id="expires_at_descending"
+        ),
+    ],
+)
+async def test_find_invite_page_sorted_by_each_sort_type_and_direction(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    sort_by: str,
+    sort_direction: str,
+    expected_names: list[str],
+) -> None:
+    await insert_invite_row(
+        db_session,
+        name="Apple",
+        created_at=datetime(2026, 1, 3, tzinfo=UTC),
+        expires_at=datetime(2099, 2, 1, tzinfo=UTC),
+    )
+    await insert_invite_row(
+        db_session,
+        name="Banana",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        expires_at=datetime(2099, 3, 1, tzinfo=UTC),
+    )
+    await insert_invite_row(
+        db_session,
+        name="Cherry",
+        created_at=datetime(2026, 1, 2, tzinfo=UTC),
+        expires_at=datetime(2099, 1, 1, tzinfo=UTC),
+    )
+
+    find_invite_page_response = await api_client.get(
+        "/admin/invites", params={"sort_by": sort_by, "sort_direction": sort_direction}
+    )
+
+    response_body = find_invite_page_response.json()
+    assert find_invite_page_response.status_code == 200
+    assert [invite["name"] for invite in response_body["invites"]] == expected_names
+
+
+@pytest.mark.usefixtures("signed_in_admin")
+@pytest.mark.parametrize(
+    ("search", "expected_names"),
+    [
+        pytest.param("friends", ["Ada's friends"], id="name"),
+        pytest.param("note", [], id="note_is_not_searched"),
+        pytest.param("%", [], id="percent_is_literal"),
+    ],
+)
+async def test_find_invite_page_search(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    search: str,
+    expected_names: list[str],
+) -> None:
+    await insert_invite_row(db_session, name="Ada's friends", note="A note")
+    await insert_invite_row(db_session, name="Beta testers")
+
+    find_invite_page_response = await api_client.get("/admin/invites", params={"search": search})
+
+    response_body = find_invite_page_response.json()
+    assert [invite["name"] for invite in response_body["invites"]] == expected_names
+    assert response_body["pagination"]["total"] == len(expected_names)
 
 
 # POST /admin/invites/{invite_identity}/revoke

@@ -6,9 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from libs.blog_posts.inputs import (
     CreateBlogPostInput,
     FindPublicBlogPostPageInput,
+    FindUserBlogPostPageInput,
     UpdateBlogPostInput,
 )
-from libs.blog_posts.types import PublicBlogPostSortType
+from libs.blog_posts.types import PublicBlogPostSortType, UserBlogPostSortType
 from libs.core.types import SortDirectionType
 from libs.database.orm import BlogPostOrm
 from tests.factories.core import build_pagination_input
@@ -66,6 +67,24 @@ def build_find_public_blog_post_page_input(
     persona_identity: UUID | None = None,
 ) -> FindPublicBlogPostPageInput:
     return FindPublicBlogPostPageInput(
+        pagination_input=build_pagination_input(
+            page=page, page_size=page_size, search=search, sort_direction=sort_direction
+        ),
+        sort_by=sort_by,
+        persona_identity=persona_identity,
+    )
+
+
+def build_find_user_blog_post_page_input(
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    search: str | None = None,
+    sort_by: UserBlogPostSortType = UserBlogPostSortType.CREATED_AT,
+    sort_direction: SortDirectionType = SortDirectionType.DESC,
+    persona_identity: UUID | None = None,
+) -> FindUserBlogPostPageInput:
+    return FindUserBlogPostPageInput(
         pagination_input=build_pagination_input(
             page=page, page_size=page_size, search=search, sort_direction=sort_direction
         ),

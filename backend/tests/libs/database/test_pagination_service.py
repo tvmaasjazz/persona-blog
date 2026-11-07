@@ -162,3 +162,109 @@ async def test_find_page_load_options_load_the_relationship_on_the_records(
     assert [
         content_item_record.persona.name for content_item_record in find_page_result.records
     ] == ["Slow Mornings Sam"]
+
+
+async def test_find_mapping_page_returns_the_page_rows_as_label_dicts_without_the_total(
+    db_session: AsyncSession,
+) -> None:
+    await _insert_find_page_users(db_session)
+    pagination_service = PaginationService(db_session=db_session)
+    user_page_input = _build_user_page_input(
+        build_pagination_input(page=2, page_size=2, sort_direction=SortDirectionType.ASC)
+    )
+    all_records_query = select(
+        UserOrm.email.label("user_email"), UserOrm.is_active.label("user_is_active")
+    ).where(UserOrm.email.like("find-page-%"))
+
+    find_mapping_page_result = await pagination_service.find_mapping_page(
+        all_records_query, USER_PAGINATION_CONFIG, user_page_input
+    )
+
+    assert find_mapping_page_result == FindPageResult(
+        records=[
+            {"user_email": "find-page-c@example.com", "user_is_active": True},
+            {"user_email": "find-page-d@example.com", "user_is_active": True},
+        ],
+        pagination=PaginationResult(page=2, page_size=2, total=5),
+    )
+
+
+async def test_find_mapping_page_sorts_by_a_column_that_is_not_selected(
+    db_session: AsyncSession,
+) -> None:
+    await _insert_find_page_users(db_session)
+    pagination_service = PaginationService(db_session=db_session)
+    user_page_input = _build_user_page_input(
+        build_pagination_input(sort_direction=SortDirectionType.DESC)
+    )
+    all_records_query = select(UserOrm.is_active.label("user_is_active")).where(
+        UserOrm.email.like("find-page-%")
+    )
+
+    find_mapping_page_result = await pagination_service.find_mapping_page(
+        all_records_query, USER_PAGINATION_CONFIG, user_page_input
+    )
+
+    assert find_mapping_page_result == FindPageResult(
+        records=[{"user_is_active": True}] * 5,
+        pagination=PaginationResult(page=1, page_size=20, total=5),
+    )
+
+
+async def test_find_mapping_page_empty_first_page_returns_total_zero(
+    db_session: AsyncSession,
+) -> None:
+    pagination_service = PaginationService(db_session=db_session)
+    user_page_input = _build_user_page_input(build_pagination_input(page=1, page_size=2))
+    all_records_query = select(UserOrm.email.label("user_email")).where(
+        UserOrm.email.like("find-page-%")
+    )
+
+    find_mapping_page_result = await pagination_service.find_mapping_page(
+        all_records_query, USER_PAGINATION_CONFIG, user_page_input
+    )
+
+    assert find_mapping_page_result == FindPageResult(
+        records=[], pagination=PaginationResult(page=1, page_size=2, total=0)
+    )
+
+
+async def test_find_mapping_page_empty_page_past_the_end_returns_the_full_total(
+    db_session: AsyncSession,
+) -> None:
+    await _insert_find_page_users(db_session)
+    pagination_service = PaginationService(db_session=db_session)
+    user_page_input = _build_user_page_input(build_pagination_input(page=9, page_size=2))
+    all_records_query = select(UserOrm.email.label("user_email")).where(
+        UserOrm.email.like("find-page-%")
+    )
+
+    find_mapping_page_result = await pagination_service.find_mapping_page(
+        all_records_query, USER_PAGINATION_CONFIG, user_page_input
+    )
+
+    assert find_mapping_page_result == FindPageResult(
+        records=[], pagination=PaginationResult(page=9, page_size=2, total=5)
+    )
+
+
+async def test_find_mapping_page_search_counts_only_matching_rows(
+    db_session: AsyncSession,
+) -> None:
+    await _insert_find_page_users(db_session)
+    pagination_service = PaginationService(db_session=db_session)
+    user_page_input = _build_user_page_input(
+        build_pagination_input(page=1, page_size=1, search="find-page-b")
+    )
+    all_records_query = select(UserOrm.email.label("user_email")).where(
+        UserOrm.email.like("find-page-%")
+    )
+
+    find_mapping_page_result = await pagination_service.find_mapping_page(
+        all_records_query, USER_PAGINATION_CONFIG, user_page_input
+    )
+
+    assert find_mapping_page_result == FindPageResult(
+        records=[{"user_email": "find-page-b@example.com"}],
+        pagination=PaginationResult(page=1, page_size=1, total=1),
+    )

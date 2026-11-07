@@ -7,18 +7,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.auth.results import AuthUser
 from libs.core.exceptions import ForbiddenException, NotFoundException
+from libs.core.results import PaginationResult
+from libs.core.types import SortDirectionType
 from libs.database.orm import PersonaOrm
+from libs.database.services import PaginationService
 from libs.personas.results import (
     CreatePersonaResult,
-    FindUserPersonaListResult,
+    FindUserPersonaPageResult,
     FindUserPersonaResult,
     PersonaDetailResult,
     PublicPersonaResult,
 )
 from libs.personas.services import PersonaService
+from libs.personas.types import UserPersonaSortType
 from tests.factories.auth import build_auth_user
 from tests.factories.database import fetch_database_utc_now
-from tests.factories.personas import build_persona_input, insert_persona_row
+from tests.factories.personas import (
+    build_find_user_persona_page_input,
+    build_persona_input,
+    insert_persona_row,
+)
 from tests.factories.users import insert_user_row
 
 
@@ -28,9 +36,11 @@ async def _insert_auth_user(db_session: AsyncSession) -> AuthUser:
     return build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
 
 
-async def test_create_persona_persists_row(db_session: AsyncSession) -> None:
+async def test_create_persona_persists_row(
+    db_session: AsyncSession, pagination_service: PaginationService
+) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
     persona_input = build_persona_input(
         name="Ada the Essayist",
         bio="Writes long-form essays on computing history.",
@@ -70,10 +80,13 @@ async def test_create_persona_persists_row(db_session: AsyncSession) -> None:
     ],
 )
 async def test_create_persona_persists_is_public(
-    db_session: AsyncSession, is_public: bool, expected_is_public: bool
+    db_session: AsyncSession,
+    pagination_service: PaginationService,
+    is_public: bool,
+    expected_is_public: bool,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
     persona_input = build_persona_input(is_public=is_public)
 
     create_persona_result = await persona_service.create_persona(persona_input, auth_user)
@@ -86,10 +99,11 @@ async def test_create_persona_persists_is_public(
 
 async def test_create_persona_same_name_different_user_persists_row(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     first_auth_user = await _insert_auth_user(db_session)
     second_auth_user = await _insert_auth_user(db_session)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
     await persona_service.create_persona(
         build_persona_input(name="Ada the Essayist"), first_auth_user
     )
@@ -106,9 +120,10 @@ async def test_create_persona_same_name_different_user_persists_row(
 
 async def test_create_persona_same_name_after_soft_delete_persists_row(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
     first_create_result = await persona_service.create_persona(
         build_persona_input(name="Ada the Essayist"), auth_user
     )
@@ -124,7 +139,9 @@ async def test_create_persona_same_name_after_soft_delete_persists_row(
     assert persona_record.deleted_at is None
 
 
-async def test_find_persona_returns_persona_detail_result(db_session: AsyncSession) -> None:
+async def test_find_persona_returns_persona_detail_result(
+    db_session: AsyncSession, pagination_service: PaginationService
+) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
     persona_record = await insert_persona_row(
@@ -133,7 +150,7 @@ async def test_find_persona_returns_persona_detail_result(db_session: AsyncSessi
         name="Ada the Essayist",
         bio="Writes long-form essays.",
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     find_persona_result = await persona_service.find_persona(persona_record.identity, auth_user)
 
@@ -155,9 +172,10 @@ async def test_find_persona_returns_persona_detail_result(db_session: AsyncSessi
 
 async def test_find_persona_never_inserted_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_persona(uuid4(), auth_user)
@@ -165,6 +183,7 @@ async def test_find_persona_never_inserted_raises_not_found_exception(
 
 async def test_find_persona_soft_deleted_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
@@ -175,7 +194,7 @@ async def test_find_persona_soft_deleted_raises_not_found_exception(
         deleted_at=deleted_at,
         deleted_by_id=user_record.id,
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_persona(persona_record.identity, auth_user)
@@ -183,6 +202,7 @@ async def test_find_persona_soft_deleted_raises_not_found_exception(
 
 async def test_find_persona_another_users_private_persona_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -190,7 +210,7 @@ async def test_find_persona_another_users_private_persona_raises_not_found_excep
         user_id=other_user_record.id, user_identity=other_user_record.identity
     )
     persona_record = await insert_persona_row(db_session, created_by_id=owner_record.id)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_persona(persona_record.identity, other_auth_user)
@@ -198,6 +218,7 @@ async def test_find_persona_another_users_private_persona_raises_not_found_excep
 
 async def test_find_persona_another_users_public_persona_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -207,7 +228,7 @@ async def test_find_persona_another_users_public_persona_raises_not_found_except
     persona_record = await insert_persona_row(
         db_session, created_by_id=owner_record.id, is_public=True
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_persona(persona_record.identity, other_auth_user)
@@ -215,6 +236,7 @@ async def test_find_persona_another_users_public_persona_raises_not_found_except
 
 async def test_find_persona_another_users_public_persona_inactive_creator_raises_not_found(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     suspended_owner_record = await insert_user_row(db_session, is_active=False)
     other_user_record = await insert_user_row(db_session)
@@ -224,7 +246,7 @@ async def test_find_persona_another_users_public_persona_inactive_creator_raises
     persona_record = await insert_persona_row(
         db_session, created_by_id=suspended_owner_record.id, is_public=True
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_persona(persona_record.identity, other_auth_user)
@@ -232,6 +254,7 @@ async def test_find_persona_another_users_public_persona_inactive_creator_raises
 
 async def test_find_public_persona_signed_out_public_persona_returns_public_persona_result(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     persona_record = await insert_persona_row(
@@ -243,7 +266,7 @@ async def test_find_public_persona_signed_out_public_persona_returns_public_pers
         background="Former mathematician.",
         is_public=True,
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     find_public_persona_result = await persona_service.find_public_persona(
         persona_record.identity, None
@@ -263,10 +286,11 @@ async def test_find_public_persona_signed_out_public_persona_returns_public_pers
 
 async def test_find_public_persona_signed_out_private_persona_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     persona_record = await insert_persona_row(db_session, created_by_id=owner_record.id)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_public_persona(persona_record.identity, None)
@@ -274,12 +298,13 @@ async def test_find_public_persona_signed_out_private_persona_raises_not_found_e
 
 async def test_find_public_persona_signed_out_inactive_creator_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     suspended_owner_record = await insert_user_row(db_session, is_active=False)
     persona_record = await insert_persona_row(
         db_session, created_by_id=suspended_owner_record.id, is_public=True
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_public_persona(persona_record.identity, None)
@@ -287,8 +312,9 @@ async def test_find_public_persona_signed_out_inactive_creator_raises_not_found_
 
 async def test_find_public_persona_never_inserted_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_public_persona(uuid4(), None)
@@ -296,6 +322,7 @@ async def test_find_public_persona_never_inserted_raises_not_found_exception(
 
 async def test_find_public_persona_soft_deleted_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     persona_record = await insert_persona_row(
@@ -305,7 +332,7 @@ async def test_find_public_persona_soft_deleted_raises_not_found_exception(
         deleted_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
         deleted_by_id=owner_record.id,
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_public_persona(persona_record.identity, None)
@@ -313,13 +340,14 @@ async def test_find_public_persona_soft_deleted_raises_not_found_exception(
 
 async def test_find_public_persona_owner_private_persona_returns_result_flagged_as_owner(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     owner_auth_user = build_auth_user(user_id=owner_record.id, user_identity=owner_record.identity)
     persona_record = await insert_persona_row(
         db_session, created_by_id=owner_record.id, name="Ada the Essayist", bio="Writes essays."
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     find_public_persona_result = await persona_service.find_public_persona(
         persona_record.identity, owner_auth_user
@@ -339,6 +367,7 @@ async def test_find_public_persona_owner_private_persona_returns_result_flagged_
 
 async def test_find_public_persona_another_users_public_persona_returns_result_not_owner(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -348,7 +377,7 @@ async def test_find_public_persona_another_users_public_persona_returns_result_n
     persona_record = await insert_persona_row(
         db_session, created_by_id=owner_record.id, name="Ada the Essayist", is_public=True
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     find_public_persona_result = await persona_service.find_public_persona(
         persona_record.identity, other_auth_user
@@ -360,6 +389,7 @@ async def test_find_public_persona_another_users_public_persona_returns_result_n
 
 async def test_find_public_persona_another_users_private_persona_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -367,7 +397,7 @@ async def test_find_public_persona_another_users_private_persona_raises_not_foun
         user_id=other_user_record.id, user_identity=other_user_record.identity
     )
     persona_record = await insert_persona_row(db_session, created_by_id=owner_record.id)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_public_persona(persona_record.identity, other_auth_user)
@@ -375,6 +405,7 @@ async def test_find_public_persona_another_users_private_persona_raises_not_foun
 
 async def test_find_public_persona_another_users_public_persona_inactive_creator_raises_not_found(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     suspended_owner_record = await insert_user_row(db_session, is_active=False)
     other_user_record = await insert_user_row(db_session)
@@ -384,7 +415,7 @@ async def test_find_public_persona_another_users_public_persona_inactive_creator
     persona_record = await insert_persona_row(
         db_session, created_by_id=suspended_owner_record.id, is_public=True
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_public_persona(persona_record.identity, other_auth_user)
@@ -392,12 +423,13 @@ async def test_find_public_persona_another_users_public_persona_inactive_creator
 
 async def test_find_public_persona_public_persona_creator_reactivated_returns_result(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session, is_active=False)
     persona_record = await insert_persona_row(
         db_session, created_by_id=owner_record.id, name="Ada the Essayist", is_public=True
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
     owner_record.is_active = True
     await db_session.flush()
 
@@ -409,7 +441,9 @@ async def test_find_public_persona_public_persona_creator_reactivated_returns_re
     assert find_public_persona_result.name == "Ada the Essayist"
 
 
-async def test_find_persona_owner_inactive_returns_own_persona(db_session: AsyncSession) -> None:
+async def test_find_persona_owner_inactive_returns_own_persona(
+    db_session: AsyncSession, pagination_service: PaginationService
+) -> None:
     suspended_owner_record = await insert_user_row(db_session, is_active=False)
     owner_auth_user = build_auth_user(
         user_id=suspended_owner_record.id, user_identity=suspended_owner_record.identity
@@ -417,7 +451,7 @@ async def test_find_persona_owner_inactive_returns_own_persona(db_session: Async
     persona_record = await insert_persona_row(
         db_session, created_by_id=suspended_owner_record.id, name="Ada the Essayist", is_public=True
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     find_persona_result = await persona_service.find_persona(
         persona_record.identity, owner_auth_user
@@ -428,6 +462,7 @@ async def test_find_persona_owner_inactive_returns_own_persona(db_session: Async
 
 async def test_update_persona_another_users_public_persona_inactive_creator_raises_not_found(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     suspended_owner_record = await insert_user_row(db_session, is_active=False)
     other_user_record = await insert_user_row(db_session)
@@ -437,7 +472,7 @@ async def test_update_persona_another_users_public_persona_inactive_creator_rais
     persona_record = await insert_persona_row(
         db_session, created_by_id=suspended_owner_record.id, is_public=True
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.update_persona(
@@ -445,8 +480,8 @@ async def test_update_persona_another_users_public_persona_inactive_creator_rais
         )
 
 
-async def test_find_user_persona_list_returns_only_live_personas_newest_first(
-    db_session: AsyncSession,
+async def test_find_user_persona_page_returns_only_own_live_personas_newest_first(
+    db_session: AsyncSession, pagination_service: PaginationService
 ) -> None:
     user_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -480,32 +515,191 @@ async def test_find_user_persona_list_returns_only_live_personas_newest_first(
     await insert_persona_row(
         db_session, created_by_id=other_user_record.id, name="Other Public Persona", is_public=True
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
-    find_user_persona_list_result = await persona_service.find_user_persona_list(auth_user)
+    find_user_persona_page_result = await persona_service.find_user_persona_page(
+        build_find_user_persona_page_input(), auth_user
+    )
 
-    assert find_user_persona_list_result == FindUserPersonaListResult(
+    assert find_user_persona_page_result == FindUserPersonaPageResult(
         personas=[
             PersonaDetailResult.model_validate(newest_persona_record, from_attributes=True),
             PersonaDetailResult.model_validate(middle_persona_record, from_attributes=True),
             PersonaDetailResult.model_validate(oldest_persona_record, from_attributes=True),
-        ]
+        ],
+        pagination=PaginationResult(page=1, page_size=20, total=3),
     )
 
 
-async def test_find_user_persona_list_no_personas_returns_empty_list(
-    db_session: AsyncSession,
+async def test_find_user_persona_page_no_personas_returns_empty_page(
+    db_session: AsyncSession, pagination_service: PaginationService
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
-    find_user_persona_list_result = await persona_service.find_user_persona_list(auth_user)
+    find_user_persona_page_result = await persona_service.find_user_persona_page(
+        build_find_user_persona_page_input(), auth_user
+    )
 
-    assert find_user_persona_list_result == FindUserPersonaListResult(personas=[])
+    assert find_user_persona_page_result == FindUserPersonaPageResult(
+        personas=[], pagination=PaginationResult(page=1, page_size=20, total=0)
+    )
+
+
+async def _insert_named_personas(
+    db_session: AsyncSession, *, names: list[str]
+) -> tuple[AuthUser, list[PersonaOrm]]:
+    user_record = await insert_user_row(db_session)
+    auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
+    persona_records = [
+        await insert_persona_row(
+            db_session,
+            created_by_id=user_record.id,
+            name=name,
+            created_at=datetime(2026, 1, day, tzinfo=UTC),
+        )
+        for day, name in enumerate(names, start=1)
+    ]
+    return auth_user, persona_records
+
+
+async def test_find_user_persona_page_slices_the_page_and_totals_every_row(
+    db_session: AsyncSession, pagination_service: PaginationService
+) -> None:
+    auth_user, _ = await _insert_named_personas(
+        db_session, names=["Persona 1", "Persona 2", "Persona 3", "Persona 4", "Persona 5"]
+    )
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
+
+    find_user_persona_page_result = await persona_service.find_user_persona_page(
+        build_find_user_persona_page_input(page=2, page_size=2), auth_user
+    )
+
+    persona_names = [persona.name for persona in find_user_persona_page_result.personas]
+    assert persona_names == ["Persona 3", "Persona 2"]
+    assert find_user_persona_page_result.pagination == PaginationResult(
+        page=2, page_size=2, total=5
+    )
+
+
+async def test_find_user_persona_page_page_past_the_end_returns_no_rows_and_same_total(
+    db_session: AsyncSession, pagination_service: PaginationService
+) -> None:
+    auth_user, _ = await _insert_named_personas(db_session, names=["Persona 1", "Persona 2"])
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
+
+    find_user_persona_page_result = await persona_service.find_user_persona_page(
+        build_find_user_persona_page_input(page=4, page_size=2), auth_user
+    )
+
+    assert find_user_persona_page_result == FindUserPersonaPageResult(
+        personas=[], pagination=PaginationResult(page=4, page_size=2, total=2)
+    )
+
+
+@pytest.mark.parametrize(
+    ("sort_by", "sort_direction", "expected_names"),
+    [
+        pytest.param(
+            UserPersonaSortType.CREATED_AT,
+            SortDirectionType.ASC,
+            ["Cherry", "Apple", "Banana"],
+            id="created_at_ascending",
+        ),
+        pytest.param(
+            UserPersonaSortType.CREATED_AT,
+            SortDirectionType.DESC,
+            ["Banana", "Apple", "Cherry"],
+            id="created_at_descending",
+        ),
+        pytest.param(
+            UserPersonaSortType.NAME,
+            SortDirectionType.ASC,
+            ["Apple", "Banana", "Cherry"],
+            id="name_ascending",
+        ),
+        pytest.param(
+            UserPersonaSortType.NAME,
+            SortDirectionType.DESC,
+            ["Cherry", "Banana", "Apple"],
+            id="name_descending",
+        ),
+    ],
+)
+async def test_find_user_persona_page_sorts_by_each_sort_type_in_both_directions(
+    db_session: AsyncSession,
+    pagination_service: PaginationService,
+    sort_by: UserPersonaSortType,
+    sort_direction: SortDirectionType,
+    expected_names: list[str],
+) -> None:
+    # Created in the order Cherry, Apple, Banana
+    auth_user, _ = await _insert_named_personas(db_session, names=["Cherry", "Apple", "Banana"])
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
+
+    find_user_persona_page_result = await persona_service.find_user_persona_page(
+        build_find_user_persona_page_input(sort_by=sort_by, sort_direction=sort_direction),
+        auth_user,
+    )
+
+    persona_names = [persona.name for persona in find_user_persona_page_result.personas]
+    assert persona_names == expected_names
+
+
+@pytest.mark.parametrize(
+    ("search", "expected_names"),
+    [
+        pytest.param("MORNING", ["Slow Mornings Sam"], id="case_insensitive_name"),
+        pytest.param("owl nora", ["Night Owl Nora"], id="every_word_matches"),
+        pytest.param("owl sam", [], id="every_word_must_match"),
+        pytest.param("100%", [], id="percent_is_literal"),
+        pytest.param(
+            "  ", ["Slow Mornings Sam", "Night Owl Nora"], id="whitespace_means_no_search"
+        ),
+    ],
+)
+async def test_find_user_persona_page_search_matches_name(
+    db_session: AsyncSession,
+    pagination_service: PaginationService,
+    search: str,
+    expected_names: list[str],
+) -> None:
+    auth_user, _ = await _insert_named_personas(
+        db_session, names=["Slow Mornings Sam", "Night Owl Nora"]
+    )
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
+
+    find_user_persona_page_result = await persona_service.find_user_persona_page(
+        build_find_user_persona_page_input(search=search, sort_by=UserPersonaSortType.NAME),
+        auth_user,
+    )
+
+    persona_names = [persona.name for persona in find_user_persona_page_result.personas]
+    assert persona_names == expected_names
+
+
+async def test_find_user_persona_page_search_total_counts_only_matching_own_personas(
+    db_session: AsyncSession, pagination_service: PaginationService
+) -> None:
+    auth_user, _ = await _insert_named_personas(
+        db_session, names=["Coffee One", "Coffee Two", "Tea One"]
+    )
+    other_user_record = await insert_user_row(db_session)
+    await insert_persona_row(db_session, created_by_id=other_user_record.id, name="Coffee Other")
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
+
+    find_user_persona_page_result = await persona_service.find_user_persona_page(
+        build_find_user_persona_page_input(page_size=1, search="coffee"), auth_user
+    )
+
+    assert find_user_persona_page_result.pagination == PaginationResult(
+        page=1, page_size=1, total=2
+    )
 
 
 async def test_find_user_persona_own_persona_returns_result_with_id(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
@@ -515,7 +709,7 @@ async def test_find_user_persona_own_persona_returns_result_with_id(
         name="Ada the Essayist",
         bio="Writes long-form essays.",
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     find_user_persona_result = await persona_service.find_user_persona(
         persona_record.identity, auth_user
@@ -534,6 +728,7 @@ async def test_find_user_persona_own_persona_returns_result_with_id(
 
 async def test_find_user_persona_another_users_public_persona_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -543,7 +738,7 @@ async def test_find_user_persona_another_users_public_persona_raises_not_found_e
     persona_record = await insert_persona_row(
         db_session, created_by_id=owner_record.id, is_public=True
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_user_persona(persona_record.identity, other_auth_user)
@@ -551,6 +746,7 @@ async def test_find_user_persona_another_users_public_persona_raises_not_found_e
 
 async def test_find_user_persona_another_users_private_persona_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -558,7 +754,7 @@ async def test_find_user_persona_another_users_private_persona_raises_not_found_
         user_id=other_user_record.id, user_identity=other_user_record.identity
     )
     persona_record = await insert_persona_row(db_session, created_by_id=owner_record.id)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_user_persona(persona_record.identity, other_auth_user)
@@ -566,6 +762,7 @@ async def test_find_user_persona_another_users_private_persona_raises_not_found_
 
 async def test_find_user_persona_soft_deleted_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
@@ -576,7 +773,7 @@ async def test_find_user_persona_soft_deleted_raises_not_found_exception(
         deleted_at=deleted_at,
         deleted_by_id=user_record.id,
     )
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_user_persona(persona_record.identity, auth_user)
@@ -584,15 +781,18 @@ async def test_find_user_persona_soft_deleted_raises_not_found_exception(
 
 async def test_find_user_persona_never_inserted_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.find_user_persona(uuid4(), auth_user)
 
 
-async def test_update_persona_replaces_fields(db_session: AsyncSession) -> None:
+async def test_update_persona_replaces_fields(
+    db_session: AsyncSession, pagination_service: PaginationService
+) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
     persona_record = await insert_persona_row(
@@ -604,7 +804,7 @@ async def test_update_persona_replaces_fields(db_session: AsyncSession) -> None:
         is_public=True,
     )
     await db_session.commit()
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
     updated_persona_input = build_persona_input(name="New Name", bio="New bio.")
 
     await persona_service.update_persona(persona_record.identity, updated_persona_input, auth_user)
@@ -622,9 +822,10 @@ async def test_update_persona_replaces_fields(db_session: AsyncSession) -> None:
 
 async def test_update_persona_never_inserted_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.update_persona(uuid4(), build_persona_input(), auth_user)
@@ -632,6 +833,7 @@ async def test_update_persona_never_inserted_raises_not_found_exception(
 
 async def test_update_persona_another_users_private_persona_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -640,7 +842,7 @@ async def test_update_persona_another_users_private_persona_raises_not_found_exc
     )
     persona_record = await insert_persona_row(db_session, created_by_id=owner_record.id)
     await db_session.commit()
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.update_persona(
@@ -650,6 +852,7 @@ async def test_update_persona_another_users_private_persona_raises_not_found_exc
 
 async def test_update_persona_another_users_public_persona_raises_forbidden_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -660,7 +863,7 @@ async def test_update_persona_another_users_public_persona_raises_forbidden_exce
         db_session, created_by_id=owner_record.id, is_public=True
     )
     await db_session.commit()
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(ForbiddenException):
         await persona_service.update_persona(
@@ -668,12 +871,14 @@ async def test_update_persona_another_users_public_persona_raises_forbidden_exce
         )
 
 
-async def test_delete_persona_soft_deletes_row(db_session: AsyncSession) -> None:
+async def test_delete_persona_soft_deletes_row(
+    db_session: AsyncSession, pagination_service: PaginationService
+) -> None:
     user_record = await insert_user_row(db_session)
     auth_user = build_auth_user(user_id=user_record.id, user_identity=user_record.identity)
     persona_record = await insert_persona_row(db_session, created_by_id=user_record.id)
     await db_session.commit()
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     await persona_service.delete_persona(persona_record.identity, auth_user)
 
@@ -691,9 +896,10 @@ async def test_delete_persona_soft_deletes_row(db_session: AsyncSession) -> None
 
 async def test_delete_persona_never_inserted_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     auth_user = await _insert_auth_user(db_session)
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.delete_persona(uuid4(), auth_user)
@@ -701,6 +907,7 @@ async def test_delete_persona_never_inserted_raises_not_found_exception(
 
 async def test_delete_persona_another_users_private_persona_raises_not_found_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -709,7 +916,7 @@ async def test_delete_persona_another_users_private_persona_raises_not_found_exc
     )
     persona_record = await insert_persona_row(db_session, created_by_id=owner_record.id)
     await db_session.commit()
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(NotFoundException):
         await persona_service.delete_persona(persona_record.identity, other_auth_user)
@@ -717,6 +924,7 @@ async def test_delete_persona_another_users_private_persona_raises_not_found_exc
 
 async def test_delete_persona_another_users_public_persona_raises_forbidden_exception(
     db_session: AsyncSession,
+    pagination_service: PaginationService,
 ) -> None:
     owner_record = await insert_user_row(db_session)
     other_user_record = await insert_user_row(db_session)
@@ -727,7 +935,7 @@ async def test_delete_persona_another_users_public_persona_raises_forbidden_exce
         db_session, created_by_id=owner_record.id, is_public=True
     )
     await db_session.commit()
-    persona_service = PersonaService(db_session=db_session)
+    persona_service = PersonaService(db_session=db_session, pagination_service=pagination_service)
 
     with pytest.raises(ForbiddenException):
         await persona_service.delete_persona(persona_record.identity, other_auth_user)
