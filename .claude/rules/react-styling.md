@@ -74,7 +74,7 @@ Substack's columns, from the left:
   the two are centred together. A page whose table needs more, such as the admin
   pages, sets `isFullWidth` on its route and gets up to 1100px. A table goes in
   `DataTable` (`components/`), which scrolls sideways inside itself below `md`, so the
-  page never does
+  page never does. `isFullWidth` has no effect on a route that sets `hasSidebar`
 - **Right sidebar**: only on a page that has something for it, never an empty
   column. `AppLayout` shows one when signed out, holding the sign-in card (about
   370px), except on a route that shows its own sign-in and sets
