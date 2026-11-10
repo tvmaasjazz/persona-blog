@@ -161,7 +161,8 @@ export function useCurrentUser() {
 
 One hook per mutation, named `use` + the action: `useSignOut`, `useGenerateText`.
 It updates or invalidates every query key the change affects in `onSuccess`, so
-callers never refetch by hand.
+callers never refetch by hand. A query key names an API resource, so a hook invalidates
+another feature's resource by its key, without importing from that feature.
 
 The hook owns the cache and nothing else: it never toasts, navigates, or sets form
 state. The component that calls `mutate` does those, in the second argument, because
@@ -204,10 +205,12 @@ to show. It uses `sonner`, through `toast` imported from `'sonner'`. The one
 - **Error:** an error that belongs to a field shows under that field, not in a toast,
   like a 409 name clash under Name. Anything else goes to `toast.error` with
   `apiErrorMessage(error)` from `lib/api-error.ts`. The exception is generating
-  text: a failed generate or resume call shows a fixed message, such as "Couldn't
-  write the post. Try again.", because its detail can carry provider internals.
+  text: a failed generate or resume call shows a fixed message from
+  `generate-text/generate-text-error-messages.ts`, because its detail can carry
+  provider internals. A 402 (the balance) and a 409 on start (the active-run limit) get
+  their own fixed messages there.
 - **Queries don't toast.** A failed query renders an error state where its data
-  would be.
+  would be. The one exception is the signed-out toast (› Permissions and sessions).
 - **No toast for what is already on screen**, such as a dialog that closes or a list
   that updates in place with nothing else to confirm.
 
@@ -318,6 +321,19 @@ signal.
 Hiding or disabling a control is a courtesy, never the check: the API refuses, and the
 page handles the refusal. A secret such as an invite code stays out of query keys that
 outlive the page, toasts and logs. No `dangerouslySetInnerHTML`.
+
+## Permissions and sessions
+
+The UI checks permissions, never roles: `hasPermission(user, 'PERSONA_WRITE')` from
+`features/auth/permissions.ts`. Only three places check: the nav, the
+`RequirePermission` layout route (the pattern is
+`features/auth/components/require-permission.tsx`), and a route file passing `canEdit`
+to a feature component. A feature other than `auth` never reads the current user.
+
+When the server deletes a session, the API's 401 clears its cookie. `lib/api-client.ts`
+then sets `['users', 'me']` to `null` and toasts "You were signed out. Sign in again."
+once, and `app/query-client.ts` retries a query once after a 401, so an open route
+succeeds signed out and a guarded one redirects.
 
 ## Naming
 
