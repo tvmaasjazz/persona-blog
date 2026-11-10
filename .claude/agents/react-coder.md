@@ -46,8 +46,8 @@ The rules files say where each of these lives and how it is shaped.
   the setup files listed below. `lib/api-error.ts` is one: extend it when a feature
   needs more from API errors
 - **shadcn components**, added with the CLI. Variant edits only, per
-  `react-styling.md` › Components. Never re-add `button.tsx`, `alert-dialog.tsx`, or
-  `sonner.tsx`: the CLI would overwrite their deliberate edits
+  `react-styling.md` › Components. Never re-add `button.tsx`, `alert-dialog.tsx`,
+  `dialog.tsx`, or `sonner.tsx`: the CLI would overwrite their deliberate edits
 
 ## What you don't write
 
