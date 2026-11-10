@@ -111,7 +111,8 @@ written. They are expected to grow.
 
 An agent in `.claude/agents/` is named for the side of the stack it works on:
 
-- `react-` for frontend agents that write or review React code: `react-coder`
+- `react-` for frontend agents that write or review React code: `react-coder`,
+  `react-reviewer`
 - `fe-` for other frontend work, such as styling or the frontend docs: `fe-docs-auditor`
 - `be-` for backend agents: `be-test-writer`, `be-docs-auditor`. Agents named for a
   backend tool, `fastapi-coder` and `schema-coder`, keep the tool name instead
@@ -151,6 +152,9 @@ Open the PR for review as soon as the code is written and `ruff check` passes, b
 tests and the docs audit. Tests, then audit fixes, land afterwards as separate commits
 on the same PR. Until they do, the PR description says what's still to come and which
 existing tests fail.
+
+A frontend PR is reviewed by `react-reviewer` once it's open, after the docs audit.
+Pass it the base and head refs and what the PR is for, never an opinion of the code.
 
 ## Git
 
