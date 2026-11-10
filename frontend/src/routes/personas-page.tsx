@@ -6,21 +6,13 @@ import { ListSearchBox } from '@/components/list-search-box'
 import { Button } from '@/components/ui/button'
 import { useUserPersonaPage } from '@/features/personas/api/user-persona-page-query'
 import { PersonaList } from '@/features/personas/components/persona-list'
-import type { components } from '@/lib/api-schema.gen'
 import { useListSearchParams } from '@/lib/use-list-search-params'
 
 const PAGE_SIZE = 20
-const SORT_VALUES = [
-  'CREATED_AT',
-] as const satisfies readonly components['schemas']['UserPersonaSortType'][]
 
 export function PersonasPage() {
-  // Page and search live in the URL
-  const { page, search, sortBy, sortDirection, setPage, setSearch } = useListSearchParams({
-    sortValues: SORT_VALUES,
-    defaultSort: 'CREATED_AT',
-    defaultDirection: 'DESC',
-  })
+  // Page and search live in the URL; the list has one order
+  const { page, search, setPage, setSearch } = useListSearchParams()
   const {
     data: personaPage,
     isPending,
@@ -29,8 +21,8 @@ export function PersonasPage() {
     page,
     page_size: PAGE_SIZE,
     search: search || undefined,
-    sort_by: sortBy,
-    sort_direction: sortDirection,
+    sort_by: 'CREATED_AT',
+    sort_direction: 'DESC',
   })
 
   return (

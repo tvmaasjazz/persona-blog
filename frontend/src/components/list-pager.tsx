@@ -11,7 +11,8 @@ type ListPagerProps = {
 export function ListPager({ pagination, onPageChange }: ListPagerProps) {
   const pageCount = Math.max(1, Math.ceil(pagination.total / pagination.page_size))
 
-  if (pageCount <= 1) {
+  // Past the last page, PastLastPageNotice is the way back
+  if (pageCount <= 1 || pagination.page > pageCount) {
     return null
   }
 

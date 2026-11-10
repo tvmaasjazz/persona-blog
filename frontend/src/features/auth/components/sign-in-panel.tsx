@@ -19,7 +19,7 @@ export function SignInPanel({ searchParams }: SignInPanelProps) {
     return (
       <div className="flex max-w-sm flex-col gap-4">
         <h1 className="text-xl font-extrabold">Sign in</h1>
-        <div className="h-40 rounded-2xl bg-accent" />
+        <div className="h-40 rounded-2xl bg-accent" aria-hidden />
       </div>
     )
   }
