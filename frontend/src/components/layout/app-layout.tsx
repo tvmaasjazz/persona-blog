@@ -1,4 +1,4 @@
-import { FileText, Home, LogIn, Plus, Sparkles, Users } from 'lucide-react'
+import { FileText, Home, LogIn, Plus, Shield, Sparkles, Users } from 'lucide-react'
 import { Link, Outlet, ScrollRestoration, useMatches } from 'react-router'
 
 import { NavItem } from '@/components/layout/nav-item'
@@ -16,6 +16,8 @@ export type AppRouteHandle = {
   hasSidebar?: boolean
   // The right column's sign-in card is hidden where the page is the sign-in
   isSignInCardHidden?: boolean
+  // The main column is up to 1100px wide instead of 720px, for a wide table
+  isFullWidth?: boolean
 }
 
 export function AppLayout() {
@@ -28,12 +30,16 @@ export function AppLayout() {
   const isSignInCardHidden = matches.some(
     (match) => (match.handle as AppRouteHandle | undefined)?.isSignInCardHidden,
   )
+  const isFullWidth = matches.some(
+    (match) => (match.handle as AppRouteHandle | undefined)?.isFullWidth,
+  )
   const isSignedOut = !isPending && !user
   const isSignInCardShown = isSignedOut && !isSignInCardHidden
   // Nav items by permission
   const canWritePersonas = hasPermission(user, 'PERSONA_WRITE')
   const canWritePosts = hasPermission(user, 'BLOG_POST_WRITE')
   const canGenerate = hasPermission(user, 'GENERATE_TEXT_RUN_WRITE')
+  const canReadUsers = hasPermission(user, 'USER_READ')
 
   // Nav, then the page and the sign-in card
   return (
@@ -45,6 +51,7 @@ export function AppLayout() {
           <NavItem to="/" label="Home" icon={Home} isExact />
           {canWritePersonas && <NavItem to="/personas" label="My Personas" icon={Users} />}
           {canWritePosts && <NavItem to="/posts" label="My Posts" icon={FileText} />}
+          {canReadUsers && <NavItem to="/admin/users" label="Admin" icon={Shield} />}
         </ul>
         {canGenerate && (
           <Button asChild className="mt-3 w-full px-0 md:px-4">
@@ -69,7 +76,12 @@ export function AppLayout() {
       </nav>
 
       <div className="flex min-w-0 flex-1 justify-center gap-10 px-6 py-8">
-        <main className={cn('w-full min-w-0', !hasSidebar && 'max-w-[720px]')}>
+        <main
+          className={cn(
+            'w-full min-w-0',
+            !hasSidebar && (isFullWidth ? 'max-w-[1100px]' : 'max-w-[720px]'),
+          )}
+        >
           <LowBalanceBanner />
           <Outlet />
         </main>

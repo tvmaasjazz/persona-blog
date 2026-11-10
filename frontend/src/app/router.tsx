@@ -4,6 +4,8 @@ import { AppLayout, type AppRouteHandle } from '@/components/layout/app-layout'
 import { RequireAuth } from '@/features/auth/components/require-auth'
 import { RequirePermission } from '@/features/auth/components/require-permission'
 import { AccountPage } from '@/routes/account-page'
+import { AdminUserPage } from '@/routes/admin-user-page'
+import { AdminUsersPage } from '@/routes/admin-users-page'
 import { BlogPostPage } from '@/routes/blog-post-page'
 import { BlogPostsPage } from '@/routes/blog-posts-page'
 import { EditBlogPostPage } from '@/routes/edit-blog-post-page'
@@ -60,6 +62,23 @@ export const router = createBrowserRouter([
                 path: '/write/runs/:runIdentity',
                 element: <GenerateTextRunPage />,
                 handle: { hasSidebar: true } satisfies AppRouteHandle,
+              },
+            ],
+          },
+          {
+            element: (
+              <RequirePermission permission="USER_READ" message="This page is for admins." />
+            ),
+            children: [
+              {
+                path: '/admin/users',
+                element: <AdminUsersPage />,
+                handle: { isFullWidth: true } satisfies AppRouteHandle,
+              },
+              {
+                path: '/admin/users/:userIdentity',
+                element: <AdminUserPage />,
+                handle: { isFullWidth: true, hasSidebar: true } satisfies AppRouteHandle,
               },
             ],
           },
