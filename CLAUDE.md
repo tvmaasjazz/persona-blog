@@ -43,6 +43,7 @@ npm run fmt:check            # check formatting without writing
 npm run lint                 # oxlint
 npm run build                # type-check and build to dist/
 npm run test                 # Vitest unit tests
+npm run test:e2e             # Playwright flows (needs the API and the dev seed)
 npm run api:types            # regenerate src/lib/api-schema.gen.ts (needs the API on 8000)
 npx shadcn@latest add <name> # add a shadcn/ui component to src/components/ui/
 ```
@@ -148,6 +149,10 @@ Split work across parallel agents only along files they don't share.
   shared layer's file list and exports as its contract. Each formats and lints only
   its own files (`react-coder.md` › Commands). Run `fmt`, `lint` and `build` once at
   the end.
+- **Frontend tests.** `fe-test-writer` agents split by test file, one kind each (unit
+  or end-to-end), and each runs only its own files. End-to-end writers write in
+  parallel, but their runs share the dev database, so each runs its files alone. Run
+  `npm run test` and `npm run test:e2e` once at the end.
 
 ## Pull requests
 

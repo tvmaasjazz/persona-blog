@@ -46,7 +46,7 @@ call in `src/lib/api-schema.gen.ts`.
 Run commands from `frontend/`, and only these:
 
 - `npm run test -- <your files>` for unit tests (the script pins the locale)
-- `npx playwright test <your files>` for end-to-end flows
+- `npm run test:e2e -- <your files>` for end-to-end flows
 - `npm run fmt -- <your files>` and `npm run lint -- <your files>`
 
 Write end-to-end flows only once `react-testing.md` › End-to-end tests is filled in;
