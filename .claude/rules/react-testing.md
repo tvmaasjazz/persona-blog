@@ -65,6 +65,9 @@ A flow walks the real app against the real local API and its dev seed
   the API (`page.request`, which carries the signed-in context's cookie). It undoes
   the change before it ends where later tests rely on the seed (a suspended user is
   reactivated), and never relies on another test's changes, so any one runs alone.
+  The undo goes in a `finally`, so a failure part-way still leaves the seed as it was.
+- A count or total that the seed doesn't fix (other runs add posts) is read from the
+  API in the test, never written as a literal.
 - No real generate run: a flow never reaches the model. The 402 path uses the seeded
   creator at $0.
 - Local only: `e2e/global-setup.ts` stops the run unless the API on `localhost:8000`
