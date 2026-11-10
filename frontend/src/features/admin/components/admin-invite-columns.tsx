@@ -24,7 +24,7 @@ export function buildAdminInviteColumns(
       header: 'Name',
       sortValue: 'NAME',
       firstSortDirection: 'ASC',
-      className: 'min-w-40 whitespace-normal [overflow-wrap:anywhere]',
+      className: 'min-w-40 whitespace-normal wrap-anywhere',
       cell: (invite) => invite.name,
     },
     {

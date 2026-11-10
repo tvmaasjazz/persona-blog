@@ -3,8 +3,8 @@ import { toast } from 'sonner'
 import { useAppForm } from '@/components/form/use-app-form'
 import { useGrantUserCredits } from '@/features/admin/api/use-grant-user-credits'
 import { SectionCard } from '@/features/admin/components/section-card'
+import { MAX_CREDIT_GRANT_USD } from '@/features/admin/credit-amount-schema'
 import {
-  MAX_CREDIT_GRANT_USD,
   creditGrantFormOptions,
   creditGrantFormSchema,
 } from '@/features/admin/credit-grant-form-schema'

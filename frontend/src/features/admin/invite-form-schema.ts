@@ -2,9 +2,9 @@ import { formOptions, revalidateLogic } from '@tanstack/react-form'
 import { z } from 'zod'
 
 import { focusFirstInvalidField } from '@/components/form/form-errors'
-import { creditAmountUsdSchema } from '@/features/admin/credit-grant-form-schema'
+import { creditAmountUsdSchema } from '@/features/admin/credit-amount-schema'
 
-// The limits in libs.invites.constants and libs.admin.constants.
+// The limits in libs.invites.constants.
 export const DEFAULT_INVITE_EXPIRES_IN_DAYS = 7
 export const MAX_INVITE_EXPIRES_IN_DAYS = 30
 

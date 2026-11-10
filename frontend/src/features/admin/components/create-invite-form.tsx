@@ -5,7 +5,7 @@ import { useAppForm } from '@/components/form/use-app-form'
 import { useCreateInvite } from '@/features/admin/api/use-create-invite'
 import { InviteLinkDialog } from '@/features/admin/components/invite-link-dialog'
 import { SectionCard } from '@/features/admin/components/section-card'
-import { MAX_CREDIT_GRANT_USD } from '@/features/admin/credit-grant-form-schema'
+import { MAX_CREDIT_GRANT_USD } from '@/features/admin/credit-amount-schema'
 import {
   MAX_INVITE_EXPIRES_IN_DAYS,
   inviteFormOptions,

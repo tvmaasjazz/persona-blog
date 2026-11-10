@@ -31,13 +31,11 @@ export function RevokeInviteButton({ inviteIdentity, inviteName }: RevokeInviteB
             if (isSessionEndedError(error)) {
               return
             }
+            toast.error(apiErrorMessage(error))
             // A 409 means it was used first; the refreshed table shows it as used
             if (error instanceof ApiError && error.status === 409) {
-              toast.error(apiErrorMessage(error))
               close()
-              return
             }
-            toast.error(apiErrorMessage(error))
           },
         })
       }

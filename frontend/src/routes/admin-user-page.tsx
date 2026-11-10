@@ -62,9 +62,7 @@ export function AdminUserPage() {
       header={
         <div className="flex flex-col gap-4">
           <AdminSectionNav canReadInvites={hasPermission(currentUser, 'INVITE_READ')} />
-          <h1 className="text-xl font-extrabold [overflow-wrap:anywhere]">
-            {user?.email ?? 'User'}
-          </h1>
+          <h1 className="text-xl font-extrabold wrap-anywhere">{user?.email ?? 'User'}</h1>
         </div>
       }
       sidebar={

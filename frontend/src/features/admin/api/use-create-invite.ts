@@ -11,6 +11,7 @@ export function useCreateInvite() {
   const queryClient = useQueryClient()
 
   return useMutation({
+    gcTime: 0,
     mutationFn: async (invite: AdminInviteDto) => {
       const { data, error, response } = await apiClient.POST('/admin/invites', { body: invite })
 
