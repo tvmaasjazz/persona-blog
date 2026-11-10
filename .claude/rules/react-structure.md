@@ -86,6 +86,19 @@ reads `usePersonaList()` and hands the personas to the generate form.
 
 No barrel `index.ts` files. Import from the file that defines the thing.
 
+## Component boundaries
+
+A component, hook or function does one job, said in a sentence without "and".
+
+- Fetching and cache go in `api/`.
+- A timer, observer or scroll listener goes in a hook.
+- Markup and classes go in a component.
+- The URL and navigation belong to the route file, and to the component that calls
+  `mutate`.
+- Motion is classes, never code mixed into data handling.
+- A boolean prop that turns a component into a different one is two components.
+- A block written a third time becomes a shared one.
+
 ## Talking to the API
 
 The backend is reached only through `apiClient`, and only from a feature's `api/`
@@ -178,6 +191,8 @@ to show. It uses `sonner`, through `toast` imported from `'sonner'`. The one
 - **No toast for what is already on screen**, such as a dialog that closes or a list
   that updates in place with nothing else to confirm.
 
+What the user reads is in sentence case, and a failure says what to do next.
+
 ### Sign-in
 
 Google sign-in is a full-page navigation, not a request: an `<a href>` to
@@ -261,6 +276,26 @@ toast says what.
 A route that needs something from the layout says so in its `handle`, typed as
 `AppRouteHandle` from `app-layout.tsx`. `hasSidebar` is the one field so far; see
 `react-styling.md` › Layout for what it does.
+
+## States
+
+A view that loads data has a loading, an empty and an error state, and a not-found
+state when it's read by identity. A button is disabled while its request runs. A
+destructive action confirms in an `AlertDialog` first; `delete-persona-button.tsx` is
+the pattern.
+
+## Accessibility
+
+A link navigates and a button acts. No interactive element sits inside another. Every
+control has a label, and an icon-only button an `aria-label`. Headings descend in
+order. A sortable column says its sort with `aria-sort`. Colour is never the only
+signal.
+
+## Trust
+
+Hiding or disabling a control is a courtesy, never the check: the API refuses, and the
+page handles the refusal. A secret such as an invite code stays out of query keys that
+outlive the page, toasts and logs. No `dangerouslySetInnerHTML`.
 
 ## Naming
 
