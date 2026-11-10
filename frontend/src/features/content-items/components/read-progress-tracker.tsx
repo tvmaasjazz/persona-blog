@@ -31,6 +31,7 @@ function TrackedContent({ contentItemIdentity, children }: ReadProgressTrackerPr
       return
     }
     lastSentProgressRef.current = readProgress
+    // A failed view is dropped: no onError, so nothing is toasted or retried
     recordView({ contentItemIdentity, readPercent: readProgress })
   }, [contentItemIdentity, readProgress, recordView])
 

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { RefObject } from 'react'
 
-import type { RecordContentItemViewVariables } from '../api/use-record-content-item-view'
+import type { components } from '@/lib/api-schema.gen'
 
-export type ReadProgress = RecordContentItemViewVariables['readPercent']
+export type ReadProgress = components['schemas']['RecordContentItemViewDto']['read_percent']
 
 // Returns the furthest quarter of the element the bottom of the viewport has passed.
 export function useReadProgress(elementRef: RefObject<HTMLElement | null>): ReadProgress {
