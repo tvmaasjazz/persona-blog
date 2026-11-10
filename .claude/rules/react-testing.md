@@ -66,9 +66,10 @@ A flow walks the real app against the real local API and its dev seed
   the change before it ends where later tests rely on the seed (a suspended user is
   reactivated), and never relies on another test's changes, so any one runs alone.
   The undo goes in a `finally`, so a failure part-way still leaves the seed as it was.
-  It goes through `page.request` and is unconditional: it reads the state from the API
-  and restores what the test read before its change, never only when a button happens
-  to be on screen. A change the API can't undo (a grant) is read before and compared,
+  It goes through `page.request` and is unconditional, never only when a button happens
+  to be on screen. When the seed fixes a value (a role, active), the undo puts back the
+  seed's value, and the test sets it before it starts too, so a failed run doesn't carry
+  over; a value the seed doesn't fix is read before the change and restored. A change the API can't undo (a grant) is read before and compared,
   never asserted as a seeded value.
 - A count or total that the seed doesn't fix (other runs add posts) is read from the
   API in the test, never written as a literal.
@@ -76,7 +77,10 @@ A flow walks the real app against the real local API and its dev seed
   positive wait for the state it checks. That a request wasn't sent is checked by
   recording requests (`page.on('request')`), not by a toast's absence.
 - A response read through `page.request` is typed from `../src/lib/api-schema.gen.ts`,
-  as app code is; `react-structure.md` › TypeScript applies.
+  as app code is, by annotating the variable
+  (`const body: components['schemas']['…'] = await response.json()`). Node's own
+  `fetch` (in `global-setup.ts`) returns `unknown`, so there it's an `as` to the schema
+  type.
 - No real generate run: a flow never reaches the model. The 402 path uses the seeded
   creator at $0.
 - Local only: `e2e/global-setup.ts` stops the run unless the API on `localhost:8000`

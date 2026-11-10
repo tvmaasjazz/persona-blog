@@ -10,17 +10,8 @@ type AdminInvitePageResponse = components['schemas']['AdminInvitePageResponseDto
 const NEWCOMER_EMAIL = SEEDED_USER_EMAILS.newcomer
 const ADMIN_EMAIL = SEEDED_USER_EMAILS.admin
 
-// The seeded emails in the order an ascending email sort puts them
-const SEEDED_EMAILS_ASCENDING = [
-  'dev-admin@example.com',
-  'dev-broke@example.com',
-  'dev-creator@example.com',
-  'dev-invited@example.com',
-  'dev-low@example.com',
-  'dev-newcomer@example.com',
-  'dev-reader@example.com',
-  'dev-suspended@example.com',
-]
+// Every seeded email (backend/scripts/dev_seed.py) in the order an ascending email sort puts them
+const SEEDED_EMAILS_ASCENDING = Object.values(SEEDED_USER_EMAILS).toSorted()
 
 // Reads the newcomer from the API
 async function findNewcomer(page: Page): Promise<AdminUserResponse> {
@@ -64,7 +55,7 @@ async function openNewcomerPage(page: Page) {
 // The seeded emails the table shows, in the order it shows them
 async function readSeededEmailsInOrder(page: Page): Promise<string[]> {
   const emails = await page.getByRole('cell').getByRole('link').allInnerTexts()
-  return emails.filter((email) => SEEDED_EMAILS_ASCENDING.includes(email))
+  return emails.filter((email) => (SEEDED_EMAILS_ASCENDING as string[]).includes(email))
 }
 
 test('the admin sorts the users table by email and searches it', async ({ page, signInAs }) => {
@@ -200,19 +191,35 @@ test('the admin creates an invite, sees its link only in the dialog, then revoke
     await expect(inviteRow.getByRole('cell').nth(1)).toHaveText('$0.50')
     await expect(inviteRow.getByRole('cell').nth(2)).toHaveText('Unused')
 
-    // The link is not shown again: no field in the page or the row
+    // The link is not shown again: reload so the page is rebuilt from the API alone
+    const inviteCode = inviteLink.split('/').pop() ?? ''
+    expect(inviteCode).not.toBe('')
+    const listResponsePromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/admin/invites' &&
+        response.url().includes(encodeURIComponent(inviteName)),
+    )
+    await page.reload()
+    await page.getByRole('searchbox', { name: 'Search invites' }).fill(inviteName)
+    const listBody = await (await listResponsePromise).text()
+    expect(listBody.includes(inviteCode)).toBe(false)
     await expect(page.getByLabel('Invite link')).toHaveCount(0)
-    await expect(inviteRow.getByRole('textbox')).toHaveCount(0)
+    const reloadedRow = page.getByRole('row', { name: new RegExp(inviteName) })
+    await expect(reloadedRow.getByRole('cell').nth(2)).toHaveText('Unused')
+    await expect(reloadedRow.getByRole('button')).toHaveCount(1)
+    await expect(reloadedRow.getByRole('button')).toHaveAccessibleName(
+      `Revoke invite ${inviteName}`,
+    )
 
     // Revoke it from the table, confirming
-    await inviteRow.getByRole('button', { name: `Revoke invite ${inviteName}` }).click()
+    await reloadedRow.getByRole('button', { name: `Revoke invite ${inviteName}` }).click()
     await page
       .getByRole('alertdialog', { name: `Revoke ${inviteName}?` })
       .getByRole('button', { name: 'Revoke' })
       .click()
     await expect(page.getByText('Invite revoked')).toBeVisible()
-    await expect(inviteRow.getByRole('cell').nth(2)).toHaveText('Revoked')
-    await expect(inviteRow.getByRole('button')).toHaveCount(0)
+    await expect(reloadedRow.getByRole('cell').nth(2)).toHaveText('Revoked')
+    await expect(reloadedRow.getByRole('button')).toHaveCount(0)
   } finally {
     // Revoke the invite if the test left it unused
     const response = await page.request.get('/api/admin/invites', {

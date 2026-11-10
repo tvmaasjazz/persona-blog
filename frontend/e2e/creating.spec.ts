@@ -44,6 +44,8 @@ test('the creator pages through their posts and searches them', async ({ page, s
   const postLinks = page.getByRole('link', { name: /Bread and Patience, Entry/ })
   await expect(postLinks.first()).toBeVisible()
   await expect(entryLinks.first()).toContainText('Bread and Patience')
+  // The search gives one page, so the pager is gone once the narrowed rows have arrived
+  await expect(page.getByRole('navigation', { name: 'Pages' })).toHaveCount(0)
   for (const postLink of await entryLinks.all()) {
     await expect(postLink).toContainText('Bread and Patience')
   }
@@ -61,13 +63,17 @@ test('making a public persona private asks first, and cancelling saves nothing',
   await page.goto('/personas')
   const bramPath = await page.getByRole('link', { name: /Bram Holt/ }).getAttribute('href')
   const bramIdentity = bramPath?.split('/').pop()
+  if (bramIdentity === undefined || bramIdentity === '') {
+    throw new Error(`Bram Holt's link has no persona path: ${bramPath}`)
+  }
 
   // Read how many public posts Bram has from the same route the edit page counts with
   const countResponse = await page.request.get(
     `/api/blog-posts/public?persona_identity=${bramIdentity}&page_size=1`,
   )
   expect(countResponse.ok()).toBe(true)
-  const publicPostCount = ((await countResponse.json()) as PublicBlogPostPage).pagination.total
+  const countPage: PublicBlogPostPage = await countResponse.json()
+  const publicPostCount = countPage.pagination.total
   expect(publicPostCount).toBeGreaterThan(1)
 
   const personaRequests: string[] = []
@@ -97,15 +103,20 @@ test('making a public persona private asks first, and cancelling saves nothing',
     // Cancelling closes the dialog and sends no save
     await dialog.getByRole('button', { name: 'Cancel' }).click()
     await expect(dialog).toHaveCount(0)
-    await page.waitForLoadState('networkidle')
-    expect(personaRequests.filter((request) => request.startsWith('PUT '))).toEqual([])
     await page.goto('/personas')
     await expect(page.getByRole('link', { name: /Bram Holt/ })).toContainText('Public')
     await expect(page.getByRole('link', { name: /Bram Holt/ })).not.toContainText('Private')
+
+    // No save was sent, and the API still has Bram public
+    expect(personaRequests.filter((request) => request.startsWith('PUT '))).toEqual([])
+    const stillPublicResponse = await page.request.get(`/api/personas/${bramIdentity}`)
+    expect(stillPublicResponse.ok()).toBe(true)
+    const stillPublic: PersonaResponse = await stillPublicResponse.json()
+    expect(stillPublic.is_public).toBe(true)
   } finally {
     const bramResponse = await page.request.get(`/api/personas/${bramIdentity}`)
     expect(bramResponse.ok()).toBe(true)
-    const bram = (await bramResponse.json()) as PersonaResponse
+    const bram: PersonaResponse = await bramResponse.json()
     if (!bram.is_public) {
       const restored: components['schemas']['PersonaDto'] = {
         name: bram.name,

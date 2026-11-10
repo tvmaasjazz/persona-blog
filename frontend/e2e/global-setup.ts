@@ -1,5 +1,6 @@
 import type { components } from '../src/lib/api-schema.gen.ts'
 
+type HealthResponseDto = components['schemas']['HealthResponseDto']
 type PublicBlogPostPageResponseDto = components['schemas']['PublicBlogPostPageResponseDto']
 
 // The flows run only against a local development API on port 8000 with the dev seed in
@@ -21,7 +22,7 @@ export default async function globalSetup() {
   if (!healthResponse.ok) {
     throw new Error(`The API at ${LOCAL_API_URL} answered ${healthResponse.status} to /health`)
   }
-  const health = (await healthResponse.json()) as { environment?: string }
+  const health = (await healthResponse.json()) as HealthResponseDto
   if (health.environment !== 'DEVELOPMENT') {
     throw new Error(`The API at ${LOCAL_API_URL} is ${health.environment}, not DEVELOPMENT`)
   }

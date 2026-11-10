@@ -11,6 +11,8 @@ export const SEEDED_USER_EMAILS = {
   brokeCreator: 'dev-broke@example.com',
   reader: 'dev-reader@example.com',
   newcomer: 'dev-newcomer@example.com',
+  invited: 'dev-invited@example.com',
+  suspended: 'dev-suspended@example.com',
 } as const
 
 export type SeededUser = keyof typeof SEEDED_USER_EMAILS
