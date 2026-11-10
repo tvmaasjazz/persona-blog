@@ -16,10 +16,15 @@ export function SignInPanel({ searchParams }: SignInPanelProps) {
   const { data: user, isPending } = useCurrentUser()
 
   if (isPending) {
-    return <div className="h-40 rounded-2xl bg-accent" />
+    return (
+      <div className="flex max-w-sm flex-col gap-4">
+        <h1 className="text-xl font-extrabold">Sign in</h1>
+        <div className="h-40 rounded-2xl bg-accent" />
+      </div>
+    )
   }
 
-  // An accepted invite while signed out can't happen, so it counts as no code
+  // An accepted invite while signed out comes from a stale link, so it counts as no code
   const foundResult = findSignInResult(
     searchParams,
     user ? formatUsd(user.credit_balance_usd) : null,

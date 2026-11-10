@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 
 import { CardListSkeleton } from '@/components/card-list-skeleton'
+import { PastLastPageNotice } from '@/components/past-last-page-notice'
 import { QueryErrorState } from '@/components/query-error-state'
 import { Button } from '@/components/ui/button'
 import { PersonaCard } from '@/features/personas/components/persona-card'
@@ -34,14 +35,7 @@ export function PersonaList({
   if (personas.length === 0) {
     // Past the last page, such as after a delete or a stale link
     if (pagination && pagination.total > 0) {
-      return (
-        <div className="flex flex-col items-start gap-4">
-          <p className="text-muted-foreground">Nothing on this page.</p>
-          <Button variant="secondary" onClick={() => onPageChange(1)}>
-            Go to page 1
-          </Button>
-        </div>
-      )
+      return <PastLastPageNotice onFirstPage={() => onPageChange(1)} />
     }
 
     // No match for the search, which differs from having no personas
