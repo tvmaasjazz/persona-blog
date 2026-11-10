@@ -1,9 +1,9 @@
-import { Link, useNavigate } from 'react-router'
+import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { setFieldServerError } from '@/components/form/form-errors'
 import { useAppForm } from '@/components/form/use-app-form'
-import { Button } from '@/components/ui/button'
+import { QueryErrorState } from '@/components/query-error-state'
 import { usePersona } from '@/features/personas/api/persona-query'
 import { useUpdatePersona } from '@/features/personas/api/use-update-persona'
 import { PersonaForm } from '@/features/personas/components/persona-form'
@@ -31,17 +31,12 @@ export function EditPersonaForm({ personaIdentity }: EditPersonaFormProps) {
 
   // Not found or failed
   if (error) {
-    const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
-
     return (
-      <div className="flex flex-col items-start gap-4">
-        <p className="text-muted-foreground">
-          {isNotFound ? 'Persona not found' : apiErrorMessage(error)}
-        </p>
-        <Button asChild variant="secondary">
-          <Link to="/personas">Back to personas</Link>
-        </Button>
-      </div>
+      <QueryErrorState
+        error={error}
+        notFoundMessage="Persona not found."
+        backTo={{ to: '/personas', label: 'Back to personas' }}
+      />
     )
   }
 

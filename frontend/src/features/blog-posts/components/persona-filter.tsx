@@ -5,12 +5,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { components } from '@/lib/api-schema.gen'
 
-type PersonaResponseDto = components['schemas']['PersonaResponseDto']
+type PersonaOption = { identity: string; name: string }
 
 type PersonaFilterProps = {
-  personas: PersonaResponseDto[]
+  personas: PersonaOption[]
   personaIdentity: string | undefined
   onChange: (personaIdentity: string | undefined) => void
 }

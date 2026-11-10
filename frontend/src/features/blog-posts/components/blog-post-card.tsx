@@ -4,18 +4,14 @@ import { PersonaAvatar } from '@/components/persona-avatar'
 import { PostStatusBadges } from '@/features/blog-posts/components/post-status-badges'
 import type { components } from '@/lib/api-schema.gen'
 
-type BlogPostResponseDto = components['schemas']['BlogPostResponseDto']
-type PersonaResponseDto = components['schemas']['PersonaResponseDto']
+type BlogPostSummaryResponseDto = components['schemas']['BlogPostSummaryResponseDto']
 
 type BlogPostCardProps = {
-  blogPost: BlogPostResponseDto
-  persona: PersonaResponseDto | undefined
+  blogPost: BlogPostSummaryResponseDto
   isCompact?: boolean
 }
 
-export function BlogPostCard({ blogPost, persona, isCompact = false }: BlogPostCardProps) {
-  const personaName = persona?.name ?? 'Unknown persona'
-
+export function BlogPostCard({ blogPost, isCompact = false }: BlogPostCardProps) {
   // Compact: title and status
   if (isCompact) {
     return (
@@ -24,7 +20,11 @@ export function BlogPostCard({ blogPost, persona, isCompact = false }: BlogPostC
         className="flex flex-col gap-2 rounded-2xl border bg-card p-4 hover:bg-accent"
       >
         <span className="font-bold break-words">{blogPost.title}</span>
-        <PostStatusBadges publishedAt={blogPost.published_at} isPublic={blogPost.is_public} />
+        <PostStatusBadges
+          publishedAt={blogPost.published_at}
+          isPublic={blogPost.is_public}
+          isPersonaPublic={blogPost.is_persona_public}
+        />
       </Link>
     )
   }
@@ -42,10 +42,16 @@ export function BlogPostCard({ blogPost, persona, isCompact = false }: BlogPostC
         )}
       </div>
       <div className="flex items-center gap-2">
-        <PersonaAvatar name={personaName} avatarUrl={persona?.avatar_url ?? null} />
-        <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{personaName}</span>
-        <PostStatusBadges publishedAt={blogPost.published_at} isPublic={blogPost.is_public} />
+        <PersonaAvatar name={blogPost.persona_name} avatarUrl={blogPost.persona_avatar_url} />
+        <span className="min-w-0 truncate text-sm text-muted-foreground">
+          {blogPost.persona_name}
+        </span>
       </div>
+      <PostStatusBadges
+        publishedAt={blogPost.published_at}
+        isPublic={blogPost.is_public}
+        isPersonaPublic={blogPost.is_persona_public}
+      />
     </Link>
   )
 }

@@ -49,11 +49,15 @@ frontend/src/
 ├── components/
 │   ├── ui/                    # shadcn/ui, added with the CLI, never hand-created
 │   ├── form/                  # the form layer: useAppForm, field components
-│   └── layout/                # app shell and page layouts: AppLayout, PageWithSidebar
+│   ├── layout/                # app shell and page layouts: AppLayout, PageWithSidebar
+│   └── list-pager.tsx         # components more than one feature uses, like the list parts
 └── lib/
     ├── api-client.ts          # apiClient: the openapi-fetch instance
     ├── api-error.ts           # ApiError, createApiError, apiErrorMessage
     ├── api-schema.gen.ts      # generated from /openapi.json, never hand-edited
+    ├── format-date.ts         # formatDate, formatDateTime
+    ├── use-debounced-callback.ts
+    ├── use-list-search-params.ts
     └── utils.ts               # cn(), from shadcn
 ```
 
@@ -66,7 +70,8 @@ subfolders a feature uses.
 
 A React hook that only one feature uses and that makes no API call goes in its
 `hooks/`, like `generate-text/hooks/use-unsaved-run-guard.ts`. Hooks that call the API
-stay in `api/`.
+stay in `api/`. A hook with no API call that more than one feature uses goes in
+`lib/`, as `use-<name>.ts`.
 
 Plain functions and constants that only one feature uses (no React, no API call) go
 in a kebab-case `.ts` file at the feature root, named for what it holds:
@@ -82,7 +87,7 @@ instead of one domain importing another. What more than one feature needs moves 
 params. A route never calls `apiClient` and holds no business logic. It may call
 features' query hooks to pass one feature's data into another as props, or to choose
 which feature's component to render, which is how it composes them: `write-page.tsx`
-reads `usePersonaList()` and hands the personas to the generate form.
+reads `usePersonaOptions()` and hands the personas to the generate form.
 
 No barrel `index.ts` files. Import from the file that defines the thing.
 
@@ -172,6 +177,21 @@ createPersona.mutate(persona, {
   onError: (error) => toast.error(apiErrorMessage(error)),
 })
 ```
+
+### Paged lists
+
+A paged route is read through a page query. The pattern is
+`features/personas/api/user-persona-page-query.ts`.
+
+- The params are the route's query type from the generated schema
+  (`paths['/personas']['get']['parameters']['query']`), and the key is the resource path
+  then the params: `['personas', params]`. Invalidating the prefix covers every page.
+- `placeholderData: keepPreviousData`, so a page change keeps the old rows on screen.
+- The page, search and sort live in the URL as `page`, `q`, `sort` and `dir`, read and
+  written only by the route file through `useListSearchParams` from
+  `lib/use-list-search-params.ts`. A changed search, sort or filter returns to page 1.
+  The list component takes its rows and states as props.
+- A list someone manages has `ListSearchBox` and `ListPager` from `components/`.
 
 ### Toasts
 
@@ -283,7 +303,8 @@ A route that needs something from the layout says so in its `handle`, typed as
 A view that loads data has a loading, an empty and an error state, and a not-found
 state when it's read by identity. A button is disabled while its request runs. A
 destructive action confirms in an `AlertDialog` first; `delete-persona-button.tsx` is
-the pattern.
+the pattern. Build the states from `CardListSkeleton` and `QueryErrorState` in
+`components/`. A list with a search tells an empty search apart from having nothing.
 
 ## Accessibility
 

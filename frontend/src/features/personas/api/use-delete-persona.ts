@@ -20,7 +20,11 @@ export function useDeletePersona() {
     mutationFn: deletePersona,
     onSuccess: (_result, personaIdentity) => {
       queryClient.removeQueries({ queryKey: ['personas', personaIdentity] })
-      return queryClient.invalidateQueries({ queryKey: ['personas'], exact: true })
+      // A deleted persona's posts leave the post list
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['personas'] }),
+        queryClient.invalidateQueries({ queryKey: ['blog-posts'] }),
+      ])
     },
   })
 }

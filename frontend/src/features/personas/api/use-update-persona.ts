@@ -27,6 +27,11 @@ export function useUpdatePersona() {
 
   return useMutation({
     mutationFn: updatePersona,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['personas'] }),
+    // Posts carry the persona's name, avatar and visibility
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['personas'] }),
+        queryClient.invalidateQueries({ queryKey: ['blog-posts'] }),
+      ]),
   })
 }

@@ -4,11 +4,11 @@ import { Link } from 'react-router'
 
 import { PageWithSidebar } from '@/components/layout/page-with-sidebar'
 import { PersonaAvatar } from '@/components/persona-avatar'
+import { QueryErrorState } from '@/components/query-error-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { usePersona } from '@/features/personas/api/persona-query'
 import { DeletePersonaButton } from '@/features/personas/components/delete-persona-button'
-import { ApiError, apiErrorMessage } from '@/lib/api-error'
 
 type PersonaProfileProps = {
   personaIdentity: string
@@ -45,17 +45,12 @@ export function PersonaProfile({ personaIdentity, posts }: PersonaProfileProps) 
 
   // Not found or failed
   if (error) {
-    const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
-
     return (
-      <div className="mx-auto flex max-w-[720px] flex-col items-start gap-4">
-        <p className="text-muted-foreground">
-          {isNotFound ? 'Persona not found' : apiErrorMessage(error)}
-        </p>
-        <Button asChild variant="secondary">
-          <Link to="/personas">Back to personas</Link>
-        </Button>
-      </div>
+      <QueryErrorState
+        error={error}
+        notFoundMessage="Persona not found."
+        backTo={{ to: '/personas', label: 'Back to personas' }}
+      />
     )
   }
 
@@ -74,7 +69,7 @@ export function PersonaProfile({ personaIdentity, posts }: PersonaProfileProps) 
             </div>
           </div>
           <p className="whitespace-pre-wrap">{persona.bio}</p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="secondary">
               <Link to={`/personas/${persona.identity}/edit`}>
                 <Pencil aria-hidden />

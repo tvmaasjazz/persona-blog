@@ -41,7 +41,8 @@ The rules files say where each of these lives and how it is shaped.
 - **Form field components** in `src/components/form/`, registered in
   `use-app-form.ts`, when a form needs a kind of control the app doesn't have yet
   (`react-structure.md` › Forms)
-- **Shared helpers** in `src/lib/`, when more than one feature needs them, other than
+- **Shared helpers and hooks** in `src/lib/`, when more than one feature needs them
+  (`react-structure.md` › Features), other than
   the setup files listed below. `lib/api-error.ts` is one: extend it when a feature
   needs more from API errors
 - **shadcn components**, added with the CLI. Variant edits only, per

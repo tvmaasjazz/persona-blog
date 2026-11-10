@@ -1,13 +1,13 @@
 import { useSearchParams } from 'react-router'
 
 import { WriteBlogPost } from '@/features/generate-text/components/write-blog-post'
-import { usePersonaList } from '@/features/personas/api/persona-list-query'
+import { usePersonaOptions } from '@/features/personas/api/user-persona-page-query'
 import { apiErrorMessage } from '@/lib/api-error'
 
 export function WritePage() {
   // Load the personas to write as
   const [searchParams] = useSearchParams()
-  const { data, isPending, error } = usePersonaList()
+  const { data: personas, isPending, error } = usePersonaOptions()
 
   // Loading, error, or the write form
   return (
@@ -19,7 +19,7 @@ export function WritePage() {
         <p className="text-muted-foreground">{apiErrorMessage(error)}</p>
       ) : (
         <WriteBlogPost
-          personas={data.personas}
+          personas={personas}
           preselectedPersonaIdentity={searchParams.get('persona')}
           fromRunIdentity={searchParams.get('from_run')}
         />
