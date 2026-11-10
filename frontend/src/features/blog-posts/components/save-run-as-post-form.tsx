@@ -10,7 +10,7 @@ import {
   saveRunAsPostFormOptions,
   saveRunAsPostFormSchema,
 } from '@/features/blog-posts/save-run-as-post-form-schema'
-import { ApiError } from '@/lib/api-error'
+import { ApiError, isSessionEndedError } from '@/lib/api-error'
 
 type SaveRunAsPostFormProps = {
   runIdentity: string
@@ -46,6 +46,9 @@ export function SaveRunAsPostForm({
         onSaved?.()
         navigate(`/posts/${blogPostIdentity}`)
       } catch (error) {
+        if (isSessionEndedError(error)) {
+          return
+        }
         if (error instanceof ApiError && error.status === 409) {
           toast.error('This post is already saved.')
         } else {

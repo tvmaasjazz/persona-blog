@@ -2,6 +2,8 @@ import { createBrowserRouter } from 'react-router'
 
 import { AppLayout, type AppRouteHandle } from '@/components/layout/app-layout'
 import { RequireAuth } from '@/features/auth/components/require-auth'
+import { RequirePermission } from '@/features/auth/components/require-permission'
+import { AccountPage } from '@/routes/account-page'
 import { BlogPostPage } from '@/routes/blog-post-page'
 import { BlogPostsPage } from '@/routes/blog-posts-page'
 import { EditBlogPostPage } from '@/routes/edit-blog-post-page'
@@ -18,26 +20,43 @@ export const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       { path: '/', element: <HomePage /> },
+      // Moves out of the guard in the public-reading PR
       {
         element: <RequireAuth />,
         children: [
-          { path: '/personas', element: <PersonasPage /> },
-          { path: '/personas/new', element: <NewPersonaPage /> },
+          { path: '/account', element: <AccountPage /> },
+          {
+            element: <RequirePermission permission="PERSONA_WRITE" />,
+            children: [
+              { path: '/personas', element: <PersonasPage /> },
+              { path: '/personas/new', element: <NewPersonaPage /> },
+              { path: '/personas/:personaIdentity/edit', element: <EditPersonaPage /> },
+            ],
+          },
+          {
+            element: <RequirePermission permission="BLOG_POST_WRITE" />,
+            children: [
+              { path: '/posts', element: <BlogPostsPage /> },
+              { path: '/posts/:blogPostIdentity/edit', element: <EditBlogPostPage /> },
+            ],
+          },
+          {
+            element: <RequirePermission permission="GENERATE_TEXT_RUN_WRITE" />,
+            children: [
+              { path: '/write', element: <WritePage /> },
+              {
+                path: '/write/runs/:runIdentity',
+                element: <GenerateTextRunPage />,
+                handle: { hasSidebar: true } satisfies AppRouteHandle,
+              },
+            ],
+          },
           {
             path: '/personas/:personaIdentity',
             element: <PersonaPage />,
             handle: { hasSidebar: true } satisfies AppRouteHandle,
           },
-          { path: '/personas/:personaIdentity/edit', element: <EditPersonaPage /> },
-          { path: '/write', element: <WritePage /> },
-          {
-            path: '/write/runs/:runIdentity',
-            element: <GenerateTextRunPage />,
-            handle: { hasSidebar: true } satisfies AppRouteHandle,
-          },
-          { path: '/posts', element: <BlogPostsPage /> },
           { path: '/posts/:blogPostIdentity', element: <BlogPostPage /> },
-          { path: '/posts/:blogPostIdentity/edit', element: <EditBlogPostPage /> },
         ],
       },
     ],

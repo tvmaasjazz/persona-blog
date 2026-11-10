@@ -17,6 +17,11 @@ export function createApiError(error: unknown, response: Response): ApiError {
   return new ApiError(response.status, detail)
 }
 
+// True for a 401, which the API client has already announced with its signed-out toast.
+export function isSessionEndedError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401
+}
+
 export function apiErrorMessage(error: unknown): string {
   if (error instanceof ApiError && typeof error.detail === 'string') {
     return error.detail

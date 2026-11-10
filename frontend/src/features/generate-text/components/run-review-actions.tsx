@@ -4,7 +4,9 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useResumeGenerateText } from '@/features/generate-text/api/use-resume-generate-text'
 import { RequestChangesForm } from '@/features/generate-text/components/request-changes-form'
+import { resumeRunErrorMessage } from '@/features/generate-text/generate-text-error-messages'
 import { findReviewStepName } from '@/features/generate-text/run-steps'
+import { isSessionEndedError } from '@/lib/api-error'
 
 type RunReviewActionsProps = {
   runIdentity: string
@@ -29,8 +31,11 @@ export function RunReviewActions({ runIdentity, lastStep }: RunReviewActionsProp
         runIdentity,
         resume: { is_approved: isApproved, feedback_text: feedbackText },
       })
-    } catch {
-      toast.error("Couldn't continue the run. Try again.")
+    } catch (error) {
+      if (isSessionEndedError(error)) {
+        return
+      }
+      toast.error(resumeRunErrorMessage(error))
     }
   }
 

@@ -60,7 +60,8 @@ say where to look and add what a rule can't state.
 7. **Accessibility.** `react-structure.md` › Accessibility, on every control and
    heading the change adds.
 8. **Types.** `react-structure.md` › TypeScript and Talking to the API.
-9. **Trust.** `react-structure.md` › Trust. For each control the change hides or
+9. **Trust.** `react-structure.md` › Trust, and › Permissions and sessions: a check
+   reads a permission, never a role, and only where that section allows. For each control the change hides or
    disables, find where the page handles the API refusing the same action.
 10. **Words.** `react-structure.md` › Toasts, on everything the user reads.
 

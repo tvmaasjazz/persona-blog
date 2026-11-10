@@ -1,14 +1,19 @@
-import { LogOut } from 'lucide-react'
+import { LogOut, UserRound } from 'lucide-react'
+import { Link } from 'react-router'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useSignOut } from '@/features/auth/api/use-sign-out'
+import { hasPermission } from '@/features/auth/permissions'
 import type { components } from '@/lib/api-schema.gen'
+import { formatUsd } from '@/lib/format-usd'
 
 type UserResponseDto = components['schemas']['UserResponseDto']
 
@@ -33,6 +38,18 @@ export function UserMenu({ user }: UserMenuProps) {
         <span className="hidden truncate text-sm font-semibold md:inline">{label}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
+        {hasPermission(user, 'GENERATE_TEXT_RUN_WRITE') && (
+          <>
+            <DropdownMenuLabel>Balance {formatUsd(user.credit_balance_usd)}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <DropdownMenuItem asChild>
+          <Link to="/account">
+            <UserRound aria-hidden />
+            Account
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem disabled={signOut.isPending} onSelect={() => signOut.mutate()}>
           <LogOut aria-hidden />
           Sign out

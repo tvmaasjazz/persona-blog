@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { useDeleteBlogPost } from '@/features/blog-posts/api/use-delete-blog-post'
-import { apiErrorMessage } from '@/lib/api-error'
+import { apiErrorMessage, isSessionEndedError } from '@/lib/api-error'
 
 type DeleteBlogPostButtonProps = {
   blogPostIdentity: string
@@ -57,7 +57,11 @@ export function DeleteBlogPostButton({
                   toast.success('Post deleted')
                   navigate('/posts')
                 },
-                onError: (error) => toast.error(apiErrorMessage(error)),
+                onError: (error) => {
+                  if (!isSessionEndedError(error)) {
+                    toast.error(apiErrorMessage(error))
+                  }
+                },
               })
             }}
           >

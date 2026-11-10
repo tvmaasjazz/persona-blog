@@ -6,7 +6,7 @@ import { useAppForm } from '@/components/form/use-app-form'
 import { useCreatePersona } from '@/features/personas/api/use-create-persona'
 import { PersonaForm } from '@/features/personas/components/persona-form'
 import { personaFormOptions, personaFormSchema } from '@/features/personas/persona-form-schema'
-import { ApiError, apiErrorMessage } from '@/lib/api-error'
+import { ApiError, apiErrorMessage, isSessionEndedError } from '@/lib/api-error'
 
 export function CreatePersonaForm() {
   // Empty form
@@ -22,6 +22,9 @@ export function CreatePersonaForm() {
         toast.success('Persona created')
         navigate(`/personas/${personaIdentity}`)
       } catch (error) {
+        if (isSessionEndedError(error)) {
+          return
+        }
         if (error instanceof ApiError && error.status === 409) {
           setFieldServerError(formApi, 'name', apiErrorMessage(error))
         } else {

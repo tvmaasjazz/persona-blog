@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { useDeletePersona } from '@/features/personas/api/use-delete-persona'
-import { apiErrorMessage } from '@/lib/api-error'
+import { apiErrorMessage, isSessionEndedError } from '@/lib/api-error'
 
 type DeletePersonaButtonProps = {
   personaIdentity: string
@@ -54,7 +54,11 @@ export function DeletePersonaButton({ personaIdentity, personaName }: DeletePers
                   toast.success('Persona deleted')
                   navigate('/personas')
                 },
-                onError: (error) => toast.error(apiErrorMessage(error)),
+                onError: (error) => {
+                  if (!isSessionEndedError(error)) {
+                    toast.error(apiErrorMessage(error))
+                  }
+                },
               })
             }}
           >

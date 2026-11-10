@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { PageWithSidebar } from '@/components/layout/page-with-sidebar'
 import { MarkdownContent } from '@/components/markdown-content'
 import { Button } from '@/components/ui/button'
+import { useRunBalanceRefresh } from '@/features/generate-text/api/use-run-balance-refresh'
 import { DiscardRunButton } from '@/features/generate-text/components/discard-run-button'
 import { LeaveUnsavedRunDialog } from '@/features/generate-text/components/leave-unsaved-run-dialog'
 import { RunInputsSummary } from '@/features/generate-text/components/run-inputs-summary'
@@ -127,9 +128,10 @@ export function GenerateTextRunView({
   personaName,
   renderCompletedActions,
 }: GenerateTextRunViewProps) {
-  // Notices and leave guard
+  // Notices, balance refresh and leave guard
   const navigate = useNavigate()
   useRunReadyNotice(run)
+  useRunBalanceRefresh(run.status)
   const { blocker, allowLeave } = useUnsavedRunGuard(run.status === 'COMPLETED')
 
   // Leave without the prompt after discarding
