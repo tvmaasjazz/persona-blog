@@ -29,7 +29,7 @@ types in `src/lib/api-schema.gen.ts`; never guess a request or response shape.
 The rules files say where each of these lives and how it is shaped.
 
 - **Feature code**: query options and hooks, mutation hooks, feature components,
-  feature-only hooks, form schemas (`<entity>-form-schema.ts`) and plain feature
+  feature-only hooks, form schemas (`react-structure.md` › Forms) and plain feature
   helpers at the feature root, under `src/features/<feature>/` (`react-structure.md` ›
   Features, › Forms)
 - **Pages** in `src/routes/`, and their entries in `src/app/router.tsx`. In the
@@ -47,9 +47,8 @@ The rules files say where each of these lives and how it is shaped.
   (`react-structure.md` › Features), except the setup files listed below.
   `lib/api-error.ts` is one to extend when a feature needs more from API errors
 - **shadcn components**, added with the CLI. Variant edits only, per
-  `react-styling.md` › Components. Never re-add `button.tsx`, `input.tsx`,
-  `select.tsx`, `alert-dialog.tsx`, `dialog.tsx`, or `sonner.tsx`: the CLI would overwrite their
-  deliberate edits
+  `react-styling.md` › Components. Never re-add a file that section says is edited:
+  the CLI would overwrite the edit
 
 ## What you don't write
 
