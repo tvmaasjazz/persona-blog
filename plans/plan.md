@@ -457,6 +457,8 @@ Each keeps its path, permission and list key, and adds `pagination`:
 
 ### 11. Frontend
 
+Built to `plans/frontend-plan.md`, which splits it into PRs.
+
 Everything the backend-only PRs added, before the deploy:
 
 - **Roles:** a reader sees no create, edit or generate actions, and a 403 shows a
