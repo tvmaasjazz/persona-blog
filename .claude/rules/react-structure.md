@@ -155,6 +155,10 @@ export function useCurrentUser() {
 - Query keys start with the backend resource path, split on `/`: `GET /users/me` is
   `['users', 'me']`, `GET /blog-posts/{identity}` is
   `['blog-posts', blogPostIdentity]`.
+- A view page reads the `/public` route and an edit page the owner's. Their keys differ
+  in the last part: `['blog-posts', blogPostIdentity]` and
+  `['blog-posts', blogPostIdentity, 'public']`; the public page is
+  `['blog-posts', 'public', params]`. Invalidating `['blog-posts']` covers all three.
 - A failed request throws `createApiError(error, response)` from `lib/api-error.ts`:
   an `ApiError` carrying the HTTP `status` and the body's `detail`, so a caller can
   tell a 409 from anything else. The one exception is the 401 below.
@@ -201,6 +205,11 @@ A paged route is read through a page query. The pattern is
   `lib/use-list-search-params.ts`. A changed search, sort or filter returns to page 1.
   The list component takes its rows and states as props.
 - A list someone manages has `ListSearchBox` and `ListPager` from `components/`.
+- A list a reader scrolls is infinite: `useInfiniteQuery` over the same paged route,
+  its pages flattened and de-duplicated by `identity`, with `InfiniteScrollSentinel`
+  from `components/` at the end. Its key ends in `'infinite'`, so it never shares one
+  with a `useQuery` over the same route. The pattern is
+  `features/blog-posts/api/public-blog-post-page-infinite-query.ts`.
 
 ### Toasts
 

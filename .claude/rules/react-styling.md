@@ -60,8 +60,8 @@ only 4:1 against the background, which fails WCAG AA for body text.
 | UI text                    | `font-sans`, the default                             |
 | Post body text             | `font-serif`                                         |
 
-`font-serif` is Spectral with a Georgia fallback. Spectral isn't loaded yet. Loading
-it (a Google Fonts link or a `@fontsource` package) is decided when post pages land.
+`font-serif` is Spectral with a Georgia fallback. Spectral isn't loaded; post text
+falls back to Georgia.
 
 ## Layout
 
