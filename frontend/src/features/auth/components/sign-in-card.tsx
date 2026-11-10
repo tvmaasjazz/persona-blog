@@ -1,6 +1,6 @@
 import { Sparkles } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
+import { GoogleSignInButton } from '@/components/google-sign-in-button'
 
 export function SignInCard() {
   return (
@@ -10,9 +10,7 @@ export function SignInCard() {
       <p className="text-sm text-muted-foreground">
         Sign in to start generating personas and their posts.
       </p>
-      <Button asChild className="w-full">
-        <a href="/api/auth/google/login">Continue with Google</a>
-      </Button>
+      <GoogleSignInButton />
     </div>
   )
 }

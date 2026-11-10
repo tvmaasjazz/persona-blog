@@ -10,9 +10,11 @@ import { EditBlogPostPage } from '@/routes/edit-blog-post-page'
 import { EditPersonaPage } from '@/routes/edit-persona-page'
 import { GenerateTextRunPage } from '@/routes/generate-text-run-page'
 import { HomePage } from '@/routes/home-page'
+import { InvitePage } from '@/routes/invite-page'
 import { NewPersonaPage } from '@/routes/new-persona-page'
 import { PersonaPage } from '@/routes/persona-page'
 import { PersonasPage } from '@/routes/personas-page'
+import { SignInPage } from '@/routes/sign-in-page'
 import { WritePage } from '@/routes/write-page'
 
 export const router = createBrowserRouter([
@@ -20,6 +22,16 @@ export const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       { path: '/', element: <HomePage /> },
+      {
+        path: '/sign-in',
+        element: <SignInPage />,
+        handle: { isSignInCardHidden: true } satisfies AppRouteHandle,
+      },
+      {
+        path: '/invite/:inviteCode',
+        element: <InvitePage />,
+        handle: { isSignInCardHidden: true } satisfies AppRouteHandle,
+      },
       // Moves out of the guard in the public-reading PR
       {
         element: <RequireAuth />,
