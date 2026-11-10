@@ -5,6 +5,7 @@ import { useCurrentUser } from '@/features/auth/api/current-user-query'
 import { hasPermission } from '@/features/auth/permissions'
 import { usePublicBlogPost } from '@/features/blog-posts/api/public-blog-post-query'
 import { BlogPostView } from '@/features/blog-posts/components/blog-post-view'
+import { ReadProgressTracker } from '@/features/content-items/components/read-progress-tracker'
 
 export function BlogPostPage() {
   const { blogPostIdentity = '' } = useParams()
@@ -34,5 +35,16 @@ export function BlogPostPage() {
   // Edit and Delete are for the owner who may write posts
   const canEdit = blogPost.is_owner && hasPermission(user, 'BLOG_POST_WRITE')
 
-  return <BlogPostView blogPost={blogPost} canEdit={canEdit} />
+  const blogPostView = <BlogPostView blogPost={blogPost} canEdit={canEdit} />
+
+  // An owner's own reads aren't views
+  if (blogPost.is_owner) {
+    return blogPostView
+  }
+
+  return (
+    <ReadProgressTracker contentItemIdentity={blogPost.content_item_identity}>
+      {blogPostView}
+    </ReadProgressTracker>
+  )
 }
