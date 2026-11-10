@@ -20,7 +20,7 @@ export function resumeRunErrorMessage(error: unknown): string {
     return INSUFFICIENT_CREDITS_MESSAGE
   }
   if (error instanceof ApiError && error.status === 409) {
-    return 'This run has changed since you opened it, or you already have the most posts being written at once. Reload the page to see where it stands.'
+    return "This run can't continue right now. It may have changed (see it below), or another post is still being written; wait for it to finish."
   }
   return "Couldn't continue the run. Try again."
 }

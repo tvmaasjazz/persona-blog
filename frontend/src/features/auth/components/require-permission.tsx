@@ -29,7 +29,7 @@ export function RequirePermission({
 
   if (!hasPermission(user, permission)) {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="mx-auto flex max-w-[720px] flex-col gap-2">
         <h1 className="text-xl font-extrabold">No access</h1>
         <p className="text-muted-foreground">{message}</p>
       </div>

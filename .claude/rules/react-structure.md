@@ -55,7 +55,7 @@ frontend/src/
 │   └── list-pager.tsx         # components more than one feature uses, like the list parts
 └── lib/
     ├── api-client.ts          # apiClient: the openapi-fetch instance
-    ├── api-error.ts           # ApiError, createApiError, apiErrorMessage
+    ├── api-error.ts           # ApiError, createApiError, apiErrorMessage, isSessionEndedError
     ├── api-schema.gen.ts      # generated from /openapi.json, never hand-edited
     ├── format-date.ts         # formatDate, formatDateTime
     ├── use-debounced-callback.ts
@@ -210,8 +210,8 @@ to show. It uses `sonner`, through `toast` imported from `'sonner'`. The one
   `apiErrorMessage(error)` from `lib/api-error.ts`. The exception is generating
   text: a failed generate or resume call shows a fixed message from
   `generate-text/generate-text-error-messages.ts`, because its detail can carry
-  provider internals. A 402 (the balance) and a 409 on start (the active-run limit) get
-  their own fixed messages there.
+  provider internals. A 402 (the balance) and a 409 on start or resume get their
+  own fixed messages there.
 - **Queries don't toast.** A failed query renders an error state where its data
   would be. The one exception is the signed-out toast (› Permissions and sessions).
 - **No toast for what is already on screen**, such as a dialog that closes or a list
@@ -293,8 +293,8 @@ The route tree lives in `app/router.tsx`. Paths are kebab-case (`/blog-posts`), 
 the backend's. A section that needs sign-in is a layout route wrapped in
 `<RequireAuth>`, which renders the child route, redirects when signed out, and shows
 a loading state while the current user loads. A route that needs a permission is
-wrapped in `<RequirePermission>` too (› Permissions and sessions). Pages don't check auth
-themselves.
+wrapped in `<RequirePermission>` too (› Permissions and sessions). Pages don't check
+auth themselves.
 
 `AppLayout` renders `<ScrollRestoration />`, so every navigation opens at the top. A
 page that changes in place scrolls to the top itself: the run page when its polled
@@ -317,8 +317,8 @@ the pattern. Build the states from `CardListSkeleton` and `QueryErrorState` in
 ## Accessibility
 
 A link navigates and a button acts. No interactive element sits inside another. Every
-control has a label (an icon-only button: `react-styling.md` › Icons). Headings descend in
-order. A sortable column says its sort with `aria-sort`. Colour is never the only
+control has a label (an icon-only button: `react-styling.md` › Icons). Headings descend
+in order. A sortable column says its sort with `aria-sort`. Colour is never the only
 signal.
 
 ## Trust
@@ -339,11 +339,12 @@ missing. A feature other than `auth` never reads the current user; it may invali
 `['users', 'me']` by key (› Mutations).
 
 When the server deletes a session, the API's 401 clears its cookie. On a 401 from any
-path but `/users/me`, `lib/api-client.ts` sets `['users', 'me']` to `null` and, if a
-user was signed in, toasts "You were signed out. Sign in again." once. `app/query-client.ts`
-retries a query once after a 401, so an open route succeeds signed out and a guarded one
-redirects. A mutation's caller skips its own failure toast for a 401
-(`isSessionEndedError(error)` from `lib/api-error.ts`), since that toast has said it.
+path but `/users/me` and `/auth/logout`, `lib/api-client.ts` sets `['users', 'me']` to
+`null` and, if a user was signed in, toasts "You were signed out. Sign in again." once.
+`app/query-client.ts` retries a query once after a 401, so an open route succeeds
+signed out and a guarded one redirects. A mutation's caller skips its own failure toast
+for a 401 (`isSessionEndedError(error)` from `lib/api-error.ts`), since that toast has
+said it.
 
 ## Naming
 
