@@ -53,8 +53,10 @@ frontend/src/
 │   ├── form/                  # the form layer: useAppForm, field components
 │   ├── layout/                # app shell and page layouts: AppLayout, PageWithSidebar
 │   ├── confirm-action-button.tsx  # ConfirmActionButton
+│   ├── confirm-dialog.tsx     # ConfirmDialog
 │   ├── data-table.tsx         # DataTable
 │   ├── google-sign-in-button.tsx  # GoogleSignInButton
+│   ├── infinite-scroll-sentinel.tsx  # InfiniteScrollSentinel
 │   └── list-pager.tsx         # components more than one feature uses, like the list parts
 └── lib/
     ├── api-client.ts          # apiClient: the openapi-fetch instance
@@ -63,6 +65,7 @@ frontend/src/
     ├── format-date.ts         # formatDate, formatDateTime
     ├── use-debounced-callback.ts
     ├── use-list-search-params.ts
+    ├── use-scrolled-into-view.ts
     └── utils.ts               # cn(), from shadcn
 ```
 
@@ -155,6 +158,11 @@ export function useCurrentUser() {
 - Query keys start with the backend resource path, split on `/`: `GET /users/me` is
   `['users', 'me']`, `GET /blog-posts/{identity}` is
   `['blog-posts', blogPostIdentity]`.
+- A view page reads the `/public` route and an edit page the owner's. The public key
+  puts `'public'` last for one row (`['blog-posts', blogPostIdentity, 'public']`,
+  `['personas', personaIdentity, 'public']`) and second for a page
+  (`['blog-posts', 'public', params]`, with `'infinite'` last when infinite).
+  Invalidating the resource (`['blog-posts']`) covers all of them.
 - A failed request throws `createApiError(error, response)` from `lib/api-error.ts`:
   an `ApiError` carrying the HTTP `status` and the body's `detail`, so a caller can
   tell a 409 from anything else. The one exception is the 401 below.
@@ -201,6 +209,11 @@ A paged route is read through a page query. The pattern is
   `lib/use-list-search-params.ts`. A changed search, sort or filter returns to page 1.
   The list component takes its rows and states as props.
 - A list someone manages has `ListSearchBox` and `ListPager` from `components/`.
+- A list a reader scrolls is infinite: `useInfiniteQuery` over the same paged route,
+  its pages flattened and de-duplicated by `identity`, with `InfiniteScrollSentinel`
+  from `components/` at the end. Its key ends in `'infinite'`, so it never shares one
+  with a `useQuery` over the same route. The pattern is
+  `features/blog-posts/api/public-blog-post-page-infinite-query.ts`.
 
 ### Toasts
 
@@ -323,8 +336,12 @@ A route that needs something from the layout says so in its `handle`, typed as
 A view that loads data has a loading, an empty and an error state, and a not-found
 state when it's read by identity. A button is disabled while its request runs. A
 destructive or far-reaching action confirms first through `ConfirmActionButton`
-(`components/`); its caller closes the dialog on success, so a failure leaves it open. Build the states from `CardListSkeleton` and `QueryErrorState` in
-`components/`; a table uses `DataTable`, which has them built in. A list with a search tells an empty search apart from having nothing.
+(`components/`); its caller closes the dialog on success, so a failure leaves it open.
+A confirm opened from state rather than its own button, such as a form's submit, uses
+`ConfirmDialog` (`components/`), which `ConfirmActionButton` is built on.
+Build the states from `CardListSkeleton` and `QueryErrorState` in `components/`; a
+table uses `DataTable`, which has them built in. A list with a search tells an empty
+search apart from having nothing.
 
 ## Accessibility
 
@@ -351,8 +368,12 @@ missing. A feature other than `auth` never reads the current user; it may invali
 `['users', 'me']` by key (› Mutations).
 
 When the server deletes a session, the API's 401 clears its cookie. On a 401 from any
-path but `/users/me` and `/auth/logout`, `lib/api-client.ts` sets `['users', 'me']` to
-`null` and, if a user was signed in, toasts "You were signed out. Sign in again." once.
+path but `/users/me` and `/auth/logout`, `lib/api-client.ts` checks a user was signed
+in, then sets `['users', 'me']` to `null`, resets every other query, and toasts "You
+were signed out. Sign in again."; the check makes it happen once. Signing out resets
+every query but `['users', 'me']` too (`lib/reset-queries-except-current-user.ts`): an
+open route's answer depends on who asked (`is_owner`, an owner's private record), and
+its key doesn't say who.
 `app/query-client.ts` retries a query once after a 401, so an open route succeeds
 signed out and a guarded one redirects. A mutation's caller skips its own failure toast
 for a 401 (`isSessionEndedError(error)` from `lib/api-error.ts`), since that toast has

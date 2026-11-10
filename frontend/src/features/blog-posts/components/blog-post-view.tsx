@@ -3,68 +3,69 @@ import { Link } from 'react-router'
 
 import { MarkdownContent } from '@/components/markdown-content'
 import { PersonaAvatar } from '@/components/persona-avatar'
-import { QueryErrorState } from '@/components/query-error-state'
 import { Button } from '@/components/ui/button'
-import { useBlogPost } from '@/features/blog-posts/api/blog-post-query'
 import { DeleteBlogPostButton } from '@/features/blog-posts/components/delete-blog-post-button'
 import { PostStatusBadges } from '@/features/blog-posts/components/post-status-badges'
+import type { components } from '@/lib/api-schema.gen'
+import { formatDate } from '@/lib/format-date'
 
 type BlogPostViewProps = {
-  blogPostIdentity: string
+  blogPost: components['schemas']['PublicBlogPostResponseDto']
+  canEdit: boolean
 }
 
-export function BlogPostView({ blogPostIdentity }: BlogPostViewProps) {
-  // Load the post
-  const { data: blogPost, isPending, error } = useBlogPost(blogPostIdentity)
-
-  if (isPending) {
-    return <div className="h-40 rounded-2xl bg-accent" />
-  }
-
-  if (error) {
-    return (
-      <QueryErrorState
-        error={error}
-        notFoundMessage="Post not found."
-        backTo={{ to: '/posts', label: 'Back to posts' }}
-      />
-    )
-  }
-
-  // Header with author and actions, then the body
+export function BlogPostView({ blogPost, canEdit }: BlogPostViewProps) {
+  // Title, subtitle, author and date, then the body
   return (
     <article className="flex flex-col gap-8">
       <header className="flex flex-col gap-4">
         <h1 className="text-xl font-extrabold break-words">{blogPost.title}</h1>
-        {blogPost.subtitle && <p className="text-muted-foreground italic">{blogPost.subtitle}</p>}
-        <div className="flex items-center gap-2">
+        {blogPost.subtitle && (
+          <p className="break-words text-muted-foreground italic">{blogPost.subtitle}</p>
+        )}
+        <div className="flex items-center gap-3">
           <PersonaAvatar name={blogPost.persona_name} avatarUrl={blogPost.persona_avatar_url} />
-          <Link
-            to={`/personas/${blogPost.persona_identity}`}
-            className="font-semibold text-primary-text"
-          >
-            {blogPost.persona_name}
-          </Link>
-        </div>
-        <PostStatusBadges
-          publishedAt={blogPost.published_at}
-          isPublic={blogPost.is_public}
-          isPersonaPublic={blogPost.is_persona_public}
-        />
-        <div className="flex items-center gap-2">
-          <Button asChild variant="secondary">
-            <Link to={`/posts/${blogPost.identity}/edit`}>
-              <Pencil aria-hidden />
-              Edit
+          <div className="flex min-w-0 flex-col">
+            <Link
+              to={`/personas/${blogPost.persona_identity}`}
+              className="font-semibold break-words text-primary-text"
+            >
+              {blogPost.persona_name}
             </Link>
-          </Button>
-          <DeleteBlogPostButton
-            blogPostIdentity={blogPost.identity}
-            blogPostTitle={blogPost.title}
-          />
+            {/* The owner's badges show the date, which may be a scheduled one */}
+            {!blogPost.is_owner && blogPost.published_at && (
+              <time dateTime={blogPost.published_at} className="text-sm text-muted-foreground">
+                {formatDate(blogPost.published_at)}
+              </time>
+            )}
+          </div>
         </div>
+        {/* The owner's badges show the date and visibility */}
+        {blogPost.is_owner && (
+          <PostStatusBadges
+            publishedAt={blogPost.published_at}
+            isPublic={blogPost.is_public}
+            isPersonaPublic={blogPost.is_persona_public}
+          />
+        )}
+        {canEdit && (
+          <div className="flex items-center gap-2">
+            <Button asChild variant="secondary">
+              <Link to={`/posts/${blogPost.identity}/edit`}>
+                <Pencil aria-hidden />
+                Edit
+              </Link>
+            </Button>
+            <DeleteBlogPostButton
+              blogPostIdentity={blogPost.identity}
+              blogPostTitle={blogPost.title}
+            />
+          </div>
+        )}
       </header>
-      <MarkdownContent markdown={blogPost.body} />
+      <div className="font-serif">
+        <MarkdownContent markdown={blogPost.body} />
+      </div>
     </article>
   )
 }

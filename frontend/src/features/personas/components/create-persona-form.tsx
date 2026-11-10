@@ -35,6 +35,11 @@ export function CreatePersonaForm() {
   })
 
   return (
-    <PersonaForm form={form} submitLabel="Create persona" onCancel={() => navigate('/personas')} />
+    <PersonaForm
+      form={form}
+      submitLabel="Create persona"
+      submitButtonRef={undefined}
+      onCancel={() => navigate('/personas')}
+    />
   )
 }

@@ -21,7 +21,7 @@ export const PublishingFields = withFieldGroup({
               label="Public"
               description={
                 isPersonaPublic
-                  ? 'Other signed-in people can read a public post once it is published.'
+                  ? 'Anyone can read a public post once it is published.'
                   : 'This persona is private, so its posts stay private. Make the persona public to share them.'
               }
               isDisabled={!isPersonaPublic}

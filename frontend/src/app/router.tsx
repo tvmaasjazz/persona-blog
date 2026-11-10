@@ -35,7 +35,8 @@ export const router = createBrowserRouter([
         element: <InvitePage />,
         handle: { isSignInCardHidden: true } satisfies AppRouteHandle,
       },
-      // Moves out of the guard in the public-reading PR
+      { path: '/personas/:personaIdentity', element: <PersonaPage /> },
+      { path: '/posts/:blogPostIdentity', element: <BlogPostPage /> },
       {
         element: <RequireAuth />,
         children: [
@@ -95,12 +96,6 @@ export const router = createBrowserRouter([
               },
             ],
           },
-          {
-            path: '/personas/:personaIdentity',
-            element: <PersonaPage />,
-            handle: { hasSidebar: true } satisfies AppRouteHandle,
-          },
-          { path: '/posts/:blogPostIdentity', element: <BlogPostPage /> },
         ],
       },
     ],
