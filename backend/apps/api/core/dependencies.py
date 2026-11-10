@@ -25,8 +25,8 @@ def get_app_settings(request: Request) -> AppSettings:
 
 
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:
-    """Yields the request's session in a transaction that commits after the route returns,
-    or rolls back if it raises."""
+    """Yields the request's session in a transaction that commits when the route returns,
+    before the response is sent, or rolls back if it raises."""
     db_session_factory = request.app.state.db_session_factory
     async with db_session_factory() as db_session, db_session.begin():
         yield db_session
@@ -107,7 +107,8 @@ LlmServiceDep = Annotated[LlmService, Depends(get_llm_service)]
 AppSettingsDep = Annotated[AppSettings, Depends(get_app_settings)]
 AuthUserDep = Annotated[AuthUser, Depends(get_auth_user)]
 OptionalAuthUserDep = Annotated[AuthUser | None, Depends(get_optional_auth_user)]
-DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
+# Function scope makes the commit land before the response and its after-response tasks
+DbSessionDep = Annotated[AsyncSession, Depends(get_db_session, scope="function")]
 
 
 def get_client_ip(request: Request) -> str:
