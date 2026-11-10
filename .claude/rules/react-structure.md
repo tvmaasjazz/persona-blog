@@ -77,10 +77,9 @@ stay in `api/`. A hook with no API call that more than one feature uses goes in
 `lib/`, as `use-<name>.ts`.
 
 Plain functions and constants that only one feature uses (no React, no API call) go
-in a kebab-case `.ts` file at the feature root, named for what it holds:
-`generate-text/run-steps.ts` holds the step names and the text built from a run. One
-used by more than one feature moves to `lib/`, messages included (the pattern is
-`lib/invite-messages.ts`).
+in a kebab-case `.ts` file at the feature root, named for what it holds, like
+`generate-text/run-steps.ts`. One used by more than one feature moves to `lib/`,
+messages included (the pattern is `lib/invite-messages.ts`).
 
 A feature never imports from another feature. When a page needs two features, the
 route file in `routes/` composes them, the way a backend lib composes two services
@@ -91,10 +90,9 @@ for the one QueryClient in `app/query-client.ts`.
 `routes/` files are thin: they lay out feature components and read route and search
 params. A route never calls `apiClient` and holds no business logic. It may call
 features' query hooks to pass one feature's data into another as props, or to choose
-which feature's component to render, which is how it composes them: `write-page.tsx`
-reads `usePersonaOptions()` and hands the personas to the generate form. A query lives
-in the feature that owns its resource, whoever shows it: a persona's public post count
-is in `blog-posts`, and the edit-persona route passes it to the persona form.
+which feature's component to render, which is how it composes them; the pattern is
+`routes/write-page.tsx`. A query lives in the feature that owns its resource, whoever
+shows it, and the route passes its value to another feature's component.
 
 No barrel `index.ts` files. Import from the file that defines the thing.
 
@@ -307,8 +305,9 @@ Validation:
 Fields reused across forms are a field group: `withFieldGroup` from `use-app-form.ts`,
 defined in the feature's `components/` with its `defaultValues`. A parent form nests
 the values under a key and passes it as `fields`, so the same fields serve more than
-one form. The group's Zod schema is exported from its own `<group>-form-schema.ts` at
-the feature root and nested into each parent's schema. The pattern is
+one form. The group's Zod schema is exported from its own `<name>-form-schema.ts` at
+the feature root, named for the group (`publishing-form-schema.ts`), and nested into
+each parent's schema. The pattern is
 `features/blog-posts/components/publishing-fields.tsx`.
 
 A new kind of control, such as a select or date picker, is a new field component in
