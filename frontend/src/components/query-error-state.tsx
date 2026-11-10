@@ -8,9 +8,11 @@ type QueryErrorStateProps = {
   // Given, a 404 or 422 reads as not found
   notFoundMessage?: string
   backTo?: { to: string; label: string }
+  // Given when the error replaces the whole page, as its h1
+  heading?: string
 }
 
-export function QueryErrorState({ error, notFoundMessage, backTo }: QueryErrorStateProps) {
+export function QueryErrorState({ error, notFoundMessage, backTo, heading }: QueryErrorStateProps) {
   // A bad identity is a 422, which reads the same as a missing one
   const isNotFound =
     notFoundMessage !== undefined &&
@@ -27,6 +29,7 @@ export function QueryErrorState({ error, notFoundMessage, backTo }: QueryErrorSt
 
   return (
     <div className="mx-auto flex max-w-[720px] flex-col items-start gap-4">
+      {heading && <h1 className="text-xl font-extrabold">{heading}</h1>}
       <p className="text-muted-foreground">{message}</p>
       {backTo && (
         <Button asChild variant="secondary">

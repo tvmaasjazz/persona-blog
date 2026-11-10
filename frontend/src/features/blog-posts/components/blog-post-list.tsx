@@ -15,9 +15,9 @@ type BlogPostListProps = {
   error: Error | null
   // A search or filter is narrowing the list
   isNarrowed: boolean
-  // Together these catch a page past the last one; a list fixed to page 1 omits them
-  pagination?: PaginationResponseDto
-  onPageChange?: (page: number) => void
+  // Together these catch a page past the last one
+  pagination: PaginationResponseDto | undefined
+  onPageChange: (page: number) => void
   // Titles and status only, for a sidebar
   isCompact?: boolean
   emptyState: ReactNode
@@ -39,7 +39,7 @@ export function BlogPostList({
 
   if (blogPosts.length === 0) {
     // Past the last page, such as after a delete or a stale link
-    if (pagination && pagination.total > 0 && onPageChange) {
+    if (pagination && pagination.total > 0) {
       return <PastLastPageNotice onFirstPage={() => onPageChange(1)} />
     }
 

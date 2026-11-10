@@ -50,6 +50,7 @@ export function AdminUserPage() {
         error={adminUser.error}
         notFoundMessage="User not found."
         backTo={{ to: '/admin/users', label: 'Back to users' }}
+        heading="User"
       />
     )
   }

@@ -28,7 +28,12 @@ function LoadedPersonaPage({ personaIdentity }: LoadedPersonaPageProps) {
   const { data: currentUser } = useCurrentUser()
 
   if (isPending) {
-    return <div className="h-40 rounded-2xl bg-accent" aria-hidden />
+    return (
+      <>
+        <h1 className="sr-only">Loading persona</h1>
+        <div className="h-40 rounded-2xl bg-accent" aria-hidden />
+      </>
+    )
   }
 
   // Not found, or someone else's private persona
@@ -38,6 +43,7 @@ function LoadedPersonaPage({ personaIdentity }: LoadedPersonaPageProps) {
         error={error}
         notFoundMessage="Persona not found."
         backTo={{ to: '/', label: 'Go home' }}
+        heading="Persona"
       />
     )
   }

@@ -222,8 +222,8 @@ A paged route is read through a page query. The pattern is
   route file renders `ListPager` under the list; the list component takes its rows and
   states as props.
 - A page past the last shows `PastLastPageNotice` from `components/`, which offers page
-  1. The list component takes `pagination` and `onPageChange` for it, as `DataTable`
-  does.
+  1, and `ListPager` renders nothing. The list component takes `pagination` and
+  `onPageChange` for it, as `DataTable` does.
 - A list a reader scrolls is infinite: `useInfiniteQuery` over the same paged route,
   its pages flattened and de-duplicated by `identity`, with `InfiniteScrollSentinel`
   from `components/` at the end. Its key ends in `'infinite'`, so it never shares one
@@ -358,8 +358,11 @@ search apart from having nothing.
 
 A link navigates and a button acts. No interactive element sits inside another. Every
 control has a label (an icon-only button: `react-styling.md` › Icons). Headings descend
-in order, and every state of a page, loading included, has its `h1`. A sortable column
-says its sort with `aria-sort`. A label hidden at a breakpoint stays in the accessible
+in order, and every state of a page, loading included, has its `h1`. A loading state
+whose title isn't known yet has an `sr-only` one saying what loads ("Loading post", or
+"Loading" in a route guard). An error that replaces the page passes `QueryErrorState`
+the page's name as `heading`, a generic noun for a page titled by its data ("Post").
+A sortable column says its sort with `aria-sort`. A label hidden at a breakpoint stays in the accessible
 name with `sr-only <bp>:not-sr-only`, not an `aria-label`. Colour is never the only
 signal.
 

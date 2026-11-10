@@ -29,7 +29,12 @@ function LoadedRun({ runIdentity }: LoadedRunProps) {
   const { data: run, isPending, error } = useGenerateTextRun(runIdentity)
 
   if (isPending) {
-    return <div className="mx-auto h-40 max-w-[720px] rounded-2xl bg-accent" />
+    return (
+      <>
+        <h1 className="sr-only">Loading run</h1>
+        <div className="mx-auto h-40 max-w-[720px] rounded-2xl bg-accent" aria-hidden />
+      </>
+    )
   }
 
   if (error) {
@@ -37,6 +42,7 @@ function LoadedRun({ runIdentity }: LoadedRunProps) {
       <QueryErrorState
         error={error}
         notFoundMessage="Run not found."
+        heading="Writing a post"
         backTo={{ to: '/write', label: 'Back to writing' }}
       />
     )

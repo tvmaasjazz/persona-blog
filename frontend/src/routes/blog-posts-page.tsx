@@ -7,22 +7,13 @@ import { useUserBlogPostPage } from '@/features/blog-posts/api/user-blog-post-pa
 import { BlogPostList } from '@/features/blog-posts/components/blog-post-list'
 import { PersonaFilter } from '@/features/blog-posts/components/persona-filter'
 import { usePersonaOptions } from '@/features/personas/api/user-persona-page-query'
-import type { components } from '@/lib/api-schema.gen'
 import { useListSearchParams } from '@/lib/use-list-search-params'
 
-const SORT_VALUES = [
-  'CREATED_AT',
-] as const satisfies readonly components['schemas']['UserBlogPostSortType'][]
 const PAGE_SIZE = 20
 
 export function BlogPostsPage() {
-  // The page, search, sort and persona filter live in the URL
-  const { page, search, sortBy, sortDirection, setPage, setSearch, setFilter } =
-    useListSearchParams({
-      sortValues: SORT_VALUES,
-      defaultSort: 'CREATED_AT',
-      defaultDirection: 'DESC',
-    })
+  // The page, search and persona filter live in the URL; the list has one order
+  const { page, search, setPage, setSearch, setFilter } = useListSearchParams()
   const [searchParams] = useSearchParams()
   const personaIdentity = searchParams.get('persona') ?? undefined
 
@@ -37,8 +28,8 @@ export function BlogPostsPage() {
     page_size: PAGE_SIZE,
     search: search || undefined,
     persona_identity: personaIdentity,
-    sort_by: sortBy,
-    sort_direction: sortDirection,
+    sort_by: 'CREATED_AT',
+    sort_direction: 'DESC',
   })
 
   // Heading, search and filter, list, pager

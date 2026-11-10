@@ -14,11 +14,14 @@ export function BlogPostPage() {
 
   if (isPending) {
     return (
-      <div className="flex flex-col gap-4" aria-hidden>
-        <div className="h-8 w-3/4 rounded-2xl bg-accent" />
-        <div className="h-12 w-1/2 rounded-2xl bg-accent" />
-        <div className="h-64 rounded-2xl bg-accent" />
-      </div>
+      <>
+        <h1 className="sr-only">Loading post</h1>
+        <div className="flex flex-col gap-4" aria-hidden>
+          <div className="h-8 w-3/4 rounded-2xl bg-accent" />
+          <div className="h-12 w-1/2 rounded-2xl bg-accent" />
+          <div className="h-64 rounded-2xl bg-accent" />
+        </div>
+      </>
     )
   }
 
@@ -28,6 +31,7 @@ export function BlogPostPage() {
         error={error}
         notFoundMessage="Post not found."
         backTo={{ to: '/', label: 'Go home' }}
+        heading="Post"
       />
     )
   }
