@@ -14,6 +14,7 @@ class BlogPostPersonaResult(BaseModel):
     identity: UUID
     name: str
     avatar_url: str | None
+    is_public: bool
 
 
 class BlogPostContentItemResult(BaseModel):
