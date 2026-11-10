@@ -74,14 +74,17 @@ Substack's columns, from the left:
   the two are centred together
 - **Right sidebar**: only on a page that has something for it, never an empty
   column. `AppLayout` shows one when signed out, holding the sign-in card (about
-  370px). A page with its own sidebar, such as a persona's posts or a run's actions,
-  sets `hasSidebar` on its route (`react-structure.md` › Routing) and lays itself out
-  with `PageWithSidebar` (`components/layout/`). That pins a sticky 320px sidebar to
-  the right edge and centres the 720px column in the space between it and the nav
+  370px), except on a route that shows its own sign-in and sets
+  `isSignInCardHidden`. A page with its own sidebar, such as a persona's posts or a
+  run's actions, sets `hasSidebar` on its route (`react-structure.md` › Routing) and
+  lays itself out with `PageWithSidebar` (`components/layout/`). That pins a sticky
+  320px sidebar to the right edge and centres the 720px column in the space between
+  it and the nav
 
 Below `lg` a page's sidebar moves into the main column, between the page's header and
-its content, so actions like Save stay near the top. Below `md` the nav rail collapses
-to icons.
+its content, so actions like Save stay near the top. The sign-in card's column is
+hidden there, so a signed-out nav shows Sign in, to `/sign-in`. Below `md` the nav rail
+collapses to icons.
 
 ## Components
 

@@ -1,4 +1,4 @@
-import { FileText, Home, Plus, Sparkles, Users } from 'lucide-react'
+import { FileText, Home, LogIn, Plus, Sparkles, Users } from 'lucide-react'
 import { Link, Outlet, ScrollRestoration, useMatches } from 'react-router'
 
 import { NavItem } from '@/components/layout/nav-item'
@@ -10,9 +10,12 @@ import { UserMenu } from '@/features/auth/components/user-menu'
 import { hasPermission } from '@/features/auth/permissions'
 import { cn } from '@/lib/utils'
 
-// A route's handle; hasSidebar makes the main area span the space right of the nav.
+// A route's handle: what it needs from the layout
 export type AppRouteHandle = {
+  // The main area spans the space right of the nav
   hasSidebar?: boolean
+  // The right column's sign-in card is hidden where the page is the sign-in
+  isSignInCardHidden?: boolean
 }
 
 export function AppLayout() {
@@ -22,7 +25,11 @@ export function AppLayout() {
   const hasSidebar = matches.some(
     (match) => (match.handle as AppRouteHandle | undefined)?.hasSidebar,
   )
-  const isSignInCardShown = !isPending && !user
+  const isSignInCardHidden = matches.some(
+    (match) => (match.handle as AppRouteHandle | undefined)?.isSignInCardHidden,
+  )
+  const isSignedOut = !isPending && !user
+  const isSignInCardShown = isSignedOut && !isSignInCardHidden
   // Nav items by permission
   const canWritePersonas = hasPermission(user, 'PERSONA_WRITE')
   const canWritePosts = hasPermission(user, 'BLOG_POST_WRITE')
@@ -43,7 +50,7 @@ export function AppLayout() {
           <Button asChild className="mt-3 w-full px-0 md:px-4">
             <Link to="/write">
               <Plus aria-hidden className="size-5 md:hidden" />
-              <span className="hidden md:inline">Create</span>
+              <span className="sr-only md:not-sr-only">Create</span>
             </Link>
           </Button>
         )}
@@ -52,6 +59,11 @@ export function AppLayout() {
             <div className="h-12 rounded-xl bg-accent" />
           ) : (
             user && <UserMenu user={user} />
+          )}
+          {isSignedOut && (
+            <ul className="lg:hidden">
+              <NavItem to="/sign-in" label="Sign in" icon={LogIn} />
+            </ul>
           )}
         </div>
       </nav>

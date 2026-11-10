@@ -24,7 +24,7 @@ export function RequirePermission({
   }
 
   if (!user) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/sign-in" replace />
   }
 
   if (!hasPermission(user, permission)) {

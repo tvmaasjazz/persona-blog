@@ -52,6 +52,7 @@ frontend/src/
 │   ├── ui/                    # shadcn/ui, added with the CLI, never hand-created
 │   ├── form/                  # the form layer: useAppForm, field components
 │   ├── layout/                # app shell and page layouts: AppLayout, PageWithSidebar
+│   ├── google-sign-in-button.tsx  # GoogleSignInButton
 │   └── list-pager.tsx         # components more than one feature uses, like the list parts
 └── lib/
     ├── api-client.ts          # apiClient: the openapi-fetch instance
@@ -122,7 +123,9 @@ export const apiClient = createClient<paths>({ baseUrl: '/api' })
 ```
 
 Request and response types always come from `api-schema.gen.ts`, never from a
-hand-written interface that mirrors a backend DTO. When the backend changes, run
+hand-written interface that mirrors a backend DTO. A value the API sends outside the
+schema, such as a redirect's code, is written once in the feature, with a comment
+naming the backend enum. When the backend changes, run
 `npm run api:types` with the backend API running on port 8000 and commit the
 regenerated file. A type error it causes is the change working as intended.
 
@@ -223,8 +226,15 @@ names are proper nouns and keep their capitals: My Personas, My Posts.
 ### Sign-in
 
 Google sign-in is a full-page navigation, not a request: an `<a href>` to
-`/api/auth/google/login`. The backend redirects to Google, Google redirects to the
-callback, and the callback sets the cookie and redirects back to the app.
+`/api/auth/google/login`, built once in `GoogleSignInButton` (`components/`), with
+`invite_code` when there is one. The backend redirects to Google, Google redirects to
+the callback, and the callback sets the cookie and redirects back to the app. A failed
+or invited sign-in lands on `/sign-in` with `error`, `invite_error` or `invite`, and
+`features/auth/sign-in-result-messages.ts` turns each code into what the page says.
+
+`POST /invites/check` is read as a query
+(`features/invites/api/invite-status-query.ts`), since it changes nothing: the code
+goes in the body, and `gcTime: 0` drops it with the page.
 
 ## Forms
 
@@ -303,8 +313,8 @@ form when it folds into its status card. When there's something new to look at, 
 toast says what.
 
 A route that needs something from the layout says so in its `handle`, typed as
-`AppRouteHandle` from `app-layout.tsx`. `hasSidebar` is the one field so far; see
-`react-styling.md` › Layout for what it does.
+`AppRouteHandle` from `app-layout.tsx`; its fields say what each does, and
+`react-styling.md` › Layout covers the ones that change the layout.
 
 ## States
 
