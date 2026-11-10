@@ -52,6 +52,7 @@ frontend/src/
 │   ├── ui/                    # shadcn/ui, added with the CLI, never hand-created
 │   ├── form/                  # the form layer: useAppForm, field components
 │   ├── layout/                # app shell and page layouts: AppLayout, PageWithSidebar
+│   ├── google-sign-in-button.tsx  # GoogleSignInButton
 │   └── list-pager.tsx         # components more than one feature uses, like the list parts
 └── lib/
     ├── api-client.ts          # apiClient: the openapi-fetch instance
@@ -231,9 +232,9 @@ the callback, and the callback sets the cookie and redirects back to the app. A 
 or invited sign-in lands on `/sign-in` with `error`, `invite_error` or `invite`, and
 `features/auth/sign-in-result-messages.ts` turns each code into what the page says.
 
-`POST /invites/check` is read as a query (`features/invites/api/invite-status-query.ts`),
-since it changes nothing: the code goes in the body, and `gcTime: 0` drops it with the
-page.
+`POST /invites/check` is read as a query
+(`features/invites/api/invite-status-query.ts`), since it changes nothing: the code
+goes in the body, and `gcTime: 0` drops it with the page.
 
 ## Forms
 
