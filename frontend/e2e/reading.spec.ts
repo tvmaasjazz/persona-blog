@@ -40,6 +40,8 @@ test('a signed-out reader reads a post and finds its persona with their posts', 
     page.getByText('A home baker who writes plainly about bread and the patience it asks for.'),
   ).toBeVisible()
   await expect(page.getByRole('heading', { level: 2 }).getByRole('link').first()).toBeVisible()
+  // Only her posts are listed: a post by Bram Holt is not
+  await expect(page.getByRole('link', { name: /Slow Mornings, Entry/ })).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0)
 })
 
@@ -54,19 +56,28 @@ test('a private persona is not found by a signed-out visitor or a reader', async
   const cassLink = page.getByRole('link', { name: /Cass Mire/ })
   await expect(cassLink).toBeVisible()
   const cassPath = await cassLink.getAttribute('href')
-  expect(cassPath).toMatch(/^\/personas\/[\w-]+$/)
+  if (cassPath === null || !/^\/personas\/[\w-]+$/.test(cassPath)) {
+    throw new Error(`Cass Mire's link has no persona path: ${cassPath}`)
+  }
 
   // Signed out
   await context.clearCookies()
-  await page.goto(cassPath!)
+  await page.goto(cassPath)
   await expect(page.getByText('Persona not found.')).toBeVisible()
   await expect(page.getByRole('heading', { level: 1, name: 'Cass Mire' })).toHaveCount(0)
 
   // A reader, who is signed in but not the owner
   await signInAs('reader')
-  await page.goto(cassPath!)
+  await page.goto(cassPath)
   await expect(page.getByText('Persona not found.')).toBeVisible()
   await expect(page.getByRole('heading', { level: 1, name: 'Cass Mire' })).toHaveCount(0)
+})
+
+test("a private persona's public post stays out of the feed", async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('searchbox', { name: 'Search posts' }).fill('Bread and Patience, Entry 301')
+  await expect(page.getByText('No posts match "Bread and Patience, Entry 301".')).toBeVisible()
+  await expect(page.getByRole('link', { name: /Entry 301/ })).toHaveCount(0)
 })
 
 test('a reader is told they have no access to write', async ({ page, signInAs }) => {

@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test'
 
+import type { components } from '../src/lib/api-schema.gen.ts'
 import { expect, test } from './fixtures.ts'
 
 type CreatedInvite = { identity: string; inviteCode: string }
@@ -10,7 +11,7 @@ async function createInvite(page: Page): Promise<CreatedInvite> {
     data: { name: `E2E invite page ${Date.now()}`, credit_amount_usd: '0.50', expires_in_days: 1 },
   })
   expect(response.ok()).toBe(true)
-  const body = (await response.json()) as { identity: string; invite_url: string }
+  const body: components['schemas']['AdminInviteCreateResponseDto'] = await response.json()
   return { identity: body.identity, inviteCode: body.invite_url.split('/').pop() ?? '' }
 }
 
@@ -90,8 +91,9 @@ for (const [query, message] of SIGN_IN_MESSAGES) {
 test('an accepted invite signed out shows only the sign-in card', async ({ page }) => {
   await page.goto('/sign-in?invite=ACCEPTED')
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible()
-  await expect(page.getByRole('status')).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Continue with Google' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: "You're in" })).toHaveCount(0)
+  await expect(page.getByRole('status')).toHaveCount(0)
 })
 
 test('an accepted invite signed in as a creator shows their balance', async ({
@@ -100,7 +102,7 @@ test('an accepted invite signed in as a creator shows their balance', async ({
 }) => {
   await signInAs('creator')
   const meResponse = await page.request.get('/api/users/me')
-  const me = (await meResponse.json()) as { credit_balance_usd: string }
+  const me: components['schemas']['UserResponseDto'] = await meResponse.json()
   const balanceText = `$${Number(me.credit_balance_usd).toFixed(2)}`
 
   await page.goto('/sign-in?invite=ACCEPTED')

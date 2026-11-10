@@ -1,8 +1,14 @@
 import type { Page } from '@playwright/test'
 
-import { expect, test } from './fixtures.ts'
+import type { components } from '../src/lib/api-schema.gen.ts'
+import { expect, SEEDED_USER_EMAILS, test } from './fixtures.ts'
 
-const NEWCOMER_EMAIL = 'dev-newcomer@example.com'
+type AdminUserResponse = components['schemas']['AdminUserResponseDto']
+type AdminUserPageResponse = components['schemas']['AdminUserPageResponseDto']
+type AdminInvitePageResponse = components['schemas']['AdminInvitePageResponseDto']
+
+const NEWCOMER_EMAIL = SEEDED_USER_EMAILS.newcomer
+const ADMIN_EMAIL = SEEDED_USER_EMAILS.admin
 
 // The seeded emails in the order an ascending email sort puts them
 const SEEDED_EMAILS_ASCENDING = [
@@ -15,6 +21,37 @@ const SEEDED_EMAILS_ASCENDING = [
   'dev-reader@example.com',
   'dev-suspended@example.com',
 ]
+
+// Reads the newcomer from the API
+async function findNewcomer(page: Page): Promise<AdminUserResponse> {
+  const response = await page.request.get('/api/admin/users', {
+    params: { search: NEWCOMER_EMAIL },
+  })
+  expect(response.ok()).toBe(true)
+  const userPage: AdminUserPageResponse = await response.json()
+  const newcomer = userPage.users.find((user) => user.email === NEWCOMER_EMAIL)
+  if (newcomer === undefined) {
+    throw new Error(`The seed has no ${NEWCOMER_EMAIL}`)
+  }
+  return newcomer
+}
+
+// Puts the newcomer back to the seed's reader who is active, whatever state they are in
+async function restoreNewcomer(page: Page) {
+  const newcomer = await findNewcomer(page)
+  if (newcomer.role !== 'READER') {
+    const roleResponse = await page.request.put(`/api/admin/users/${newcomer.identity}/role`, {
+      data: { role: 'READER' },
+    })
+    expect(roleResponse.ok()).toBe(true)
+  }
+  if (!newcomer.is_active) {
+    const activeResponse = await page.request.put(`/api/admin/users/${newcomer.identity}/active`, {
+      data: { is_active: true },
+    })
+    expect(activeResponse.ok()).toBe(true)
+  }
+}
 
 // Searches the users table for the newcomer and opens their page
 async function openNewcomerPage(page: Page) {
@@ -67,13 +104,15 @@ test('a grant to the newcomer shows on their ledger and balance', async ({ page,
   await signInAs('admin')
   const grantNote = `e2e admin grant ${Date.now()}`
 
-  // Read the balance and role before the grant, from the users table
+  // An earlier failed run may have left the newcomer a creator
+  await restoreNewcomer(page)
+
+  // Read the balance before the grant, from the users table
   await page.goto('/admin/users')
   await page.getByRole('searchbox', { name: 'Search users' }).fill(NEWCOMER_EMAIL)
   const newcomerRow = page.getByRole('row', { name: new RegExp(NEWCOMER_EMAIL) })
   await expect(newcomerRow).toBeVisible()
   const balanceBefore = Number((await newcomerRow.getByRole('cell').nth(3).innerText()).slice(1))
-  const roleBefore = await newcomerRow.getByRole('cell').nth(2).innerText()
   await page.getByRole('link', { name: NEWCOMER_EMAIL }).click()
   await expect(page.getByRole('heading', { level: 1, name: NEWCOMER_EMAIL })).toBeVisible()
 
@@ -88,7 +127,7 @@ test('a grant to the newcomer shows on their ledger and balance', async ({ page,
     const ledgerRow = page.getByRole('row', { name: new RegExp(grantNote) })
     await expect(ledgerRow).toBeVisible()
     await expect(ledgerRow.getByRole('cell').nth(2)).toHaveText('+$0.0100')
-    await expect(ledgerRow.getByRole('cell').nth(4)).toHaveText('dev-admin@example.com')
+    await expect(ledgerRow.getByRole('cell').nth(4)).toHaveText(ADMIN_EMAIL)
 
     // The balance is a cent higher
     const balanceAfter = (balanceBefore + 0.01).toFixed(2)
@@ -96,20 +135,14 @@ test('a grant to the newcomer shows on their ledger and balance', async ({ page,
       page.getByRole('definition').filter({ hasText: new RegExp(`^\\$${balanceAfter}$`) }),
     ).toBeVisible()
   } finally {
-    // A grant makes a reader a creator; put the newcomer back as they were
-    if (roleBefore === 'Reader') {
-      const makeReaderButton = page.getByRole('button', { name: 'Make reader' })
-      if (await makeReaderButton.isVisible()) {
-        await makeReaderButton.click()
-        await page.getByRole('alertdialog').getByRole('button', { name: 'Make reader' }).click()
-        await expect(page.getByText('Role changed to reader')).toBeVisible()
-      }
-    }
+    // A grant makes a reader a creator; put the newcomer back as the seed has them
+    await restoreNewcomer(page)
   }
 })
 
 test('the admin suspends the newcomer, then reactivates them', async ({ page, signInAs }) => {
   await signInAs('admin')
+  await restoreNewcomer(page)
   await openNewcomerPage(page)
 
   try {
@@ -124,21 +157,20 @@ test('the admin suspends the newcomer, then reactivates them', async ({ page, si
     // The account says Suspended
     await expect(page.getByRole('definition').filter({ hasText: /^Suspended$/ })).toBeVisible()
     await expect(page.getByText('This account is suspended.')).toBeVisible()
-  } finally {
-    // Reactivate, so later flows find the seed as it was
-    const reactivateButton = page.getByRole('button', { name: 'Reactivate' })
-    if (await reactivateButton.isVisible()) {
-      await reactivateButton.click()
-      await page.getByRole('alertdialog').getByRole('button', { name: 'Reactivate' }).click()
-      await expect(page.getByText('User reactivated')).toBeVisible()
-    }
-  }
 
-  await expect(page.getByRole('definition').filter({ hasText: /^Active$/ })).toBeVisible()
-  await expect(page.getByText('This account is active.')).toBeVisible()
+    // Reactivate, confirming in the dialog
+    await page.getByRole('button', { name: 'Reactivate' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Reactivate' }).click()
+    await expect(page.getByText('User reactivated')).toBeVisible()
+    await expect(page.getByRole('definition').filter({ hasText: /^Active$/ })).toBeVisible()
+    await expect(page.getByText('This account is active.')).toBeVisible()
+  } finally {
+    // Leave the newcomer active, so later flows find the seed as it was
+    await restoreNewcomer(page)
+  }
 })
 
-test('the admin creates an invite, sees its link once, then revokes it', async ({
+test('the admin creates an invite, sees its link only in the dialog, then revokes it', async ({
   page,
   signInAs,
 }) => {
@@ -147,33 +179,54 @@ test('the admin creates an invite, sees its link once, then revokes it', async (
   await page.goto('/admin/invites')
   await expect(page.getByRole('heading', { level: 1, name: 'Invites' })).toBeVisible()
 
-  // Create it
-  await page.getByLabel('Name', { exact: true }).fill(inviteName)
-  await page.getByLabel('Amount (USD)').fill('0.50')
-  await page.getByRole('button', { name: 'Create invite' }).click()
+  try {
+    // Create it
+    await page.getByLabel('Name', { exact: true }).fill(inviteName)
+    await page.getByLabel('Amount (USD)').fill('0.50')
+    await page.getByRole('button', { name: 'Create invite' }).click()
 
-  // Its link shows in the dialog; the check keeps the link out of the test output
-  const linkDialog = page.getByRole('dialog', { name: 'Invite link' })
-  await expect(linkDialog).toBeVisible()
-  const inviteLink = await linkDialog.getByLabel('Invite link').inputValue()
-  expect(/^https?:\/\/.+\/invite\/[^/]+$/.test(inviteLink)).toBe(true)
+    // Its link shows in the dialog; the check keeps the link out of the test output
+    const linkDialog = page.getByRole('dialog', { name: 'Invite link' })
+    await expect(linkDialog).toBeVisible()
+    const inviteLink = await linkDialog.getByLabel('Invite link').inputValue()
+    expect(/^https?:\/\/.+\/invite\/[^/]+$/.test(inviteLink)).toBe(true)
 
-  // Closing drops the link, and the table lists the invite as unused
-  // The dialog has two Close buttons: the footer's, then the corner icon
-  await linkDialog.getByRole('button', { name: 'Close' }).first().click()
-  await expect(linkDialog).toBeHidden()
-  await page.getByRole('searchbox', { name: 'Search invites' }).fill(inviteName)
-  const inviteRow = page.getByRole('row', { name: new RegExp(inviteName) })
-  await expect(inviteRow.getByRole('cell').nth(1)).toHaveText('$0.50')
-  await expect(inviteRow.getByRole('cell').nth(2)).toHaveText('Unused')
+    // Closing drops the link, and the table lists the invite as unused
+    // The dialog has two Close buttons: the footer's, then the corner icon
+    await linkDialog.getByRole('button', { name: 'Close' }).first().click()
+    await expect(linkDialog).toBeHidden()
+    await page.getByRole('searchbox', { name: 'Search invites' }).fill(inviteName)
+    const inviteRow = page.getByRole('row', { name: new RegExp(inviteName) })
+    await expect(inviteRow.getByRole('cell').nth(1)).toHaveText('$0.50')
+    await expect(inviteRow.getByRole('cell').nth(2)).toHaveText('Unused')
 
-  // Revoke it from the table, confirming
-  await inviteRow.getByRole('button', { name: `Revoke invite ${inviteName}` }).click()
-  await page
-    .getByRole('alertdialog', { name: `Revoke ${inviteName}?` })
-    .getByRole('button', { name: 'Revoke' })
-    .click()
-  await expect(page.getByText('Invite revoked')).toBeVisible()
-  await expect(inviteRow.getByRole('cell').nth(2)).toHaveText('Revoked')
-  await expect(inviteRow.getByRole('button')).toHaveCount(0)
+    // The link is not shown again: no field in the page or the row
+    await expect(page.getByLabel('Invite link')).toHaveCount(0)
+    await expect(inviteRow.getByRole('textbox')).toHaveCount(0)
+
+    // Revoke it from the table, confirming
+    await inviteRow.getByRole('button', { name: `Revoke invite ${inviteName}` }).click()
+    await page
+      .getByRole('alertdialog', { name: `Revoke ${inviteName}?` })
+      .getByRole('button', { name: 'Revoke' })
+      .click()
+    await expect(page.getByText('Invite revoked')).toBeVisible()
+    await expect(inviteRow.getByRole('cell').nth(2)).toHaveText('Revoked')
+    await expect(inviteRow.getByRole('button')).toHaveCount(0)
+  } finally {
+    // Revoke the invite if the test left it unused
+    const response = await page.request.get('/api/admin/invites', {
+      params: { search: inviteName },
+    })
+    expect(response.ok()).toBe(true)
+    const invitePage: AdminInvitePageResponse = await response.json()
+    for (const invite of invitePage.invites) {
+      if (invite.name === inviteName && invite.status === 'UNUSED') {
+        const revokeResponse = await page.request.post(
+          `/api/admin/invites/${invite.identity}/revoke`,
+        )
+        expect(revokeResponse.ok()).toBe(true)
+      }
+    }
+  }
 })
