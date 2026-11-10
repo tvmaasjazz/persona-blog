@@ -9,6 +9,10 @@
     {
       "files": ["src/components/ui/**"],
       "rules": { "react/only-export-components": "off" }
+    },
+    {
+      "files": ["e2e/**"],
+      "rules": { "react/rules-of-hooks": "off" }
     }
   ]
 }

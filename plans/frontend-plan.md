@@ -228,8 +228,8 @@ branch, so a diff shows only its own work. Merge them in order. Commits are
 | 8 | `feat/web-home-feed` (#62) | The feed with search | `react-coder` |
 | 9 | `feat/web-post-views` (#63) | Views and how far a post is read | `react-coder` |
 | 10 | `docs/frontend-built` (#64) | `plan.md` item 11 marked built, anything the audits left | Main session |
-| 11 | `test/web-unit-tests` | Vitest, the testing rules, `fe-test-writer`, unit tests | Main session, `fe-test-writer` |
-| 12 | `test/web-e2e-tests` | Playwright, the flows end to end | Main session, `fe-test-writer` × 2 |
+| 11 | `test/web-unit-tests` (#65) | Vitest, the testing rules, `fe-test-writer`, unit tests | Main session, `fe-test-writer` |
+| 12 | `test/web-e2e-tests` (#66) | Playwright, the flows end to end | Main session, `fe-test-writer` × 2 |
 
 ### PR 0: the plan and the reviewer
 
