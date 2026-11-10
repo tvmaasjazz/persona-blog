@@ -94,6 +94,8 @@ export function AdminUserPage() {
             isNarrowed={list.search !== ''}
             emptyMessage="No credit activity yet."
             noMatchMessage="No entries match your search."
+            pagination={ledgerPage.data?.pagination}
+            onPageChange={list.setPage}
           />
           {ledgerPage.data && (
             <ListPager pagination={ledgerPage.data.pagination} onPageChange={list.setPage} />

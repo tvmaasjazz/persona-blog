@@ -56,6 +56,8 @@ export function AdminInvitesPage() {
         isNarrowed={list.search !== ''}
         emptyMessage="No invites yet."
         noMatchMessage="No invites match your search."
+        pagination={invitePage.data?.pagination}
+        onPageChange={list.setPage}
       />
       {invitePage.data && (
         <ListPager pagination={invitePage.data.pagination} onPageChange={list.setPage} />

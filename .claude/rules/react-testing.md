@@ -59,6 +59,8 @@ A flow walks the real app against the real local API and its dev seed
 - Sign in with the `signInAs` fixture from `e2e/fixtures.ts`, which mints a session for
   one of the seeded users and sets the `sid` cookie. Google's own screen isn't tested.
   Signing out from the UI deletes that session, which is fine: each test mints its own.
+  To check what a signed-out reader sees of something only its owner can reach, read
+  its path signed in, then `context.clearCookies()`.
 - Find elements by role and label (`getByRole`, `getByLabel`), never by class or test
   id. A selector that needs a class means the page is missing a label.
 - A test reads the seeded data, and makes anything it changes itself, through the UI or
@@ -67,15 +69,19 @@ A flow walks the real app against the real local API and its dev seed
   reactivated), and never relies on another test's changes, so any one runs alone.
   The undo goes in a `finally`, so a failure part-way still leaves the seed as it was.
   It goes through `page.request` and is unconditional, never only when a button happens
-  to be on screen. When the seed fixes a value (a role, active), the undo puts back the
+  to be on screen. A test whose subject is the undo (Reactivate) clicks it in the UI,
+  and still keeps the `page.request` undo in `finally`. When the seed fixes a value (a role, active), the undo puts back the
   seed's value, and the test sets it before it starts too, so a failed run doesn't carry
-  over; a value the seed doesn't fix is read before the change and restored. A change the API can't undo (a grant) is read before and compared,
-  never asserted as a seeded value.
+  over; a value the seed doesn't fix is read before the change and restored. A change
+  the API can't undo (a grant) is read before and compared, never asserted as a seeded
+  value.
 - A count or total that the seed doesn't fix (other runs add posts) is read from the
   API in the test, never written as a literal.
 - An absence check (count 0, `not.toBeVisible()`) passes at once, so it follows a
-  positive wait for the state it checks. That a request wasn't sent is checked by
-  recording requests (`page.on('request')`), not by a toast's absence.
+  positive wait for the state it checks. A list settling is waited on through its rows,
+  never through its pager being gone, since a list that fits one page has none. That a
+  request wasn't sent is checked by recording requests (`page.on('request')`), not by
+  a toast's absence.
 - A response read through `page.request` is typed from `../src/lib/api-schema.gen.ts`,
   as app code is, by annotating the variable
   (`const body: components['schemas']['…'] = await response.json()`). Node's own

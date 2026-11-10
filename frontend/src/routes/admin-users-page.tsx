@@ -49,6 +49,8 @@ export function AdminUsersPage() {
         isNarrowed={list.search !== ''}
         emptyMessage="No users yet."
         noMatchMessage="No users match your search."
+        pagination={userPage.data?.pagination}
+        onPageChange={list.setPage}
       />
       {userPage.data && (
         <ListPager pagination={userPage.data.pagination} onPageChange={list.setPage} />

@@ -34,9 +34,10 @@ The rules files say where each of these lives and how it is shaped.
   Features, › Forms)
 - **Pages** in `src/routes/`, and their entries in `src/app/router.tsx`. In the
   router, add the feature's routes and nothing else.
-- **Stub pages and nav links**, when the task says you are writing the shared layer
-  for parallel page agents (`CLAUDE.md` › Running agents in parallel). Each stub is a
-  named export the page agent that owns it replaces.
+- **The shared layer**, when the task says you are writing it for parallel page
+  agents. What it holds, stub pages and nav links included, is in `CLAUDE.md` ›
+  Running agents in parallel. Each stub is a named export the page agent that owns it
+  replaces.
 - **Shared components** in `src/components/layout/` or `src/components/`, when more
   than one feature needs them
 - **Form field components** in `src/components/form/`, registered in
@@ -47,7 +48,7 @@ The rules files say where each of these lives and how it is shaped.
   `lib/api-error.ts` is one to extend when a feature needs more from API errors
 - **shadcn components**, added with the CLI. Variant edits only, per
   `react-styling.md` › Components. Never re-add `button.tsx`, `input.tsx`,
-  `alert-dialog.tsx`, `dialog.tsx`, or `sonner.tsx`: the CLI would overwrite their
+  `select.tsx`, `alert-dialog.tsx`, `dialog.tsx`, or `sonner.tsx`: the CLI would overwrite their
   deliberate edits
 
 ## What you don't write

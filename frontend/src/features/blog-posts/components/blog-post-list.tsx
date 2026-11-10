@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 
 import { CardListSkeleton } from '@/components/card-list-skeleton'
+import { PastLastPageNotice } from '@/components/past-last-page-notice'
 import { QueryErrorState } from '@/components/query-error-state'
-import { Button } from '@/components/ui/button'
 import { BlogPostCard } from '@/features/blog-posts/components/blog-post-card'
 import type { components } from '@/lib/api-schema.gen'
 
@@ -40,14 +40,7 @@ export function BlogPostList({
   if (blogPosts.length === 0) {
     // Past the last page, such as after a delete or a stale link
     if (pagination && pagination.total > 0 && onPageChange) {
-      return (
-        <div className="flex flex-col items-start gap-4">
-          <p className="text-muted-foreground">Nothing on this page.</p>
-          <Button variant="secondary" onClick={() => onPageChange(1)}>
-            Go to page 1
-          </Button>
-        </div>
-      )
+      return <PastLastPageNotice onFirstPage={() => onPageChange(1)} />
     }
 
     // Nothing matched, or nothing exists

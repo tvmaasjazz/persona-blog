@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import type { ReactNode } from 'react'
 
+import { PastLastPageNotice } from '@/components/past-last-page-notice'
 import { QueryErrorState } from '@/components/query-error-state'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,6 +16,7 @@ import type { components } from '@/lib/api-schema.gen'
 import { cn } from '@/lib/utils'
 
 type SortDirection = components['schemas']['SortDirectionType']
+type PaginationResponseDto = components['schemas']['PaginationResponseDto']
 
 const SKELETON_ROW_COUNT = 5
 
@@ -42,6 +44,9 @@ type DataTableProps<TRow, TSort extends string> = {
   isNarrowed: boolean
   emptyMessage: string
   noMatchMessage: string
+  // Together these catch a page past the last one
+  pagination: PaginationResponseDto | undefined
+  onPageChange: (page: number) => void
 }
 
 export function DataTable<TRow, TSort extends string>({
@@ -56,6 +61,8 @@ export function DataTable<TRow, TSort extends string>({
   isNarrowed,
   emptyMessage,
   noMatchMessage,
+  pagination,
+  onPageChange,
 }: DataTableProps<TRow, TSort>) {
   // Clicking the sorted column flips it; another column starts at its natural order
   function handleSort(column: DataTableColumn<TRow, TSort>, sortValue: TSort) {
@@ -71,6 +78,10 @@ export function DataTable<TRow, TSort extends string>({
   }
 
   if (!isPending && rows?.length === 0) {
+    // Past the last page, such as after a stale link
+    if (pagination && pagination.total > 0) {
+      return <PastLastPageNotice onFirstPage={() => onPageChange(1)} />
+    }
     return <p className="text-muted-foreground">{isNarrowed ? noMatchMessage : emptyMessage}</p>
   }
 

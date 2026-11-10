@@ -457,6 +457,7 @@ the persona and blog post reads and `signed_in_admin` every permission, both wit
 | Not found → 404               | Use an id that was never inserted |
 | Redirect                      | Assert the status, then check `Location` with `urllib.parse` |
 | Set-Cookie attributes         | Read `response.headers.get_list("set-cookie")`; assert `HttpOnly`, `Secure` for the environment, and `SameSite` |
+| A request after a cleared cookie | Seed the cookie with `api_client.cookies.set(..., domain="test", path="/")`, so the client's jar matches what the response deletes, then assert the next request goes out without it |
 | Rate limit → 429              | Pre-set the Redis counter at the cap; assert 429 |
 | Not per route                 | Invalid or expired sessions (`tests/libs/auth/test_auth_session_service.py`) and unhandled 500s (`tests/api/core/test_exception_handlers.py`) are covered once |
 

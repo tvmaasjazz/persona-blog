@@ -176,3 +176,20 @@ describe('useListSearchParams history', () => {
     expect(result.current.navigationType).toBe('REPLACE')
   })
 })
+
+describe('useListSearchParams without sort options', () => {
+  it('reads page and search, and leaves a sort in the URL unread', () => {
+    function RouterWrapper({ children }: { children: ReactNode }) {
+      return <MemoryRouter initialEntries={['/?page=2&q=cats&sort=title']}>{children}</MemoryRouter>
+    }
+    const { result } = renderHook(() => useListSearchParams(), { wrapper: RouterWrapper })
+
+    expect(result.current).toEqual({
+      page: 2,
+      search: 'cats',
+      setPage: expect.any(Function),
+      setSearch: expect.any(Function),
+      setFilter: expect.any(Function),
+    })
+  })
+})

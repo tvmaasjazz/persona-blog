@@ -107,7 +107,7 @@ Substack's sizes and a `link` variant that uses `primary-text`. Change the varia
 the file rather than overriding it with `className` at every call site. A `className`
 passed at the call site is for layout (`w-full`, margins), not for restyling.
 
-`input.tsx` takes the input shape (`rounded-xl`). `alert-dialog.tsx` and `dialog.tsx`
+`input.tsx` and the trigger in `select.tsx` take the input shape (`rounded-xl`). `alert-dialog.tsx` and `dialog.tsx`
 are edited the same way: their content takes the
 dialog shape from Shape and type (`rounded-2xl`, `bg-popover`), and their title takes
 the dialog title style (`text-xl font-extrabold`).

@@ -2,16 +2,9 @@ import { ListSearchBox } from '@/components/list-search-box'
 import { PublicBlogPostFeed } from '@/features/blog-posts/components/public-blog-post-feed'
 import { useListSearchParams } from '@/lib/use-list-search-params'
 
-// The feed has one order, so the sort is never read from the URL
-const SORT_VALUES = ['FEED_SCORE'] as const
-
 export function HomePage() {
-  // The search lives in the URL
-  const { search, setSearch } = useListSearchParams({
-    sortValues: SORT_VALUES,
-    defaultSort: 'FEED_SCORE',
-    defaultDirection: 'DESC',
-  })
+  // The search lives in the URL; the feed has one order
+  const { search, setSearch } = useListSearchParams()
 
   return (
     <div className="flex flex-col gap-6">
