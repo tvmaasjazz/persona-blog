@@ -60,8 +60,7 @@ only 4:1 against the background, which fails WCAG AA for body text.
 | UI text                    | `font-sans`, the default                             |
 | Post body text             | `font-serif`                                         |
 
-`font-serif` is Spectral with a Georgia fallback. Spectral isn't loaded; post text
-falls back to Georgia.
+`font-serif` is Spectral, which isn't loaded, so post text renders in Georgia.
 
 ## Layout
 
@@ -108,9 +107,9 @@ Substack's sizes and a `link` variant that uses `primary-text`. Change the varia
 the file rather than overriding it with `className` at every call site. A `className`
 passed at the call site is for layout (`w-full`, margins), not for restyling.
 
-`alert-dialog.tsx` and `dialog.tsx` are edited the same way: their content takes the dialog shape from
-Shape and type (`rounded-2xl`, `bg-popover`), and their title takes the dialog title
-style (`text-xl font-extrabold`).
+`alert-dialog.tsx` and `dialog.tsx` are edited the same way: their content takes the
+dialog shape from Shape and type (`rounded-2xl`, `bg-popover`), and their title takes
+the dialog title style (`text-xl font-extrabold`).
 
 `sonner.tsx` is edited for a different reason. shadcn's version reads the theme from
 `next-themes`, which the app doesn't use. It pins `theme="dark"` instead. When light

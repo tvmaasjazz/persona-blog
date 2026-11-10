@@ -55,6 +55,7 @@ frontend/src/
 │   ├── confirm-action-button.tsx  # ConfirmActionButton
 │   ├── data-table.tsx         # DataTable
 │   ├── google-sign-in-button.tsx  # GoogleSignInButton
+│   ├── infinite-scroll-sentinel.tsx  # InfiniteScrollSentinel
 │   └── list-pager.tsx         # components more than one feature uses, like the list parts
 └── lib/
     ├── api-client.ts          # apiClient: the openapi-fetch instance
@@ -63,6 +64,7 @@ frontend/src/
     ├── format-date.ts         # formatDate, formatDateTime
     ├── use-debounced-callback.ts
     ├── use-list-search-params.ts
+    ├── use-scrolled-into-view.ts
     └── utils.ts               # cn(), from shadcn
 ```
 
@@ -155,10 +157,11 @@ export function useCurrentUser() {
 - Query keys start with the backend resource path, split on `/`: `GET /users/me` is
   `['users', 'me']`, `GET /blog-posts/{identity}` is
   `['blog-posts', blogPostIdentity]`.
-- A view page reads the `/public` route and an edit page the owner's. Their keys differ
-  in the last part: `['blog-posts', blogPostIdentity]` and
-  `['blog-posts', blogPostIdentity, 'public']`; the public page is
-  `['blog-posts', 'public', params]`. Invalidating `['blog-posts']` covers all three.
+- A view page reads the `/public` route and an edit page the owner's. The public key
+  puts `'public'` last for one row (`['blog-posts', blogPostIdentity, 'public']`,
+  `['personas', personaIdentity, 'public']`) and second for a page
+  (`['blog-posts', 'public', params]`, with `'infinite'` last when infinite).
+  Invalidating the resource (`['blog-posts']`) covers all of them.
 - A failed request throws `createApiError(error, response)` from `lib/api-error.ts`:
   an `ApiError` carrying the HTTP `status` and the body's `detail`, so a caller can
   tell a 409 from anything else. The one exception is the 401 below.
@@ -332,8 +335,10 @@ A route that needs something from the layout says so in its `handle`, typed as
 A view that loads data has a loading, an empty and an error state, and a not-found
 state when it's read by identity. A button is disabled while its request runs. A
 destructive or far-reaching action confirms first through `ConfirmActionButton`
-(`components/`); its caller closes the dialog on success, so a failure leaves it open. Build the states from `CardListSkeleton` and `QueryErrorState` in
-`components/`; a table uses `DataTable`, which has them built in. A list with a search tells an empty search apart from having nothing.
+(`components/`); its caller closes the dialog on success, so a failure leaves it open.
+Build the states from `CardListSkeleton` and `QueryErrorState` in `components/`; a
+table uses `DataTable`, which has them built in. A list with a search tells an empty
+search apart from having nothing.
 
 ## Accessibility
 
