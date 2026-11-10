@@ -56,7 +56,8 @@ frontend/src/
     ├── api-error.ts           # ApiError, createApiError, apiErrorMessage
     ├── api-schema.gen.ts      # generated from /openapi.json, never hand-edited
     ├── format-date.ts         # formatDate, formatDateTime
-    ├── use-list-search-params.ts  # a hook more than one feature uses
+    ├── use-debounced-callback.ts
+    ├── use-list-search-params.ts
     └── utils.ts               # cn(), from shadcn
 ```
 
@@ -69,8 +70,8 @@ subfolders a feature uses.
 
 A React hook that only one feature uses and that makes no API call goes in its
 `hooks/`, like `generate-text/hooks/use-unsaved-run-guard.ts`. Hooks that call the API
-stay in `api/`. A hook that more than one feature uses goes in `lib/`, as
-`use-<name>.ts`.
+stay in `api/`. A hook with no API call that more than one feature uses goes in
+`lib/`, as `use-<name>.ts`.
 
 Plain functions and constants that only one feature uses (no React, no API call) go
 in a kebab-case `.ts` file at the feature root, named for what it holds:
