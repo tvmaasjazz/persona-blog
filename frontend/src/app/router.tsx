@@ -4,6 +4,7 @@ import { AppLayout, type AppRouteHandle } from '@/components/layout/app-layout'
 import { RequireAuth } from '@/features/auth/components/require-auth'
 import { RequirePermission } from '@/features/auth/components/require-permission'
 import { AccountPage } from '@/routes/account-page'
+import { AdminInvitesPage } from '@/routes/admin-invites-page'
 import { AdminUserPage } from '@/routes/admin-user-page'
 import { AdminUsersPage } from '@/routes/admin-users-page'
 import { BlogPostPage } from '@/routes/blog-post-page'
@@ -79,6 +80,18 @@ export const router = createBrowserRouter([
                 path: '/admin/users/:userIdentity',
                 element: <AdminUserPage />,
                 handle: { hasSidebar: true } satisfies AppRouteHandle,
+              },
+            ],
+          },
+          {
+            element: (
+              <RequirePermission permission="INVITE_READ" message="This page is for admins." />
+            ),
+            children: [
+              {
+                path: '/admin/invites',
+                element: <AdminInvitesPage />,
+                handle: { isFullWidth: true } satisfies AppRouteHandle,
               },
             ],
           },
