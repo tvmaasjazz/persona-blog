@@ -25,7 +25,7 @@ Every class ends in the suffix for what it is:
 | `Input`      | A service method's payload (`libs/` only)    | `CreateUserInput`                |
 | `Result`     | A function's return shape                    | `FindUserByEmailResult`          |
 | `Router`     | FastAPI `APIRouter` modules                  | `account_router` (an `APIRouter` instance) |
-| `Service`    | Business logic, framework-free               | `AccountService`                 |
+| `Service`    | Business logic, framework-free, including a script's worker (below) | `AccountService`                 |
 | `Builder`    | Builds one thing from configuration, as a class | `BlogPostGraphBuilder`         |
 | `Registry`   | Holds one of something per enum member, looked up by it | `GenerateTextGraphBuilderRegistry` |
 | `Utils`      | Stateless static builders and mappers for one domain | `LlmUtils`, `DateTimeUtils` |
@@ -51,9 +51,9 @@ db session, no HTTP client, no settings held as attributes. Values it needs are
 arguments, and a log line is fine. The moment something needs a collaborator it is a
 service, not a util.
 
-A class in `scripts/` takes the same suffixes. One that holds the script's
-collaborators and does its work is a `<Script>Service`, like `DevSeedService` in
-`scripts/dev_seed.py`.
+A class in `scripts/` takes the suffixes not scoped to `libs/`, `apps/` or `tests/`.
+One that holds the script's collaborators and does its work is a `<Script>Service`,
+like `DevSeedService` in `scripts/dev_seed.py`.
 
 Two classes take no suffix. SQLAlchemy column types are named for the value they
 hold (`UtcDateTime`). `AuthUser`, the signed-in user in request scope, is named for
