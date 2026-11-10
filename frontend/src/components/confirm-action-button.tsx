@@ -69,7 +69,7 @@ export function ConfirmActionButton({
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{openedText.title}</AlertDialogTitle>
+          <AlertDialogTitle className="wrap-anywhere">{openedText.title}</AlertDialogTitle>
           <AlertDialogDescription>{openedText.description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

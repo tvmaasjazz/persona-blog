@@ -108,8 +108,8 @@ Substack's sizes and a `link` variant that uses `primary-text`. Change the varia
 the file rather than overriding it with `className` at every call site. A `className`
 passed at the call site is for layout (`w-full`, margins), not for restyling.
 
-`alert-dialog.tsx` is edited the same way: its content takes the dialog shape from
-Shape and type (`rounded-2xl`, `bg-popover`), and its title takes the dialog title
+`alert-dialog.tsx` and `dialog.tsx` are edited the same way: their content takes the dialog shape from
+Shape and type (`rounded-2xl`, `bg-popover`), and their title takes the dialog title
 style (`text-xl font-extrabold`).
 
 `sonner.tsx` is edited for a different reason. shadcn's version reads the theme from

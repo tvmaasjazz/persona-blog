@@ -33,7 +33,7 @@ export const CREDIT_LEDGER_COLUMNS: DataTableColumn<
   },
   {
     header: 'Made by',
-    className: 'min-w-32 [overflow-wrap:anywhere] whitespace-normal',
+    className: 'min-w-32 wrap-anywhere whitespace-normal',
     cell: (entry) => entry.created_by_email,
   },
 ]
