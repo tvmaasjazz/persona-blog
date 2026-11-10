@@ -34,7 +34,7 @@ from libs.content_engagement.services import ContentEngagementService
 from libs.content_items.services import ContentItemService
 from libs.credits.services import CreditLedgerService
 from libs.credits.types import CreditLedgerEntryType
-from libs.database.orm import CreditLedgerOrm, InviteOrm, RoleOrm, UserOrm
+from libs.database.orm import CreditLedgerOrm, InviteOrm, PersonaOrm, RoleOrm, UserOrm
 from libs.database.services import PaginationService
 from libs.database.session import create_db_session_factory
 from libs.database.utils import DatabaseClockUtils
@@ -53,6 +53,7 @@ ADMIN_EMAIL = "dev-admin@example.com"
 CREATOR_EMAIL = "dev-creator@example.com"
 LOW_BALANCE_EMAIL = "dev-low@example.com"
 BROKE_EMAIL = "dev-broke@example.com"
+BROKE_PERSONA_NAME = "Milo Penny"
 READER_EMAIL = "dev-reader@example.com"
 SUSPENDED_EMAIL = "dev-suspended@example.com"
 NEWCOMER_EMAIL = "dev-newcomer@example.com"
@@ -286,17 +287,33 @@ class DevSeedService:
 
     async def _seed_broke_creator(self, admin_auth_user: AuthUser) -> None:
         create_seed_user_result = await self._create_user(BROKE_EMAIL, "Dev Broke", 1)
-        if not create_seed_user_result.is_created:
-            return
+        if create_seed_user_result.is_created:
+            # A creator who has spent everything: $1.00 granted and $1.00 charged
+            set_user_role_input = AdminSetUserRoleInput(role=RoleType.CREATOR)
+            await self._admin_user_service.set_user_role(
+                create_seed_user_result.identity, set_user_role_input, admin_auth_user
+            )
+            await self._grant_credits(create_seed_user_result.identity, "1.00", admin_auth_user)
+            await self._add_ledger_rows(
+                create_seed_user_result.id, CreditLedgerEntryType.CHARGE, "1.00", 1
+            )
 
-        # A creator who has spent everything: $1.00 granted and $1.00 charged
-        set_user_role_input = AdminSetUserRoleInput(role=RoleType.CREATOR)
-        await self._admin_user_service.set_user_role(
-            create_seed_user_result.identity, set_user_role_input, admin_auth_user
+        # A persona of its own, so the write form reaches the balance check; keyed by name so
+        # a database seeded before it had one gets it too
+        persona_query = select(PersonaOrm.id).where(
+            PersonaOrm.created_by_id == create_seed_user_result.id,
+            PersonaOrm.name == BROKE_PERSONA_NAME,
         )
-        await self._grant_credits(create_seed_user_result.identity, "1.00", admin_auth_user)
-        await self._add_ledger_rows(
-            create_seed_user_result.id, CreditLedgerEntryType.CHARGE, "1.00", 1
+        persona_id = await self._db_session.scalar(persona_query)
+        if persona_id is not None:
+            self._skipped_line_list.append(f"persona {BROKE_PERSONA_NAME}")
+            return
+        creator_auth_user = await self._build_auth_user(create_seed_user_result, RoleType.CREATOR)
+        await self._create_persona(
+            creator_auth_user,
+            BROKE_PERSONA_NAME,
+            "Writes about starting over with an empty wallet.",
+            is_public=True,
         )
 
     async def _seed_reader(self) -> None:
