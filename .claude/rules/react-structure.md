@@ -191,7 +191,8 @@ to show. It uses `sonner`, through `toast` imported from `'sonner'`. The one
 - **No toast for what is already on screen**, such as a dialog that closes or a list
   that updates in place with nothing else to confirm.
 
-What the user reads is in sentence case, and a failure says what to do next.
+What the user reads is in sentence case, and a failure says what to do next. Page and nav
+names are proper nouns and keep their capitals: My Personas, My Posts.
 
 ### Sign-in
 
@@ -287,7 +288,7 @@ the pattern.
 ## Accessibility
 
 A link navigates and a button acts. No interactive element sits inside another. Every
-control has a label, and an icon-only button an `aria-label`. Headings descend in
+control has a label (an icon-only button: `react-styling.md` › Icons). Headings descend in
 order. A sortable column says its sort with `aria-sort`. Colour is never the only
 signal.
 

@@ -14,7 +14,8 @@ is on the page, not what was intended.
 ## Before reviewing
 
 1. Read `.claude/rules/react-structure.md` and `.claude/rules/react-styling.md` in
-   full. They are the standard. Don't review from memory of them.
+   full. They are the standard. Don't review from memory of them. Read
+   `.claude/agents/react-coder.md` › What you don't write too, for check 1.
 2. Read what the task says the PR is for: a plan section or a brief.
 3. Get the change: `git diff --stat <base>...<head>`, then
    `git diff <base>...<head> -- frontend/`.
