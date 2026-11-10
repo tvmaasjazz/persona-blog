@@ -3,15 +3,12 @@ import { toast } from 'sonner'
 
 import { queryClient } from '@/app/query-client'
 import type { paths } from '@/lib/api-schema.gen'
+import { resetQueriesExceptCurrentUser } from '@/lib/reset-queries-except-current-user'
 
 // A 401 from these says nothing new: /users/me reads signed out as null, and signing out
 // with a session the server already deleted is the outcome the user asked for
 const QUIET_UNAUTHORIZED_PATHS = new Set(['/api/users/me', '/api/auth/logout'])
 const CURRENT_USER_QUERY_KEY = ['users', 'me']
-
-function isCurrentUserQuery(queryKey: readonly unknown[]): boolean {
-  return queryKey[0] === CURRENT_USER_QUERY_KEY[0] && queryKey[1] === CURRENT_USER_QUERY_KEY[1]
-}
 
 export const apiClient = createClient<paths>({ baseUrl: '/api' })
 
@@ -28,7 +25,7 @@ apiClient.use({
       queryClient.setQueryData(CURRENT_USER_QUERY_KEY, null)
       // An open route's answer depends on who asked (is_owner, an owner's private
       // record), so everything else cached is reset and an open page refetches signed out
-      queryClient.resetQueries({ predicate: (query) => !isCurrentUserQuery(query.queryKey) })
+      void resetQueriesExceptCurrentUser(queryClient)
       toast.error('You were signed out. Sign in again.')
     }
 

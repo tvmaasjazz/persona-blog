@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from 'react'
+import type { ComponentProps, ReactNode, RefObject } from 'react'
 import { useState } from 'react'
 
 import {
@@ -10,6 +10,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import type { Button } from '@/components/ui/button'
 
@@ -24,6 +25,10 @@ type ConfirmDialogProps = {
   actionVariant?: ButtonVariant
   cancelLabel?: string
   isPending?: boolean
+  // The button that opens the dialog, so focus returns to it on close
+  trigger?: ReactNode
+  // Where focus goes on close when there is no trigger
+  returnFocusRef?: RefObject<HTMLElement | null>
   // The dialog stays open until the caller closes it
   onConfirm: () => void
 }
@@ -44,6 +49,8 @@ export function ConfirmDialog({
   actionVariant = 'destructive',
   cancelLabel = 'Cancel',
   isPending = false,
+  trigger,
+  returnFocusRef,
   onConfirm,
 }: ConfirmDialogProps) {
   const [openedText, setOpenedText] = useState<OpenedText>({ title, description, actionLabel })
@@ -59,7 +66,15 @@ export function ConfirmDialog({
 
   return (
     <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
+      <AlertDialogContent
+        onCloseAutoFocus={(event) => {
+          if (returnFocusRef?.current) {
+            event.preventDefault()
+            returnFocusRef.current.focus()
+          }
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle className="wrap-anywhere">{openedText.title}</AlertDialogTitle>
           <AlertDialogDescription>{openedText.description}</AlertDialogDescription>

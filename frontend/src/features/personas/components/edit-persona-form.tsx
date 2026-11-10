@@ -1,5 +1,5 @@
 import type { AnyFormApi } from '@tanstack/react-form'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import type { z } from 'zod'
@@ -61,6 +61,7 @@ function LoadedEditPersonaForm({ persona, publicPostCount }: LoadedEditPersonaFo
   const navigate = useNavigate()
   const updatePersona = useUpdatePersona()
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+  const submitButtonRef = useRef<HTMLButtonElement>(null)
 
   const form = useAppForm({
     ...personaFormOptions,
@@ -109,6 +110,7 @@ function LoadedEditPersonaForm({ persona, publicPostCount }: LoadedEditPersonaFo
       <PersonaForm
         form={form}
         submitLabel="Save changes"
+        submitButtonRef={submitButtonRef}
         onCancel={() => navigate(`/personas/${persona.identity}`)}
       />
       <MakePersonaPrivateDialog
@@ -117,6 +119,7 @@ function LoadedEditPersonaForm({ persona, publicPostCount }: LoadedEditPersonaFo
         personaName={persona.name}
         publicPostCount={publicPostCount}
         isPending={updatePersona.isPending}
+        returnFocusRef={submitButtonRef}
         onConfirm={handleConfirm}
       />
     </>

@@ -1,3 +1,5 @@
+import type { RefObject } from 'react'
+
 import { ConfirmDialog } from '@/components/confirm-dialog'
 
 type MakePersonaPrivateDialogProps = {
@@ -7,6 +9,7 @@ type MakePersonaPrivateDialogProps = {
   // Undefined when the count is unknown
   publicPostCount: number | undefined
   isPending: boolean
+  returnFocusRef: RefObject<HTMLElement | null>
   onConfirm: () => void
 }
 
@@ -17,6 +20,7 @@ export function MakePersonaPrivateDialog({
   personaName,
   publicPostCount,
   isPending,
+  returnFocusRef,
   onConfirm,
 }: MakePersonaPrivateDialogProps) {
   let postsLabel = 'Its public posts'
@@ -32,6 +36,7 @@ export function MakePersonaPrivateDialog({
       description={`${postsLabel} will be hidden until the persona is public again.`}
       actionLabel="Make private"
       isPending={isPending}
+      returnFocusRef={returnFocusRef}
       onConfirm={onConfirm}
     />
   )

@@ -1,3 +1,5 @@
+import type { Ref } from 'react'
+
 import { FormSection } from '@/components/form/form-section'
 import { withForm } from '@/components/form/use-app-form'
 import { Button } from '@/components/ui/button'
@@ -9,8 +11,9 @@ export const PersonaForm = withForm({
   props: {
     submitLabel: '',
     onCancel: () => {},
+    submitButtonRef: undefined as Ref<HTMLButtonElement> | undefined,
   },
-  render: function PersonaFormRender({ form, submitLabel, onCancel }) {
+  render: function PersonaFormRender({ form, submitLabel, onCancel, submitButtonRef }) {
     return (
       <form
         noValidate
@@ -110,7 +113,7 @@ export const PersonaForm = withForm({
         {/* Buttons */}
         <div className="flex gap-3">
           <form.AppForm>
-            <form.SubmitButton label={submitLabel} />
+            <form.SubmitButton label={submitLabel} ref={submitButtonRef} />
           </form.AppForm>
           <Button type="button" variant="secondary" onClick={onCancel}>
             Cancel

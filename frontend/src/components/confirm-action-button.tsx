@@ -31,21 +31,16 @@ export function ConfirmActionButton({
   const [isOpen, setIsOpen] = useState(false)
 
   return (
-    <>
-      <Button
-        type="button"
-        variant={triggerVariant}
-        aria-label={triggerAriaLabel}
-        onClick={() => setIsOpen(true)}
-      >
-        {triggerLabel}
-      </Button>
-      <ConfirmDialog
-        {...dialogProps}
-        isOpen={isOpen}
-        onOpenChange={setIsOpen}
-        onConfirm={() => onConfirm(() => setIsOpen(false))}
-      />
-    </>
+    <ConfirmDialog
+      {...dialogProps}
+      trigger={
+        <Button type="button" variant={triggerVariant} aria-label={triggerAriaLabel}>
+          {triggerLabel}
+        </Button>
+      }
+      isOpen={isOpen}
+      onOpenChange={setIsOpen}
+      onConfirm={() => onConfirm(() => setIsOpen(false))}
+    />
   )
 }

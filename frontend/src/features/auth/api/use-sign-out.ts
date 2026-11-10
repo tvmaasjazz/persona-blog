@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { apiClient } from '@/lib/api-client'
 import { createApiError } from '@/lib/api-error'
+import { resetQueriesExceptCurrentUser } from '@/lib/reset-queries-except-current-user'
 
 async function signOut(): Promise<void> {
   const { error, response } = await apiClient.POST('/auth/logout')
@@ -21,9 +22,7 @@ export function useSignOut() {
       queryClient.setQueryData(['users', 'me'], null)
       // An open page's answer depends on who asked (is_owner, an owner's private record),
       // so everything else cached is reset and an open page refetches signed out
-      queryClient.resetQueries({
-        predicate: (query) => !(query.queryKey[0] === 'users' && query.queryKey[1] === 'me'),
-      })
+      resetQueriesExceptCurrentUser(queryClient)
     },
   })
 }

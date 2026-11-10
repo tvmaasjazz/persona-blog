@@ -368,10 +368,12 @@ missing. A feature other than `auth` never reads the current user; it may invali
 `['users', 'me']` by key (› Mutations).
 
 When the server deletes a session, the API's 401 clears its cookie. On a 401 from any
-path but `/users/me` and `/auth/logout`, if a user was signed in, `lib/api-client.ts`
-sets `['users', 'me']` to `null`, resets every other query, and toasts "You were signed
-out. Sign in again.", so it happens once. Signing out resets the queries too: an open route's answer depends
-on who asked (`is_owner`, an owner's private record), and its key doesn't say who.
+path but `/users/me` and `/auth/logout`, `lib/api-client.ts` checks a user was signed
+in, then sets `['users', 'me']` to `null`, resets every other query, and toasts "You
+were signed out. Sign in again."; the check makes it happen once. Signing out resets
+every query but `['users', 'me']` too (`lib/reset-queries-except-current-user.ts`): an
+open route's answer depends on who asked (`is_owner`, an owner's private record), and
+its key doesn't say who.
 `app/query-client.ts` retries a query once after a 401, so an open route succeeds
 signed out and a guarded one redirects. A mutation's caller skips its own failure toast
 for a 401 (`isSessionEndedError(error)` from `lib/api-error.ts`), since that toast has

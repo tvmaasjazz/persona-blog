@@ -1,8 +1,6 @@
-import { ListChecks } from 'lucide-react'
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 
 import { QueryErrorState } from '@/components/query-error-state'
-import { Button } from '@/components/ui/button'
 import { useCurrentUser } from '@/features/auth/api/current-user-query'
 import { hasPermission } from '@/features/auth/permissions'
 import { PublicBlogPostFeed } from '@/features/blog-posts/components/public-blog-post-feed'
@@ -49,23 +47,13 @@ function LoadedPersonaPage({ personaIdentity }: LoadedPersonaPageProps) {
   const canWritePost = persona.is_owner && hasPermission(currentUser, 'GENERATE_TEXT_RUN_WRITE')
   const canManagePosts = persona.is_owner && hasPermission(currentUser, 'BLOG_POST_WRITE')
 
-  // A private persona's posts are hidden from readers, so the owner is told why none show
-  const emptyMessage =
-    persona.is_owner && !persona.is_public ? (
-      <div className="flex flex-wrap items-center gap-3">
-        <p className="text-muted-foreground">Readers see no posts while this persona is private.</p>
-        {canManagePosts && (
-          <Button asChild variant="secondary">
-            <Link to={`/posts?persona=${persona.identity}`}>
-              <ListChecks aria-hidden />
-              Manage posts
-            </Link>
-          </Button>
-        )}
-      </div>
-    ) : (
-      <p className="text-muted-foreground">No posts yet.</p>
-    )
+  // The owner is told why no posts show, since drafts, scheduled and private posts don't
+  let emptyMessage = 'No posts yet.'
+  if (persona.is_owner) {
+    emptyMessage = persona.is_public
+      ? 'No public posts yet.'
+      : 'No posts show here while this persona is private.'
+  }
 
   // Header, the owner's voice details, then the posts
   return (
@@ -83,7 +71,7 @@ function LoadedPersonaPage({ personaIdentity }: LoadedPersonaPageProps) {
           sort_by: 'PUBLISHED_AT',
           sort_direction: 'DESC',
         }}
-        emptyMessage={emptyMessage}
+        emptyMessage={<p className="text-muted-foreground">{emptyMessage}</p>}
       />
     </div>
   )
