@@ -49,8 +49,10 @@ Run commands from `frontend/`, and only these:
 - `npx playwright test <your files>` for end-to-end flows
 - `npm run fmt -- <your files>` and `npm run lint -- <your files>`
 
-Run only your own files, never the whole suite: other test writers may be running in
-parallel. No `npm install`, no `git`, and don't start or stop servers.
+Write end-to-end flows only once `react-testing.md` › End-to-end tests is filled in;
+until then, report that the setup is missing. Run only your own files, never the whole
+suite: other test writers may be running in parallel. No `npm install`, no `git`, and
+don't start or stop servers.
 
 When a test fails, work out which side is wrong before changing anything:
 

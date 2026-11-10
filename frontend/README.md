@@ -1,7 +1,7 @@
 # Persona Blog frontend
 
 React + Vite + TypeScript, styled with Tailwind and shadcn/ui. Conventions are in
-`.claude/rules/react-structure.md` and `.claude/rules/react-styling.md`.
+`.claude/rules/react-structure.md`, `react-styling.md` and `react-testing.md`.
 
 Run from `frontend/`:
 
