@@ -42,13 +42,14 @@ npm run fmt                  # format with oxfmt
 npm run fmt:check            # check formatting without writing
 npm run lint                 # oxlint
 npm run build                # type-check and build to dist/
+npm run test                 # Vitest unit tests
 npm run api:types            # regenerate src/lib/api-schema.gen.ts (needs the API on 8000)
 npx shadcn@latest add <name> # add a shadcn/ui component to src/components/ui/
 ```
 
-Before committing, run `ruff check` and `ruff format --check` for backend changes, and `npm run fmt:check`,
-`npm run lint` and `npm run build` for frontend changes. `pytest` must pass before
-the PR is ready to merge (see Pull requests).
+Before committing, run `ruff check` and `ruff format --check` for backend changes, and
+`npm run fmt:check`, `npm run lint`, `npm run build` and `npm run test` for frontend
+changes. `pytest` must pass before the PR is ready to merge (see Pull requests).
 
 ### Commands for Tyler to run
 
@@ -114,7 +115,8 @@ An agent in `.claude/agents/` is named for the side of the stack it works on:
 
 - `react-` for frontend agents that write or review React code: `react-coder`,
   `react-reviewer`
-- `fe-` for other frontend work, such as styling or the frontend docs: `fe-docs-auditor`
+- `fe-` for other frontend work, such as styling, tests or the frontend docs:
+  `fe-docs-auditor`, `fe-test-writer`
 - `be-` for backend agents: `be-test-writer`, `be-docs-auditor`. Agents named for a
   backend tool, `fastapi-coder` and `schema-coder`, keep the tool name instead
 

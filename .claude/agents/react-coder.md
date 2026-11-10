@@ -69,7 +69,7 @@ The rules files say where each of these lives and how it is shaped.
 - **`src/lib/api-schema.gen.ts`**: generated, never hand-edited. If a route you need
   is missing from it, the backend doesn't have it yet or the file is stale. Report it
   rather than writing a type by hand.
-- **Tests.** The frontend has no test setup yet.
+- **Tests.** `fe-test-writer` writes them, to `react-testing.md`.
 - **Anything the rules don't give a home.** If the rules don't say where something
   lives, don't choose; report it as a judgement call with a proposed rule.
 

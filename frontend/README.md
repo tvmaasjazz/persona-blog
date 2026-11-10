@@ -9,6 +9,7 @@ Run from `frontend/`:
 npm install       # install dependencies
 npm run dev       # dev server at http://localhost:5173
 npm run build     # type-check and build to dist/
+npm run test      # Vitest unit tests
 npm run fmt       # format with oxfmt
 npm run fmt:check # check formatting without writing
 npm run lint      # oxlint
