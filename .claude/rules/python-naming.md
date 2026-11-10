@@ -51,6 +51,10 @@ db session, no HTTP client, no settings held as attributes. Values it needs are
 arguments, and a log line is fine. The moment something needs a collaborator it is a
 service, not a util.
 
+A class in `scripts/` takes the same suffixes. One that holds the script's
+collaborators and does its work is a `<Script>Service`, like `DevSeedService` in
+`scripts/dev_seed.py`.
+
 Two classes take no suffix. SQLAlchemy column types are named for the value they
 hold (`UtcDateTime`). `AuthUser`, the signed-in user in request scope, is named for
 what it is everywhere it's passed.

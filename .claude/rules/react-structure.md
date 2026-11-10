@@ -79,18 +79,22 @@ stay in `api/`. A hook with no API call that more than one feature uses goes in
 Plain functions and constants that only one feature uses (no React, no API call) go
 in a kebab-case `.ts` file at the feature root, named for what it holds:
 `generate-text/run-steps.ts` holds the step names and the text built from a run. One
-used by more than one feature moves to `lib/`.
+used by more than one feature moves to `lib/`, messages included (the pattern is
+`lib/invite-messages.ts`).
 
 A feature never imports from another feature. When a page needs two features, the
 route file in `routes/` composes them, the way a backend lib composes two services
 instead of one domain importing another. What more than one feature needs moves to
-`components/` or `lib/`.
+`components/` or `lib/`. `app/` imports from `lib/`; `lib/` imports from `app/` only
+for the one QueryClient in `app/query-client.ts`.
 
 `routes/` files are thin: they lay out feature components and read route and search
 params. A route never calls `apiClient` and holds no business logic. It may call
 features' query hooks to pass one feature's data into another as props, or to choose
 which feature's component to render, which is how it composes them: `write-page.tsx`
-reads `usePersonaOptions()` and hands the personas to the generate form.
+reads `usePersonaOptions()` and hands the personas to the generate form. A query lives
+in the feature that owns its resource, whoever shows it: a persona's public post count
+is in `blog-posts`, and the edit-persona route passes it to the persona form.
 
 No barrel `index.ts` files. Import from the file that defines the thing.
 
@@ -123,6 +127,11 @@ naming the backend enum. When the backend changes, run
 `npm run api:types` with the backend API running on port 8000 and commit the
 regenerated file. A type error it causes is the change working as intended.
 
+A failed request, in a query or a mutation, throws `createApiError(error, response)`
+from `lib/api-error.ts`: an `ApiError` carrying the HTTP `status` and the body's
+`detail`, so a caller can tell a 409 from anything else. The one exception is a 401
+from `/users/me` (› Queries).
+
 In dev, Vite proxies `/api/*` to the API on `localhost:8000` and strips the `/api`
 prefix, so the browser sees one origin and the session cookie needs no CORS. The
 backend routes themselves have no `/api` prefix.
@@ -152,15 +161,19 @@ export function useCurrentUser() {
   `['personas', personaIdentity, 'public']`) and second for a page
   (`['blog-posts', 'public', params]`, with `'infinite'` last when infinite).
   Invalidating the resource (`['blog-posts']`) covers all of them.
-- A failed request throws `createApiError(error, response)` from `lib/api-error.ts`:
-  an `ApiError` carrying the HTTP `status` and the body's `detail`, so a caller can
-  tell a 409 from anything else. The one exception is the 401 below.
 - A 401 from `/users/me` means signed out. Its query function returns `null` rather
   than throwing, so `useCurrentUser()` gives the user or `null`, never an error state.
   A 401 from any other route is a deleted session (› Permissions and sessions).
 - Never copy query data into `useState` or context. Read it from the hook wherever
   it's needed; TanStack Query dedupes the request.
-- No `useEffect` for fetching data or for deriving one value from another.
+- No `useEffect` for fetching data or for deriving one value from another. An effect
+  may invalidate a key when a polled value changes (`use-run-balance-refresh.ts`); it
+  never fetches.
+- A query never overrides `retry`: `app/query-client.ts` retries once after a 401,
+  which a deleted session needs (› Permissions and sessions).
+- A fetch function two queries share, such as a page query and an infinite one over the
+  same route, gets its own file in `api/`, exported with no hook. The pattern is
+  `features/blog-posts/api/public-blog-post-page-query.ts`.
 
 ### Mutations
 
@@ -168,6 +181,13 @@ One hook per mutation, named `use` + the action: `useSignOut`, `useGenerateBlogP
 It updates or invalidates every query key the change affects in `onSuccess`, so
 callers never refetch by hand. A query key names an API resource, so a hook invalidates
 another feature's resource by its key, without importing from that feature.
+
+- A response that copies another resource's fields (a post's `persona_name`) counts as
+  affected: a persona mutation invalidates `['blog-posts']` too.
+- A hook invalidates unconditionally; it takes no flag from the caller to choose.
+- When an error means the cache is out of date, such as a 409 because the row moved
+  on, it invalidates on that error too (`onError` or `onSettled`).
+- A mutation whose result nobody sees, such as recording a view, invalidates nothing.
 
 The hook owns the cache and nothing else: it never toasts, navigates, or sets form
 state. The component that calls `mutate` does those, in the second argument, because
@@ -195,9 +215,17 @@ A paged route is read through a page query. The pattern is
 - `placeholderData: keepPreviousData`, so a page change keeps the old rows on screen.
 - The page, search and sort live in the URL as `page`, `q`, `sort` and `dir`, read and
   written only by the route file through `useListSearchParams` from
-  `lib/use-list-search-params.ts`. A changed search, sort or filter returns to page 1.
-  The list component takes its rows and states as props.
-- A list someone manages has `ListSearchBox` and `ListPager` from `components/`.
+  `lib/use-list-search-params.ts`. A changed search, sort or filter returns to page 1
+  and replaces the history entry; a page change pushes one. A list with one order
+  passes no sort options.
+- A list's sort values are a constant in its route file, a subset of the API's sort
+  enum.
+- A list someone manages has `ListSearchBox` and `ListPager` from `components/`. The
+  route file renders `ListPager` under the list; the list component takes its rows and
+  states as props.
+- A page past the last shows `PastLastPageNotice` from `components/`, which offers page
+  1. The list component takes `pagination` and `onPageChange` for it, as `DataTable`
+  does.
 - A list a reader scrolls is infinite: `useInfiniteQuery` over the same paged route,
   its pages flattened and de-duplicated by `identity`, with `InfiniteScrollSentinel`
   from `components/` at the end. Its key ends in `'infinite'`, so it never shares one
@@ -218,8 +246,7 @@ to show. It uses `sonner`, through `toast` imported from `'sonner'`. The one
   `apiErrorMessage(error)` from `lib/api-error.ts`. The exception is generating
   text: a failed generate or resume call shows a fixed message from
   `generate-text/generate-text-error-messages.ts`, because its detail can carry
-  provider internals. A 402 (the balance) and a 409 on start or resume get their
-  own fixed messages there.
+  provider internals.
 - **Queries don't toast.** A failed query renders an error state where its data
   would be. The one exception is the signed-out toast (› Permissions and sessions).
 - **No toast for what is already on screen**, such as a dialog that closes or a list
@@ -227,19 +254,6 @@ to show. It uses `sonner`, through `toast` imported from `'sonner'`. The one
 
 What the user reads is in sentence case, and a failure says what to do next. Page
 and nav names are proper nouns and keep their capitals: My Personas, My Posts.
-
-### Sign-in
-
-Google sign-in is a full-page navigation, not a request: an `<a href>` to
-`/api/auth/google/login`, built once in `GoogleSignInButton` (`components/`), with
-`invite_code` when there is one. The backend redirects to Google, Google redirects to
-the callback, and the callback sets the cookie and redirects back to the app. A failed
-or invited sign-in lands on `/sign-in` with `error`, `invite_error` or `invite`, and
-`features/auth/sign-in-result-messages.ts` turns each code into what the page says.
-
-`POST /invites/check` is read as a query
-(`features/invites/api/invite-status-query.ts`), since it changes nothing: the code
-goes in the body, and `gcTime: 0` drops it with the page.
 
 ## Forms
 
@@ -272,6 +286,13 @@ A feature's form has three parts. `features/personas/` is the example:
     rather than a hand-built button
   - then toasts and navigates
 
+A form with one action and no fields shared with another form keeps its fields and its
+`onSubmit` in one component. The pattern is
+`features/admin/components/credit-grant-form.tsx`.
+A field schema two forms in a feature share goes in `<field>-schema.ts` at the feature
+root, like `features/admin/credit-amount-schema.ts`, and is nested into each form's
+schema.
+
 Validation:
 
 - `validationLogic: revalidateLogic()`, with the schema as `validators.onDynamic`.
@@ -283,13 +304,12 @@ Validation:
   `setFieldServerError(formApi, '<field>', message)`. `FormField` clears it when the
   user edits the field. Any other API error is a toast (› Toasts).
 
-Fields reused across forms, like the blog post publishing controls, are a field group:
-`withFieldGroup` from `use-app-form.ts`, defined in the feature's `components/` with
-its `defaultValues`. A parent form nests the values under a key and renders
-`<PublishingFields form={form} fields="publishing" isPersonaPublic={...} />`, so the
-same fields serve more than one form. The group's Zod schema is exported from its own
-`<group>-form-schema.ts` at the feature root, like `publishing-form-schema.ts`, and
-nested into each parent's schema.
+Fields reused across forms are a field group: `withFieldGroup` from `use-app-form.ts`,
+defined in the feature's `components/` with its `defaultValues`. A parent form nests
+the values under a key and passes it as `fields`, so the same fields serve more than
+one form. The group's Zod schema is exported from its own `<group>-form-schema.ts` at
+the feature root and nested into each parent's schema. The pattern is
+`features/blog-posts/components/publishing-fields.tsx`.
 
 A new kind of control, such as a select or date picker, is a new field component in
 `components/form/`, registered in `use-app-form.ts`. For a form shape the app doesn't
@@ -322,9 +342,13 @@ A route that needs something from the layout says so in its `handle`, typed as
 ## States
 
 A view that loads data has a loading, an empty and an error state, and a not-found
-state when it's read by identity. A button is disabled while its request runs. A
-destructive or far-reaching action confirms first through `ConfirmActionButton`
-(`components/`); its caller closes the dialog on success, so a failure leaves it open.
+state when it's read by identity; a list has none, and a failed list shows its error
+state. A query that only fills a control, such as a filter's options, fails quietly:
+the control shows what it has, and the main list keeps its own states. A button is
+disabled while its request runs. A destructive or far-reaching action confirms first
+through `ConfirmActionButton` (`components/`); its caller closes the dialog on
+success, so a failure leaves it open, except a 409 that means the row moved on, which
+closes it.
 A confirm opened from state rather than its own button, such as a form's submit, uses
 `ConfirmDialog` (`components/`), which `ConfirmActionButton` is built on.
 Build the states from `CardListSkeleton` and `QueryErrorState` in `components/`; a
@@ -335,22 +359,30 @@ search apart from having nothing.
 
 A link navigates and a button acts. No interactive element sits inside another. Every
 control has a label (an icon-only button: `react-styling.md` › Icons). Headings descend
-in order. A sortable column says its sort with `aria-sort`. Colour is never the only
+in order, and every state of a page, loading included, has its `h1`. A sortable column
+says its sort with `aria-sort`. A label hidden at a breakpoint stays in the accessible
+name with `sr-only <bp>:not-sr-only`, not an `aria-label`. Colour is never the only
 signal.
 
 ## Trust
 
 Hiding or disabling a control is a courtesy, never the check: the API refuses, and the
 page handles the refusal. A secret such as an invite code stays out of query keys that
-outlive the page, toasts and logs. No `dangerouslySetInnerHTML`.
+outlive the page, toasts and logs. A mutation that returns a secret, such as a new
+invite's link, sets `gcTime: 0` and is `reset()` once the secret has been shown. No
+`dangerouslySetInnerHTML`.
 
 ## Permissions and sessions
 
-The UI checks permissions, never roles: `hasPermission(user, 'PERSONA_WRITE')` from
-`features/auth/permissions.ts`. Only these check: the nav in `AppLayout`, the `auth`
-feature's own components (the user menu, the balance banner), the `RequirePermission`
-layout route (the pattern is `features/auth/components/require-permission.tsx`), and a
-route file passing `canEdit` or the like to a feature component. `RequirePermission`
+The UI checks the signed-in user's permissions, never their role:
+`hasPermission(user, 'PERSONA_WRITE')` from `features/auth/permissions.ts`. A page about
+another user may branch on that user's `role`, since it's data on screen. Only these
+check: the nav in `AppLayout`, the `auth` feature's own components (the user menu, the
+balance banner), the `RequirePermission` layout route (the pattern is
+`features/auth/components/require-permission.tsx`), and a route file. The route file
+passes `canEdit` or the like to a feature component, combining `hasPermission` with the
+response's `is_owner` for an owner's record, and passes `enabled` to a query the viewer
+may lack the permission for, so it never asks for a 403. `RequirePermission`
 redirects when signed out and shows a no-access message when the permission is
 missing. A feature other than `auth` never reads the current user; it may invalidate
 `['users', 'me']` by key (› Mutations).
@@ -366,6 +398,19 @@ its key doesn't say who.
 signed out and a guarded one redirects. A mutation's caller skips its own failure toast
 for a 401 (`isSessionEndedError(error)` from `lib/api-error.ts`), since that toast has
 said it.
+
+## Sign-in
+
+Google sign-in is a full-page navigation, not a request: an `<a href>` to
+`/api/auth/google/login`, built once in `GoogleSignInButton` (`components/`), with
+`invite_code` when there is one. The backend redirects to Google, Google redirects to
+the callback, and the callback sets the cookie and redirects back to the app. A failed
+or invited sign-in lands on `/sign-in` with `error`, `invite_error` or `invite`, and
+`features/auth/sign-in-result-messages.ts` turns each code into what the page says.
+
+`POST /invites/check` is read as a query
+(`features/invites/api/invite-status-query.ts`), since it changes nothing: the code
+goes in the body, and `gcTime: 0` drops it with the page.
 
 ## Naming
 
