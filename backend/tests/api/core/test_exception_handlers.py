@@ -1,6 +1,8 @@
+from uuid import uuid4
+
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, Response
 
 from libs.core.exceptions import (
     ConflictException,
@@ -56,3 +58,95 @@ async def test_unhandled_error_returns_500_without_internals(fastapi_app: FastAP
 
     assert raise_unhandled_error_response.status_code == 500
     assert "secret-internal-detail" not in raise_unhandled_error_response.text
+
+
+class _SessionExpiredException(UnauthorizedException):
+    pass
+
+
+def _find_cleared_session_cookie_headers(response: Response) -> list[str]:
+    set_cookie_headers = response.headers.get_list("set-cookie")
+    return [header for header in set_cookie_headers if header.startswith('sid=""')]
+
+
+@pytest.mark.parametrize(
+    "unauthorized_exception",
+    [
+        pytest.param(UnauthorizedException("Not signed in"), id="standard"),
+        pytest.param(_SessionExpiredException("Session expired"), id="subclass"),
+    ],
+)
+async def test_exception_handler_unauthorized_deletes_session_cookie(
+    fastapi_app: FastAPI, api_client: AsyncClient, unauthorized_exception: Exception
+) -> None:
+    @fastapi_app.get("/raise-unauthorized-exception")
+    async def raise_unauthorized_exception() -> None:
+        raise unauthorized_exception
+
+    raise_unauthorized_exception_response = await api_client.get("/raise-unauthorized-exception")
+
+    cleared_cookie_headers = _find_cleared_session_cookie_headers(
+        raise_unauthorized_exception_response
+    )
+    assert raise_unauthorized_exception_response.status_code == 401
+    assert len(cleared_cookie_headers) == 1
+    assert "Max-Age=0" in cleared_cookie_headers[0]
+    assert "Path=/" in cleared_cookie_headers[0]
+
+
+async def test_exception_handler_guarded_route_without_cookie_deletes_session_cookie(
+    api_client: AsyncClient,
+) -> None:
+    find_user_blog_post_page_response = await api_client.get("/blog-posts")
+
+    cleared_cookie_headers = _find_cleared_session_cookie_headers(find_user_blog_post_page_response)
+    assert find_user_blog_post_page_response.status_code == 401
+    assert len(cleared_cookie_headers) == 1
+
+
+async def test_exception_handler_guarded_route_with_unknown_session_deletes_session_cookie(
+    api_client: AsyncClient,
+) -> None:
+    api_client.cookies.set("sid", "not-a-real-session-id")
+
+    find_user_blog_post_page_response = await api_client.get("/blog-posts")
+
+    cleared_cookie_headers = _find_cleared_session_cookie_headers(find_user_blog_post_page_response)
+    assert find_user_blog_post_page_response.status_code == 401
+    assert len(cleared_cookie_headers) == 1
+
+
+async def test_exception_handler_open_route_with_stale_session_deletes_session_cookie(
+    api_client: AsyncClient,
+) -> None:
+    api_client.cookies.set("sid", "not-a-real-session-id")
+
+    find_public_blog_post_response = await api_client.get(f"/blog-posts/{uuid4()}/public")
+
+    cleared_cookie_headers = _find_cleared_session_cookie_headers(find_public_blog_post_response)
+    assert find_public_blog_post_response.status_code == 401
+    assert len(cleared_cookie_headers) == 1
+
+
+async def test_exception_handler_open_route_after_stale_session_cleared_succeeds(
+    api_client: AsyncClient,
+) -> None:
+    api_client.cookies.set("sid", "not-a-real-session-id", domain="test", path="/")
+    await api_client.get("/blog-posts/public")
+
+    find_public_blog_post_page_response = await api_client.get("/blog-posts/public")
+
+    assert find_public_blog_post_page_response.status_code == 200
+
+
+async def test_exception_handler_non_unauthorized_error_sets_no_cookie(
+    fastapi_app: FastAPI, api_client: AsyncClient
+) -> None:
+    @fastapi_app.get("/raise-not-found-exception")
+    async def raise_not_found_exception() -> None:
+        raise NotFoundException("Blog post 7 not found")
+
+    raise_not_found_exception_response = await api_client.get("/raise-not-found-exception")
+
+    assert raise_not_found_exception_response.status_code == 404
+    assert raise_not_found_exception_response.headers.get_list("set-cookie") == []

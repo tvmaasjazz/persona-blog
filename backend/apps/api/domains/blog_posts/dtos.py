@@ -113,6 +113,9 @@ class BlogPostResponseDto(BaseModel):
     identity: UUID
     content_item_identity: UUID
     persona_identity: UUID
+    persona_name: str
+    persona_avatar_url: str | None
+    is_persona_public: bool
     title: str
     subtitle: str | None
     body: str
@@ -128,6 +131,9 @@ class BlogPostResponseDto(BaseModel):
             identity=blog_post_detail_result.identity,
             content_item_identity=content_item_result.identity,
             persona_identity=content_item_result.persona.identity,
+            persona_name=content_item_result.persona.name,
+            persona_avatar_url=content_item_result.persona.avatar_url,
+            is_persona_public=content_item_result.persona.is_public,
             title=blog_post_detail_result.title,
             subtitle=blog_post_detail_result.subtitle,
             body=blog_post_detail_result.body,
@@ -142,6 +148,9 @@ class PublicBlogPostResponseDto(BaseModel):
     identity: UUID
     content_item_identity: UUID
     persona_identity: UUID
+    persona_name: str
+    persona_avatar_url: str | None
+    is_persona_public: bool
     title: str
     subtitle: str | None
     body: str
@@ -161,6 +170,9 @@ class PublicBlogPostResponseDto(BaseModel):
             identity=blog_post_detail_result.identity,
             content_item_identity=content_item_result.identity,
             persona_identity=content_item_result.persona.identity,
+            persona_name=content_item_result.persona.name,
+            persona_avatar_url=content_item_result.persona.avatar_url,
+            is_persona_public=content_item_result.persona.is_public,
             title=blog_post_detail_result.title,
             subtitle=blog_post_detail_result.subtitle,
             body=blog_post_detail_result.body,
@@ -202,6 +214,7 @@ class BlogPostSummaryResponseDto(BaseModel):
     persona_identity: UUID
     persona_name: str
     persona_avatar_url: str | None
+    is_persona_public: bool
     title: str
     subtitle: str | None
     is_public: bool
@@ -220,6 +233,7 @@ class BlogPostSummaryResponseDto(BaseModel):
             persona_identity=content_item_result.persona.identity,
             persona_name=content_item_result.persona.name,
             persona_avatar_url=content_item_result.persona.avatar_url,
+            is_persona_public=content_item_result.persona.is_public,
             title=blog_post_summary_result.title,
             subtitle=blog_post_summary_result.subtitle,
             is_public=content_item_result.is_public,

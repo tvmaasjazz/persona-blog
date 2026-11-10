@@ -271,6 +271,9 @@ async def test_create_blog_post_from_generate_text_run_returns_identity_and_pers
         "identity": str(blog_post_record.identity),
         "content_item_identity": str(content_item_record.identity),
         "persona_identity": persona_identity,
+        "persona_name": "Marta Quill",
+        "persona_avatar_url": None,
+        "is_persona_public": False,
         "title": "The Title",
         "subtitle": "A subtitle.",
         "body": "A paragraph.\n\n## A Section\n\nMore text.",
@@ -559,6 +562,7 @@ async def test_find_user_blog_post_page_returns_only_signed_in_users_summaries_n
                 "persona_identity": str(persona_record.identity),
                 "persona_name": "Slow Mornings Sam",
                 "persona_avatar_url": "https://example.com/sam.png",
+                "is_persona_public": False,
                 "title": "Newest Published",
                 "subtitle": "A Subtitle",
                 "is_public": True,
@@ -572,6 +576,7 @@ async def test_find_user_blog_post_page_returns_only_signed_in_users_summaries_n
                 "persona_identity": str(persona_record.identity),
                 "persona_name": "Slow Mornings Sam",
                 "persona_avatar_url": "https://example.com/sam.png",
+                "is_persona_public": False,
                 "title": "Oldest Draft",
                 "subtitle": None,
                 "is_public": False,
@@ -852,7 +857,12 @@ async def test_find_user_blog_post_page_persona_identity_limits_rows_to_that_per
 async def test_find_blog_post_returns_blog_post_response(
     api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
 ) -> None:
-    persona_record = await insert_persona_row(db_session, created_by_id=signed_in_user.id)
+    persona_record = await insert_persona_row(
+        db_session,
+        created_by_id=signed_in_user.id,
+        name="Slow Mornings Sam",
+        avatar_url="https://example.com/sam.png",
+    )
     content_item_record = await insert_content_item_row(
         db_session, created_by_id=signed_in_user.id, persona_id=persona_record.id
     )
@@ -872,6 +882,9 @@ async def test_find_blog_post_returns_blog_post_response(
         "identity": str(blog_post_record.identity),
         "content_item_identity": str(content_item_record.identity),
         "persona_identity": str(persona_record.identity),
+        "persona_name": "Slow Mornings Sam",
+        "persona_avatar_url": "https://example.com/sam.png",
+        "is_persona_public": False,
         "title": "A Title",
         "subtitle": "A Subtitle",
         "body": VALID_BLOG_POST_BODY,
@@ -880,6 +893,27 @@ async def test_find_blog_post_returns_blog_post_response(
         "created_at": ANY,
         "updated_at": ANY,
     }
+
+
+async def test_find_blog_post_public_persona_flags_persona_public(
+    api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
+) -> None:
+    persona_record = await insert_persona_row(
+        db_session, created_by_id=signed_in_user.id, is_public=True
+    )
+    content_item_record = await insert_content_item_row(
+        db_session, created_by_id=signed_in_user.id, persona_id=persona_record.id
+    )
+    blog_post_record = await insert_blog_post_row(
+        db_session, created_by_id=signed_in_user.id, content_item_id=content_item_record.id
+    )
+    await db_session.commit()
+
+    find_blog_post_response = await api_client.get(f"/blog-posts/{blog_post_record.identity}")
+
+    response_body = find_blog_post_response.json()
+    assert find_blog_post_response.status_code == 200
+    assert response_body["is_persona_public"] is True
 
 
 async def test_find_blog_post_never_inserted_returns_404(
@@ -921,6 +955,9 @@ async def test_find_public_blog_post_signed_out_published_post_returns_public_re
         "identity": other_blog_post_identity,
         "content_item_identity": other_content_item_identity,
         "persona_identity": other_persona_identity,
+        "persona_name": "Public Persona",
+        "persona_avatar_url": None,
+        "is_persona_public": True,
         "title": "Public Post",
         "subtitle": None,
         "body": VALID_BLOG_POST_BODY,
@@ -950,7 +987,12 @@ async def test_find_public_blog_post_signed_in_as_another_user_is_not_owner(
 async def test_find_public_blog_post_signed_in_as_owner_private_post_flags_owner(
     api_client: AsyncClient, signed_in_user: UserOrm, db_session: AsyncSession
 ) -> None:
-    persona_record = await insert_persona_row(db_session, created_by_id=signed_in_user.id)
+    persona_record = await insert_persona_row(
+        db_session,
+        created_by_id=signed_in_user.id,
+        name="Slow Mornings Sam",
+        avatar_url="https://example.com/sam.png",
+    )
     content_item_record = await insert_content_item_row(
         db_session, created_by_id=signed_in_user.id, persona_id=persona_record.id
     )
@@ -972,6 +1014,9 @@ async def test_find_public_blog_post_signed_in_as_owner_private_post_flags_owner
         "identity": str(blog_post_record.identity),
         "content_item_identity": str(content_item_record.identity),
         "persona_identity": str(persona_record.identity),
+        "persona_name": "Slow Mornings Sam",
+        "persona_avatar_url": "https://example.com/sam.png",
+        "is_persona_public": False,
         "title": "A Title",
         "subtitle": "A Subtitle",
         "body": VALID_BLOG_POST_BODY,
@@ -1668,6 +1713,7 @@ async def test_find_public_blog_post_page_signed_out_returns_other_users_publish
                 "persona_identity": other_persona_identity,
                 "persona_name": "Public Persona",
                 "persona_avatar_url": None,
+                "is_persona_public": True,
                 "title": "Public Post",
                 "subtitle": None,
                 "is_public": True,
