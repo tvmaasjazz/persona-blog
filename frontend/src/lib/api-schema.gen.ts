@@ -53,7 +53,8 @@ export interface paths {
         };
         /**
          * Get Google Login
-         * @description Redirects the browser to Google's sign-in page.
+         * @description Redirects the browser to Google's sign-in page, carrying the invite code; an invite
+         *     that can't be used redirects to the frontend's sign-in page with the reason instead.
          */
         get: operations["get_google_login_auth_google_login_get"];
         put?: never;
@@ -73,11 +74,33 @@ export interface paths {
         };
         /**
          * Get Google Callback
-         * @description Completes Google sign-in, sets the session cookie and redirects to the frontend.
+         * @description Completes Google sign-in, sets the session cookie and redirects to the frontend; a
+         *     known sign-in failure redirects to its sign-in page with the error code instead.
          */
         get: operations["get_google_callback_auth_google_callback_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invites/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Find Invite Status
+         * @description Returns an invite code's status and credit amount, open to anyone holding the code;
+         *     404 for an unknown code.
+         */
+        post: operations["find_invite_status_invites_check_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -112,10 +135,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Find User Persona List
-         * @description Lists the signed-in user's own personas, newest first.
+         * Find User Persona Page
+         * @description Returns a page of the signed-in user's own personas, newest first by default;
+         *     searchable by name.
          */
-        get: operations["find_user_persona_list_personas_get"];
+        get: operations["find_user_persona_page_personas_get"];
         put?: never;
         /**
          * Create Persona
@@ -137,7 +161,7 @@ export interface paths {
         };
         /**
          * Find Persona
-         * @description Returns one persona, or 404 when it doesn't exist or the user can't access it.
+         * @description Returns one of the signed-in user's own personas in full, or 404 for anyone else's.
          */
         get: operations["find_persona_personas__persona_identity__get"];
         /**
@@ -156,6 +180,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/personas/{persona_identity}/public": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find Public Persona
+         * @description Returns a persona's public view to anyone, signed in or not; 404 unless it is public
+         *     or the signed-in user's own.
+         */
+        get: operations["find_public_persona_personas__persona_identity__public_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/blog-posts": {
         parameters: {
             query?: never;
@@ -164,16 +209,39 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Find User Blog Post List
-         * @description Lists the signed-in user's blog posts, optionally only those of one persona.
+         * Find User Blog Post Page
+         * @description Returns a page of the signed-in user's blog posts without their bodies, newest first by
+         *     default, optionally only those of one persona; searchable by title and subtitle.
          */
-        get: operations["find_user_blog_post_list_blog_posts_get"];
+        get: operations["find_user_blog_post_page_blog_posts_get"];
         put?: never;
         /**
          * Create Blog Post
          * @description Creates a blog post, or 422 when it is public but its persona is private.
          */
         post: operations["create_blog_post_blog_posts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/blog-posts/public": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find Public Blog Post Page
+         * @description Returns a page of published public blog posts, the same to anyone, signed in or not:
+         *     the homepage feed sorted by FEED_SCORE, or a persona's page filtered by persona;
+         *     searchable by title, subtitle and persona name.
+         */
+        get: operations["find_public_blog_post_page_blog_posts_public_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -189,7 +257,7 @@ export interface paths {
         };
         /**
          * Find Blog Post
-         * @description Returns one blog post, or 404 when it doesn't exist or the user can't access it.
+         * @description Returns one of the signed-in user's own blog posts, or 404 for anyone else's.
          */
         get: operations["find_blog_post_blog_posts__blog_post_identity__get"];
         /**
@@ -203,6 +271,27 @@ export interface paths {
          * @description Soft-deletes a blog post, or 404 when it is missing and 403 when not its creator.
          */
         delete: operations["delete_blog_post_blog_posts__blog_post_identity__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/blog-posts/{blog_post_identity}/public": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find Public Blog Post
+         * @description Returns a blog post's public view to anyone, signed in or not; 404 unless it is
+         *     published and public or the signed-in user's own.
+         */
+        get: operations["find_public_blog_post_blog_posts__blog_post_identity__public_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -222,6 +311,27 @@ export interface paths {
          * @description Saves a completed generate text run's output as a blog post, or 404 when no such run.
          */
         post: operations["create_blog_post_from_generate_text_run_blog_posts_from_generate_text_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/content-items/{content_item_identity}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Record Content Item View
+         * @description Records a view of a content item, once per reader per day, with how far it was read;
+         *     404 when the reader can't see the item, and nothing is recorded for its own creator.
+         */
+        put: operations["record_content_item_view_content_items__content_item_identity__view_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -288,6 +398,178 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find User Page
+         * @description Returns one page of users with their role and balance, newest first unless sorted
+         *     otherwise.
+         */
+        get: operations["find_user_page_admin_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{user_identity}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find User
+         * @description Returns one user with their role and balance; 404 for an unknown user.
+         */
+        get: operations["find_user_admin_users__user_identity__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{user_identity}/credit-ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find User Credit Ledger Page
+         * @description Returns one page of the user's credit ledger, newest first unless sorted otherwise; 404
+         *     for an unknown user.
+         */
+        get: operations["find_user_credit_ledger_page_admin_users__user_identity__credit_ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{user_identity}/credit-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grant User Credits
+         * @description Grants the user credits and makes a reader a creator, signing them out everywhere so
+         *     they sign in with the new role; 404 for an unknown user, 409 for the system user.
+         */
+        post: operations["grant_user_credits_admin_users__user_identity__credit_grants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find Invite Page
+         * @description Returns one page of invites with their status and who used them, newest first unless
+         *     sorted otherwise.
+         */
+        get: operations["find_invite_page_admin_invites_get"];
+        put?: never;
+        /**
+         * Create Invite
+         * @description Creates an invite and returns its identity and link; the link is the only time the
+         *     code is shown.
+         */
+        post: operations["create_invite_admin_invites_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/invites/{invite_identity}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Invite
+         * @description Revokes an unused invite; 404 for an unknown invite, 409 for a used one.
+         */
+        post: operations["revoke_invite_admin_invites__invite_identity__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{user_identity}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set User Role
+         * @description Sets the user's role to reader or creator, signing them out everywhere and, when a
+         *     creator becomes a reader, failing their unfinished runs; 404 for an unknown user, 409
+         *     for an admin.
+         */
+        put: operations["set_user_role_admin_users__user_identity__role_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{user_identity}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set User Active
+         * @description Suspends or reactivates the user; a suspension signs them out everywhere and fails
+         *     their unfinished runs; 404 for an unknown user, 409 for an admin.
+         */
+        put: operations["set_user_active_admin_users__user_identity__active_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/llm/complete": {
         parameters: {
             query?: never;
@@ -312,6 +594,162 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdminCreditGrantDto */
+        AdminCreditGrantDto: {
+            /** Amount Usd */
+            amount_usd: number | string;
+            /** Note */
+            note: string;
+        };
+        /** AdminCreditLedgerEntryResponseDto */
+        AdminCreditLedgerEntryResponseDto: {
+            /**
+             * Identity
+             * Format: uuid
+             */
+            identity: string;
+            entry_type: components["schemas"]["CreditLedgerEntryType"];
+            /** Amount Usd */
+            amount_usd: string;
+            /** Note */
+            note: string | null;
+            /** Generate Text Run Identity */
+            generate_text_run_identity: string | null;
+            /** Created By Email */
+            created_by_email: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** AdminCreditLedgerPageResponseDto */
+        AdminCreditLedgerPageResponseDto: {
+            pagination: components["schemas"]["PaginationResponseDto"];
+            /** Credit Ledger Entries */
+            credit_ledger_entries: components["schemas"]["AdminCreditLedgerEntryResponseDto"][];
+        };
+        /**
+         * AdminCreditLedgerSortType
+         * @enum {string}
+         */
+        AdminCreditLedgerSortType: "CREATED_AT";
+        /** AdminInviteCreateResponseDto */
+        AdminInviteCreateResponseDto: {
+            /**
+             * Identity
+             * Format: uuid
+             */
+            identity: string;
+            /** Invite Url */
+            invite_url: string;
+        };
+        /** AdminInviteDto */
+        AdminInviteDto: {
+            /** Name */
+            name: string;
+            /** Credit Amount Usd */
+            credit_amount_usd: number | string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Expires In Days
+             * @default 7
+             */
+            expires_in_days: number;
+        };
+        /** AdminInvitePageResponseDto */
+        AdminInvitePageResponseDto: {
+            pagination: components["schemas"]["PaginationResponseDto"];
+            /** Invites */
+            invites: components["schemas"]["AdminInviteResponseDto"][];
+        };
+        /** AdminInviteResponseDto */
+        AdminInviteResponseDto: {
+            /**
+             * Identity
+             * Format: uuid
+             */
+            identity: string;
+            /** Name */
+            name: string;
+            /** Credit Amount Usd */
+            credit_amount_usd: string;
+            /** Note */
+            note: string | null;
+            status: components["schemas"]["InviteStatusType"];
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Used At */
+            used_at: string | null;
+            /** Used By Email */
+            used_by_email: string | null;
+            /** Revoked At */
+            revoked_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Email */
+            created_by_email: string;
+        };
+        /**
+         * AdminInviteSortType
+         * @enum {string}
+         */
+        AdminInviteSortType: "CREATED_AT" | "NAME" | "EXPIRES_AT";
+        /** AdminUserActiveDto */
+        AdminUserActiveDto: {
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** AdminUserPageResponseDto */
+        AdminUserPageResponseDto: {
+            pagination: components["schemas"]["PaginationResponseDto"];
+            /** Users */
+            users: components["schemas"]["AdminUserResponseDto"][];
+        };
+        /** AdminUserResponseDto */
+        AdminUserResponseDto: {
+            /**
+             * Identity
+             * Format: uuid
+             */
+            identity: string;
+            /** Email */
+            email: string;
+            /** Display Name */
+            display_name: string | null;
+            role: components["schemas"]["RoleType"];
+            /** Credit Balance Usd */
+            credit_balance_usd: string;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Last Activity At */
+            last_activity_at: string | null;
+        };
+        /** AdminUserRoleDto */
+        AdminUserRoleDto: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "READER" | "CREATOR";
+        };
+        /**
+         * AdminUserSortType
+         * @enum {string}
+         */
+        AdminUserSortType: "CREATED_AT" | "EMAIL" | "LAST_ACTIVITY_AT";
         /** BlogPostDto */
         BlogPostDto: {
             /** Title */
@@ -327,11 +765,6 @@ export interface components {
             is_public: boolean;
             /** Published At */
             published_at?: string | null;
-        };
-        /** BlogPostListResponseDto */
-        BlogPostListResponseDto: {
-            /** Blog Posts */
-            blog_posts: components["schemas"]["BlogPostResponseDto"][];
         };
         /** BlogPostOptionsDto */
         BlogPostOptionsDto: {
@@ -353,10 +786,21 @@ export interface components {
              */
             identity: string;
             /**
+             * Content Item Identity
+             * Format: uuid
+             */
+            content_item_identity: string;
+            /**
              * Persona Identity
              * Format: uuid
              */
             persona_identity: string;
+            /** Persona Name */
+            persona_name: string;
+            /** Persona Avatar Url */
+            persona_avatar_url: string | null;
+            /** Is Persona Public */
+            is_persona_public: boolean;
             /** Title */
             title: string;
             /** Subtitle */
@@ -377,6 +821,53 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** BlogPostSummaryResponseDto */
+        BlogPostSummaryResponseDto: {
+            /**
+             * Identity
+             * Format: uuid
+             */
+            identity: string;
+            /**
+             * Content Item Identity
+             * Format: uuid
+             */
+            content_item_identity: string;
+            /**
+             * Persona Identity
+             * Format: uuid
+             */
+            persona_identity: string;
+            /** Persona Name */
+            persona_name: string;
+            /** Persona Avatar Url */
+            persona_avatar_url: string | null;
+            /** Is Persona Public */
+            is_persona_public: boolean;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string | null;
+            /** Is Public */
+            is_public: boolean;
+            /** Published At */
+            published_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** CheckInviteDto */
+        CheckInviteDto: {
+            /** Code */
+            code: string;
         };
         /** CompleteLlmDto */
         CompleteLlmDto: {
@@ -422,6 +913,11 @@ export interface components {
             /** Published At */
             published_at?: string | null;
         };
+        /**
+         * CreditLedgerEntryType
+         * @enum {string}
+         */
+        CreditLedgerEntryType: "GRANT" | "CHARGE" | "REFUND" | "ADJUSTMENT";
         /** EmptyResponseDto */
         EmptyResponseDto: Record<string, never>;
         /**
@@ -522,6 +1018,17 @@ export interface components {
              */
             identity: string;
         };
+        /** InviteStatusResponseDto */
+        InviteStatusResponseDto: {
+            status: components["schemas"]["InviteStatusType"];
+            /** Credit Amount Usd */
+            credit_amount_usd: string;
+        };
+        /**
+         * InviteStatusType
+         * @enum {string}
+         */
+        InviteStatusType: "UNUSED" | "USED" | "EXPIRED" | "REVOKED";
         /** LlmCompletionResponseDto */
         LlmCompletionResponseDto: {
             /**
@@ -542,6 +1049,21 @@ export interface components {
          * @enum {string}
          */
         LlmType: "FAST" | "STRONG" | "THINKING";
+        /** PaginationResponseDto */
+        PaginationResponseDto: {
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * PermissionType
+         * @description An action a role may be allowed to take.
+         * @enum {string}
+         */
+        PermissionType: "PERSONA_READ" | "PERSONA_WRITE" | "BLOG_POST_READ" | "BLOG_POST_WRITE" | "GENERATE_TEXT_RUN_READ" | "GENERATE_TEXT_RUN_WRITE" | "USER_READ" | "CREDIT_READ" | "CREDIT_WRITE" | "USER_WRITE" | "INVITE_READ" | "INVITE_WRITE";
         /** PersonaDto */
         PersonaDto: {
             /** Name */
@@ -565,11 +1087,6 @@ export interface components {
              * @default false
              */
             is_public: boolean;
-        };
-        /** PersonaListResponseDto */
-        PersonaListResponseDto: {
-            /** Personas */
-            personas: components["schemas"]["PersonaResponseDto"][];
         };
         /** PersonaResponseDto */
         PersonaResponseDto: {
@@ -607,6 +1124,99 @@ export interface components {
              */
             updated_at: string;
         };
+        /** PublicBlogPostPageResponseDto */
+        PublicBlogPostPageResponseDto: {
+            pagination: components["schemas"]["PaginationResponseDto"];
+            /** Blog Posts */
+            blog_posts: components["schemas"]["BlogPostSummaryResponseDto"][];
+        };
+        /** PublicBlogPostResponseDto */
+        PublicBlogPostResponseDto: {
+            /**
+             * Identity
+             * Format: uuid
+             */
+            identity: string;
+            /**
+             * Content Item Identity
+             * Format: uuid
+             */
+            content_item_identity: string;
+            /**
+             * Persona Identity
+             * Format: uuid
+             */
+            persona_identity: string;
+            /** Persona Name */
+            persona_name: string;
+            /** Persona Avatar Url */
+            persona_avatar_url: string | null;
+            /** Is Persona Public */
+            is_persona_public: boolean;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string | null;
+            /** Body */
+            body: string;
+            /** Is Public */
+            is_public: boolean;
+            /** Published At */
+            published_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Is Owner */
+            is_owner: boolean;
+        };
+        /**
+         * PublicBlogPostSortType
+         * @enum {string}
+         */
+        PublicBlogPostSortType: "FEED_SCORE" | "PUBLISHED_AT" | "TITLE";
+        /** PublicPersonaResponseDto */
+        PublicPersonaResponseDto: {
+            /**
+             * Identity
+             * Format: uuid
+             */
+            identity: string;
+            /** Name */
+            name: string;
+            /** Bio */
+            bio: string;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Is Public */
+            is_public: boolean;
+            /** Is Owner */
+            is_owner: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** RecordContentItemViewDto */
+        RecordContentItemViewDto: {
+            /**
+             * Read Percent
+             * @enum {integer}
+             */
+            read_percent: 0 | 25 | 50 | 75 | 100;
+        };
         /** ResumeGenerateTextDto */
         ResumeGenerateTextDto: {
             /** Is Approved */
@@ -614,6 +1224,17 @@ export interface components {
             /** Feedback Text */
             feedback_text?: string | null;
         };
+        /**
+         * RoleType
+         * @description A user's role; each role grants a fixed set of permissions.
+         * @enum {string}
+         */
+        RoleType: "ADMIN" | "CREATOR" | "READER" | "SYSTEM";
+        /**
+         * SortDirectionType
+         * @enum {string}
+         */
+        SortDirectionType: "ASC" | "DESC";
         /** StepOptionDto */
         StepOptionDto: {
             /**
@@ -632,6 +1253,28 @@ export interface components {
          * @enum {string}
          */
         TextType: "BLOG_POST";
+        /** UserBlogPostPageResponseDto */
+        UserBlogPostPageResponseDto: {
+            pagination: components["schemas"]["PaginationResponseDto"];
+            /** Blog Posts */
+            blog_posts: components["schemas"]["BlogPostSummaryResponseDto"][];
+        };
+        /**
+         * UserBlogPostSortType
+         * @enum {string}
+         */
+        UserBlogPostSortType: "CREATED_AT" | "PUBLISHED_AT" | "TITLE";
+        /** UserPersonaPageResponseDto */
+        UserPersonaPageResponseDto: {
+            pagination: components["schemas"]["PaginationResponseDto"];
+            /** Personas */
+            personas: components["schemas"]["PersonaResponseDto"][];
+        };
+        /**
+         * UserPersonaSortType
+         * @enum {string}
+         */
+        UserPersonaSortType: "CREATED_AT" | "NAME";
         /** UserResponseDto */
         UserResponseDto: {
             /**
@@ -645,6 +1288,13 @@ export interface components {
             display_name: string | null;
             /** Avatar Url */
             avatar_url: string | null;
+            role: components["schemas"]["RoleType"];
+            /** Permissions */
+            permissions: components["schemas"]["PermissionType"][];
+            /** Credit Balance Usd */
+            credit_balance_usd: string;
+            /** Is Credit Balance Low */
+            is_credit_balance_low: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -721,7 +1371,9 @@ export interface operations {
     };
     get_google_login_auth_google_login_get: {
         parameters: {
-            query?: never;
+            query?: {
+                invite_code?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -735,6 +1387,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -771,6 +1432,39 @@ export interface operations {
             };
         };
     };
+    find_invite_status_invites_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckInviteDto"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteStatusResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     find_signed_in_user_users_me_get: {
         parameters: {
             query?: never;
@@ -791,9 +1485,15 @@ export interface operations {
             };
         };
     };
-    find_user_persona_list_personas_get: {
+    find_user_persona_page_personas_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+                search?: string | null;
+                sort_direction?: components["schemas"]["SortDirectionType"];
+                sort_by?: components["schemas"]["UserPersonaSortType"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -806,7 +1506,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PersonaListResponseDto"];
+                    "application/json": components["schemas"]["UserPersonaPageResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -941,9 +1650,45 @@ export interface operations {
             };
         };
     };
-    find_user_blog_post_list_blog_posts_get: {
+    find_public_persona_personas__persona_identity__public_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                persona_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPersonaResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_user_blog_post_page_blog_posts_get: {
         parameters: {
             query?: {
+                page?: number;
+                page_size?: number;
+                search?: string | null;
+                sort_direction?: components["schemas"]["SortDirectionType"];
+                sort_by?: components["schemas"]["UserBlogPostSortType"];
                 persona_identity?: string | null;
             };
             header?: never;
@@ -958,7 +1703,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BlogPostListResponseDto"];
+                    "application/json": components["schemas"]["UserBlogPostPageResponseDto"];
                 };
             };
             /** @description Validation Error */
@@ -992,6 +1737,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IdentityResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_public_blog_post_page_blog_posts_public_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                search?: string | null;
+                sort_direction?: components["schemas"]["SortDirectionType"];
+                sort_by?: components["schemas"]["PublicBlogPostSortType"];
+                persona_identity?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicBlogPostPageResponseDto"];
                 };
             };
             /** @description Validation Error */
@@ -1102,6 +1883,37 @@ export interface operations {
             };
         };
     };
+    find_public_blog_post_blog_posts__blog_post_identity__public_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                blog_post_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicBlogPostResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_blog_post_from_generate_text_run_blog_posts_from_generate_text_run_post: {
         parameters: {
             query?: never;
@@ -1122,6 +1934,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IdentityResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_content_item_view_content_items__content_item_identity__view_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                content_item_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordContentItemViewDto"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponseDto"];
                 };
             };
             /** @description Validation Error */
@@ -1221,6 +2068,313 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GenerateTextRunResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_user_page_admin_users_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                search?: string | null;
+                sort_direction?: components["schemas"]["SortDirectionType"];
+                sort_by?: components["schemas"]["AdminUserSortType"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserPageResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_user_admin_users__user_identity__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_user_credit_ledger_page_admin_users__user_identity__credit_ledger_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                search?: string | null;
+                sort_direction?: components["schemas"]["SortDirectionType"];
+                sort_by?: components["schemas"]["AdminCreditLedgerSortType"];
+            };
+            header?: never;
+            path: {
+                user_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCreditLedgerPageResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grant_user_credits_admin_users__user_identity__credit_grants_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreditGrantDto"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_invite_page_admin_invites_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                search?: string | null;
+                sort_direction?: components["schemas"]["SortDirectionType"];
+                sort_by?: components["schemas"]["AdminInviteSortType"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminInvitePageResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_invite_admin_invites_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminInviteDto"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminInviteCreateResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_invite_admin_invites__invite_identity__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invite_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_user_role_admin_users__user_identity__role_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUserRoleDto"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponseDto"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_user_active_admin_users__user_identity__active_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUserActiveDto"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponseDto"];
                 };
             };
             /** @description Validation Error */
