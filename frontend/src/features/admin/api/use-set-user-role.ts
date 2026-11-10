@@ -6,8 +6,7 @@ import type { components } from '@/lib/api-schema.gen'
 
 type AdminUserRoleDto = components['schemas']['AdminUserRoleDto']
 
-// isOwnAccount: the signed-in admin is the target, so their own user is refetched too
-export function useSetUserRole(userIdentity: string, isOwnAccount: boolean) {
+export function useSetUserRole(userIdentity: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -21,10 +20,6 @@ export function useSetUserRole(userIdentity: string, isOwnAccount: boolean) {
         throw createApiError(error, response)
       }
     },
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
-        isOwnAccount ? queryClient.invalidateQueries({ queryKey: ['users', 'me'] }) : undefined,
-      ]),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
   })
 }

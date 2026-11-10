@@ -4,14 +4,11 @@ import type { DataTableColumn } from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
 import type { components } from '@/lib/api-schema.gen'
 import { formatDate } from '@/lib/format-date'
+import { formatRole } from '@/lib/format-role'
 import { formatUsd } from '@/lib/format-usd'
 
 type AdminUser = components['schemas']['AdminUserResponseDto']
 type AdminUserSort = components['schemas']['AdminUserSortType']
-
-function formatRole(role: AdminUser['role']): string {
-  return role.charAt(0) + role.slice(1).toLowerCase()
-}
 
 export const ADMIN_USER_COLUMNS: DataTableColumn<AdminUser, AdminUserSort>[] = [
   {

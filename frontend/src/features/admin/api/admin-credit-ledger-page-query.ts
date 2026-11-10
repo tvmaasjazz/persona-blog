@@ -37,9 +37,12 @@ export function adminCreditLedgerPageQueryOptions(
 export function useAdminCreditLedgerPage(
   userIdentity: string,
   params: AdminCreditLedgerPageParams,
+  // False when the user lacks CREDIT_READ, so nothing is requested
+  isEnabled: boolean,
 ) {
   return useQuery({
     ...adminCreditLedgerPageQueryOptions(userIdentity, params),
+    enabled: isEnabled,
     placeholderData: keepPreviousData,
   })
 }

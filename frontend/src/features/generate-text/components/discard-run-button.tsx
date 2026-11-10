@@ -1,17 +1,6 @@
 import { Trash2 } from 'lucide-react'
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+import { ConfirmActionButton } from '@/components/confirm-action-button'
 
 type DiscardRunButtonProps = {
   onDiscard: () => void
@@ -20,27 +9,22 @@ type DiscardRunButtonProps = {
 // Confirms before discarding an unsaved post; sends nothing.
 export function DiscardRunButton({ onDiscard }: DiscardRunButtonProps) {
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button type="button" variant="ghost">
+    <ConfirmActionButton
+      triggerLabel={
+        <>
           <Trash2 aria-hidden />
           Discard
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Discard this post?</AlertDialogTitle>
-          <AlertDialogDescription>
-            It won't be saved to your posts, and you won't be able to come back to it.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Keep it</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={onDiscard}>
-            Discard post
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        </>
+      }
+      triggerVariant="ghost"
+      title="Discard this post?"
+      description="It won't be saved to your posts, and you won't be able to come back to it."
+      actionLabel="Discard post"
+      cancelLabel="Keep it"
+      onConfirm={(close) => {
+        onDiscard()
+        close()
+      }}
+    />
   )
 }

@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 
 import { useAppForm } from '@/components/form/use-app-form'
+import { SectionCard } from '@/components/section-card'
 import { useGrantUserCredits } from '@/features/admin/api/use-grant-user-credits'
 import {
   creditGrantFormOptions,
@@ -8,13 +9,13 @@ import {
 } from '@/features/admin/credit-grant-form-schema'
 import { apiErrorMessage, isSessionEndedError } from '@/lib/api-error'
 
-type GrantCreditsFormProps = {
+type CreditGrantFormProps = {
   userIdentity: string
-  isOwnAccount: boolean
+  isReader: boolean
 }
 
-export function GrantCreditsForm({ userIdentity, isOwnAccount }: GrantCreditsFormProps) {
-  const grantUserCredits = useGrantUserCredits(userIdentity, isOwnAccount)
+export function CreditGrantForm({ userIdentity, isReader }: CreditGrantFormProps) {
+  const grantUserCredits = useGrantUserCredits(userIdentity)
 
   const form = useAppForm({
     ...creditGrantFormOptions,
@@ -33,8 +34,7 @@ export function GrantCreditsForm({ userIdentity, isOwnAccount }: GrantCreditsFor
   })
 
   return (
-    <section className="flex flex-col gap-4 rounded-2xl border bg-card p-5">
-      <h2 className="text-xl font-extrabold">Grant credits</h2>
+    <SectionCard title="Grant credits">
       <form
         noValidate
         className="flex flex-col gap-4"
@@ -45,7 +45,11 @@ export function GrantCreditsForm({ userIdentity, isOwnAccount }: GrantCreditsFor
       >
         <form.AppField name="amount_usd">
           {(field) => (
-            <field.TextField label="Amount (USD)" description="Up to $100, in cents." type="text" />
+            <field.TextField
+              label="Amount (USD)"
+              description="More than $0 and up to $100, to the cent."
+              type="text"
+            />
           )}
         </form.AppField>
         <form.AppField name="note">
@@ -57,9 +61,11 @@ export function GrantCreditsForm({ userIdentity, isOwnAccount }: GrantCreditsFor
           <form.SubmitButton label="Grant credits" pendingLabel="Granting…" />
         </form.AppForm>
       </form>
-      <p className="text-sm text-muted-foreground">
-        A reader becomes a creator and is signed out everywhere.
-      </p>
-    </section>
+      {isReader && (
+        <p className="text-sm text-muted-foreground">
+          A reader becomes a creator and is signed out everywhere.
+        </p>
+      )}
+    </SectionCard>
   )
 }

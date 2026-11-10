@@ -2,18 +2,7 @@ import { Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+import { ConfirmActionButton } from '@/components/confirm-action-button'
 import { useDeleteBlogPost } from '@/features/blog-posts/api/use-delete-blog-post'
 import { apiErrorMessage, isSessionEndedError } from '@/lib/api-error'
 
@@ -31,44 +20,32 @@ export function DeleteBlogPostButton({
   const deleteBlogPost = useDeleteBlogPost()
 
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="ghost" aria-label={`Delete ${blogPostTitle}`}>
+    <ConfirmActionButton
+      triggerLabel={
+        <>
           <Trash2 aria-hidden />
           Delete
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete {blogPostTitle}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This post will be removed from your list. This can't be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            disabled={deleteBlogPost.isPending}
-            onClick={(event) => {
-              event.preventDefault()
-              deleteBlogPost.mutate(blogPostIdentity, {
-                onSuccess: () => {
-                  toast.success('Post deleted')
-                  navigate('/posts')
-                },
-                onError: (error) => {
-                  if (!isSessionEndedError(error)) {
-                    toast.error(apiErrorMessage(error))
-                  }
-                },
-              })
-            }}
-          >
-            Delete post
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        </>
+      }
+      triggerVariant="ghost"
+      triggerAriaLabel={`Delete ${blogPostTitle}`}
+      title={`Delete ${blogPostTitle}?`}
+      description="This post will be removed from your list. This can't be undone."
+      actionLabel="Delete post"
+      isPending={deleteBlogPost.isPending}
+      onConfirm={() =>
+        deleteBlogPost.mutate(blogPostIdentity, {
+          onSuccess: () => {
+            toast.success('Post deleted')
+            navigate('/posts')
+          },
+          onError: (error) => {
+            if (!isSessionEndedError(error)) {
+              toast.error(apiErrorMessage(error))
+            }
+          },
+        })
+      }
+    />
   )
 }

@@ -6,8 +6,8 @@ import type { components } from '@/lib/api-schema.gen'
 
 type AdminCreditGrantDto = components['schemas']['AdminCreditGrantDto']
 
-// isOwnAccount: the signed-in admin is the target, so their balance changes too
-export function useGrantUserCredits(userIdentity: string, isOwnAccount: boolean) {
+// Also refetches the signed-in user, since the target may be the admin's own account
+export function useGrantUserCredits(userIdentity: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -24,7 +24,7 @@ export function useGrantUserCredits(userIdentity: string, isOwnAccount: boolean)
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
-        isOwnAccount ? queryClient.invalidateQueries({ queryKey: ['users', 'me'] }) : undefined,
+        queryClient.invalidateQueries({ queryKey: ['users', 'me'] }),
       ]),
   })
 }

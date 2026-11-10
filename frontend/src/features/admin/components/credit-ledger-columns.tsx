@@ -1,12 +1,11 @@
 import type { DataTableColumn } from '@/components/data-table'
 import type { components } from '@/lib/api-schema.gen'
 import { formatDateTime } from '@/lib/format-date'
+import { formatLedgerEntryType } from '@/lib/format-role'
 import { formatLedgerUsd } from '@/lib/format-usd'
 
 type AdminCreditLedgerEntryResponseDto = components['schemas']['AdminCreditLedgerEntryResponseDto']
-type CreditLedgerSort = 'CREATED_AT'
-
-export const CREDIT_LEDGER_SORT_VALUES: readonly CreditLedgerSort[] = ['CREATED_AT']
+type CreditLedgerSort = components['schemas']['AdminCreditLedgerSortType']
 
 export const CREDIT_LEDGER_COLUMNS: DataTableColumn<
   AdminCreditLedgerEntryResponseDto,
@@ -20,8 +19,7 @@ export const CREDIT_LEDGER_COLUMNS: DataTableColumn<
   },
   {
     header: 'Type',
-    className: 'capitalize',
-    cell: (entry) => entry.entry_type.toLowerCase(),
+    cell: (entry) => formatLedgerEntryType(entry.entry_type),
   },
   {
     header: 'Amount',
@@ -30,12 +28,12 @@ export const CREDIT_LEDGER_COLUMNS: DataTableColumn<
   },
   {
     header: 'Note',
-    className: 'min-w-48 break-words whitespace-normal',
+    className: 'min-w-32 break-words whitespace-normal',
     cell: (entry) => entry.note ?? '',
   },
   {
     header: 'Made by',
-    className: 'break-all',
+    className: 'min-w-32 break-all whitespace-normal',
     cell: (entry) => entry.created_by_email,
   },
 ]

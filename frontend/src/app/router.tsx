@@ -78,7 +78,7 @@ export const router = createBrowserRouter([
               {
                 path: '/admin/users/:userIdentity',
                 element: <AdminUserPage />,
-                handle: { isFullWidth: true, hasSidebar: true } satisfies AppRouteHandle,
+                handle: { hasSidebar: true } satisfies AppRouteHandle,
               },
             ],
           },
