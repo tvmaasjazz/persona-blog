@@ -14,7 +14,7 @@ export type PublicBlogPostPageInfiniteParams = Omit<PublicBlogPostPageQuery, 'pa
 
 // A read can move a post across a page boundary, so a post seen twice is kept once
 export function flattenPublicBlogPostPages(
-  pages: InfiniteData<PublicBlogPostPageResponseDto, number>,
+  infiniteData: InfiniteData<PublicBlogPostPageResponseDto, number>,
 ) {
   const blogPostsByIdentity = new Map<string, BlogPostSummaryResponseDto>()
   for (const page of infiniteData.pages) {
