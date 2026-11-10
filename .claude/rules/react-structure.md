@@ -23,7 +23,7 @@ way the backend is organized by domain. No global `hooks/` or `api/` folder.
 
 Ask before adding a dependency, and before any global client state library
 (Zustand, Redux, Jotai). Server data lives in TanStack Query and UI state in
-`useState`; nothing so far has needed more.
+`useState`.
 
 ```
 frontend/src/
@@ -46,27 +46,22 @@ frontend/src/
 │       │   ├── require-permission.tsx  # RequirePermission route guard
 │       │   └── sign-in-card.tsx        # SignInCard
 │       ├── hooks/             # hooks with no API call, if the feature has any
+│       ├── sign-in-result-messages.ts  # values the API sends outside the schema
 │       ├── permissions.ts     # hasPermission
 │       └── <what-it-holds>.ts # plain helpers for this feature only, like run-steps.ts
 ├── components/
 │   ├── ui/                    # shadcn/ui, added with the CLI, never hand-created
 │   ├── form/                  # the form layer: useAppForm, field components
 │   ├── layout/                # app shell and page layouts: AppLayout, PageWithSidebar
-│   ├── confirm-action-button.tsx  # ConfirmActionButton
-│   ├── confirm-dialog.tsx     # ConfirmDialog
-│   ├── data-table.tsx         # DataTable
-│   ├── google-sign-in-button.tsx  # GoogleSignInButton
-│   ├── infinite-scroll-sentinel.tsx  # InfiniteScrollSentinel
-│   └── list-pager.tsx         # components more than one feature uses, like the list parts
+│   └── <name>.tsx             # components more than one feature uses: the list
+│                              #   parts, states, confirms, DataTable
 └── lib/
-    ├── api-client.ts          # apiClient: the openapi-fetch instance
+    ├── api-client.ts          # apiClient, and what a deleted session does
     ├── api-error.ts           # ApiError, createApiError, apiErrorMessage, isSessionEndedError
     ├── api-schema.gen.ts      # generated from /openapi.json, never hand-edited
-    ├── format-date.ts         # formatDate, formatDateTime
-    ├── use-debounced-callback.ts
-    ├── use-list-search-params.ts
-    ├── use-scrolled-into-view.ts
-    └── utils.ts               # cn(), from shadcn
+    ├── reset-queries-except-current-user.ts  # for sign-out and a deleted session
+    ├── utils.ts               # cn(), from shadcn
+    └── <name>.ts              # helpers and use-* hooks more than one feature uses
 ```
 
 ## Features
@@ -118,14 +113,8 @@ The backend is reached only through `apiClient`, and only from a feature's `api/
 folder. Components never call `fetch`, `apiClient`, or `axios`. They call the hooks
 in `api/`.
 
-```ts
-// src/lib/api-client.ts
-import createClient from 'openapi-fetch'
-
-import type { paths } from '@/lib/api-schema.gen'
-
-export const apiClient = createClient<paths>({ baseUrl: '/api' })
-```
+`apiClient` is the one `createClient<paths>({ baseUrl: '/api' })` instance, in
+`lib/api-client.ts`.
 
 Request and response types always come from `api-schema.gen.ts`, never from a
 hand-written interface that mirrors a backend DTO. A value the API sends outside the
@@ -175,7 +164,7 @@ export function useCurrentUser() {
 
 ### Mutations
 
-One hook per mutation, named `use` + the action: `useSignOut`, `useGenerateText`.
+One hook per mutation, named `use` + the action: `useSignOut`, `useGenerateBlogPost`.
 It updates or invalidates every query key the change affects in `onSuccess`, so
 callers never refetch by hand. A query key names an API resource, so a hook invalidates
 another feature's resource by its key, without importing from that feature.
@@ -236,8 +225,8 @@ to show. It uses `sonner`, through `toast` imported from `'sonner'`. The one
 - **No toast for what is already on screen**, such as a dialog that closes or a list
   that updates in place with nothing else to confirm.
 
-What the user reads is in sentence case, and a failure says what to do next. Page and nav
-names are proper nouns and keep their capitals: My Personas, My Posts.
+What the user reads is in sentence case, and a failure says what to do next. Page
+and nav names are proper nouns and keep their capitals: My Personas, My Posts.
 
 ### Sign-in
 
@@ -323,10 +312,8 @@ wrapped in `<RequirePermission>` too (› Permissions and sessions). Pages don't
 auth themselves.
 
 `AppLayout` renders `<ScrollRestoration />`, so every navigation opens at the top. A
-page that changes in place scrolls to the top itself: the run page when its polled
-status goes from working to paused or finished (`useRunReadyNotice`), and the write
-form when it folds into its status card. When there's something new to look at, a
-toast says what.
+page that changes in place scrolls to the top itself when there's something new to
+look at, and a toast says what; `useRunReadyNotice` is the pattern.
 
 A route that needs something from the layout says so in its `handle`, typed as
 `AppRouteHandle` from `app-layout.tsx`; its fields say what each does, and

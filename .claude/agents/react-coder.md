@@ -29,8 +29,9 @@ types in `src/lib/api-schema.gen.ts`; never guess a request or response shape.
 The rules files say where each of these lives and how it is shaped.
 
 - **Feature code**: query options and hooks, mutation hooks, feature components,
-  feature-only hooks, and plain feature helpers at the feature root, under
-  `src/features/<feature>/` (`react-structure.md` › Features)
+  feature-only hooks, form schemas (`<entity>-form-schema.ts`) and plain feature
+  helpers at the feature root, under `src/features/<feature>/` (`react-structure.md` ›
+  Features, › Forms)
 - **Pages** in `src/routes/`, and their entries in `src/app/router.tsx`. In the
   router, add the feature's routes and nothing else.
 - **Stub pages and nav links**, when the task says you are writing the shared layer
@@ -42,12 +43,12 @@ The rules files say where each of these lives and how it is shaped.
   `use-app-form.ts`, when a form needs a kind of control the app doesn't have yet
   (`react-structure.md` › Forms)
 - **Shared helpers and hooks** in `src/lib/`, when more than one feature needs them
-  (`react-structure.md` › Features), other than
-  the setup files listed below. `lib/api-error.ts` is one: extend it when a feature
-  needs more from API errors
+  (`react-structure.md` › Features), except the setup files listed below.
+  `lib/api-error.ts` is one to extend when a feature needs more from API errors
 - **shadcn components**, added with the CLI. Variant edits only, per
-  `react-styling.md` › Components. Never re-add `button.tsx`, `alert-dialog.tsx`,
-  `dialog.tsx`, or `sonner.tsx`: the CLI would overwrite their deliberate edits
+  `react-styling.md` › Components. Never re-add `button.tsx`, `input.tsx`,
+  `alert-dialog.tsx`, `dialog.tsx`, or `sonner.tsx`: the CLI would overwrite their
+  deliberate edits
 
 ## What you don't write
 
@@ -61,7 +62,8 @@ The rules files say where each of these lives and how it is shaped.
   that isn't already in `package.json`, don't add it; report the component and the
   package instead.
 - **App setup files**: `main.tsx`, `app/providers.tsx`, `app/query-client.ts`,
-  `lib/api-client.ts`, `lib/utils.ts`, `index.html`, `vite.config.ts`, the tsconfig
+  `lib/api-client.ts`, `lib/reset-queries-except-current-user.ts`,
+  `lib/utils.ts`, `index.html`, `vite.config.ts`, the tsconfig
   files, `components.json`, and `.oxlintrc.json`. Written once, by the main session.
   If a task seems to need a change there, report it instead.
 - **`src/lib/api-schema.gen.ts`**: generated, never hand-edited. If a route you need
@@ -124,8 +126,8 @@ you applied it. Name the rule and the file, e.g.:
 
 Only list conventions you actually applied in this change, not every rule you read.
 
-**Checks**: the result of `npm run fmt`, `npm run lint` and `npm run build`, with any output you
-couldn't fix.
+**Checks**: the result of `npm run fmt`, `npm run lint` and `npm run build`, with any
+output you couldn't fix.
 
 **Judgement calls**: situations the rules didn't cover, what you chose, and the
 exact wording you'd propose adding and to which rules file. Write "None" if none.

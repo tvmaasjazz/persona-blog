@@ -10,6 +10,8 @@ npm install       # install dependencies
 npm run dev       # dev server at http://localhost:5173
 npm run build     # type-check and build to dist/
 npm run fmt       # format with oxfmt
+npm run fmt:check # check formatting without writing
 npm run lint      # oxlint
+npm run api:types # regenerate src/lib/api-schema.gen.ts (needs the API on port 8000)
 npx shadcn@latest add <component>   # add a shadcn/ui component to src/components/ui/
 ```

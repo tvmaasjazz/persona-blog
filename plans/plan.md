@@ -457,7 +457,11 @@ Each keeps its path, permission and list key, and adds `pagination`:
 
 ### 11. Frontend
 
-Built to `plans/frontend-plan.md`, which splits it into PRs.
+Built in #54 to #63, to `plans/frontend-plan.md`, which splits it into PRs and lists
+what each one landed. Two backend changes came with it: a 401 clears the session
+cookie, and a post's responses carry its persona's name, avatar and privacy (#55). The
+request's session also commits before the response is sent, so a write is visible as
+soon as its route answers (#59).
 
 Everything the backend-only PRs added, before the deploy:
 

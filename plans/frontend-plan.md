@@ -151,8 +151,10 @@ foresee doesn't stop it either ([Unplanned changes](#unplanned-changes)).
 
 ## Conventions for this work
 
-What every coder on this work follows, until the PR named in [Rule edits](#rule-edits)
-moves each into the rules. A brief points here instead of repeating it.
+What every coder on this work followed, until the PR named in [Rule edits](#rule-edits)
+moved each into the rules. They're all in `.claude/rules/react-structure.md` and
+`react-styling.md` now, and where the two differ, the rules win: review rounds changed
+some details (for example, the infinite list's key ends in `'infinite'`).
 
 **Permissions.** The UI checks permissions, never roles, as the backend does:
 `hasPermission(user, 'PERSONA_WRITE')` from `features/auth/permissions.ts`, with
@@ -215,17 +217,17 @@ branch, so a diff shows only its own work. Merge them in order. Commits are
 
 | # | Branch | What it lands | Built by |
 | --- | --- | --- | --- |
-| 0 | `docs/frontend-plan` | This plan, `react-reviewer`, the `CLAUDE.md` lines | Main session |
-| 1 | `feat/session-cookie-and-post-persona-fields` | B1 to B3, the two dev scripts, tests | `fastapi-coder`, `be-test-writer` |
-| 2 | `feat/web-paged-lists` | Regenerated types, the list parts, My Personas and My Posts paged and searchable | `react-coder` × 3 |
-| 3 | `feat/web-roles-and-credits` | Permissions, guards, the nav by role, a deleted session, balance, banner, the 402 | Main session, `react-coder` |
-| 4 | `feat/web-sign-in-and-invite` | `/sign-in`, `/invite/:inviteCode`, sign-in below `lg` | `react-coder` |
-| 5 | `feat/web-admin-users` | `DataTable`, the users table, a user's page | `react-coder` × 3 |
-| 6 | `feat/web-admin-invites` | The invites table, create, the link shown once, revoke | `react-coder` |
-| 7 | `feat/web-public-reading` | A post and a persona's page, signed out; the private-persona warning | `react-coder` × 3 |
-| 8 | `feat/web-home-feed` | The feed with search | `react-coder` |
-| 9 | `feat/web-post-views` | Views and how far a post is read | `react-coder` |
-| 10 | `docs/frontend-built` | `plan.md` item 11 marked built, anything the audits left | Main session |
+| 0 | `docs/frontend-plan` (#54) | This plan, `react-reviewer`, the `CLAUDE.md` lines | Main session |
+| 1 | `feat/session-cookie-and-post-persona-fields` (#55) | B1 to B3, the two dev scripts, tests | `fastapi-coder`, `be-test-writer` |
+| 2 | `feat/web-paged-lists` (#56) | Regenerated types, the list parts, My Personas and My Posts paged and searchable | `react-coder` × 3 |
+| 3 | `feat/web-roles-and-credits` (#57) | Permissions, guards, the nav by role, a deleted session, balance, banner, the 402 | Main session, `react-coder` |
+| 4 | `feat/web-sign-in-and-invite` (#58) | `/sign-in`, `/invite/:inviteCode`, sign-in below `lg` | `react-coder` |
+| 5 | `feat/web-admin-users` (#59) | `DataTable`, the users table, a user's page | `react-coder` × 3 |
+| 6 | `feat/web-admin-invites` (#60) | The invites table, create, the link shown once, revoke | `react-coder` |
+| 7 | `feat/web-public-reading` (#61) | A post and a persona's page, signed out; the private-persona warning | `react-coder` × 3 |
+| 8 | `feat/web-home-feed` (#62) | The feed with search | `react-coder` |
+| 9 | `feat/web-post-views` (#63) | Views and how far a post is read | `react-coder` |
+| 10 | `docs/frontend-built` (#64) | `plan.md` item 11 marked built, anything the audits left | Main session |
 | 11 | `test/web-unit-tests` | Vitest, the testing rules, `fe-test-writer`, unit tests | Main session, `fe-test-writer` |
 | 12 | `test/web-e2e-tests` | Playwright, the flows end to end | Main session, `fe-test-writer` × 2 |
 
@@ -569,12 +571,13 @@ why.
 ## Rule edits
 
 Proposed wording, applied in the PR that builds each pattern (D13) and pointing at the
-file that PR adds. All in `react-structure.md` unless it says otherwise.
+file that PR adds. All in `react-structure.md` unless it says otherwise. All are
+applied; the rules files hold the final wording, which the docs audits adjusted.
 
 | PR | Section | What it adds |
 | --- | --- | --- |
 | 0 | New: **Component boundaries** | "A component, hook or function does one job, said in a sentence without 'and'. Fetching and cache go in `api/`. A timer, observer or scroll listener goes in a hook. Markup and classes go in a component. The URL and navigation belong to the route file, and to the component that calls `mutate`. Motion is classes, never code mixed into data handling. A boolean prop that turns a component into a different one is two components. A block written a third time becomes a shared one." |
-| 0 | New: **States** | "A view that loads data has a loading, an empty and an error state, and a not-found state when it's read by identity. A button is disabled while its request runs. A destructive action confirms in an `AlertDialog` first; `delete-persona-button.tsx` is the pattern." |
+| 0 | New: **States** | "A view that loads data has a loading, an empty and an error state, and a not-found state when it's read by identity. A button is disabled while its request runs. A destructive action confirms in an `AlertDialog` first; `delete-persona-button.tsx` is the pattern (since replaced by `ConfirmActionButton`)." |
 | 0 | New: **Accessibility** | "A link navigates and a button acts. No interactive element sits inside another. Every control has a label, and an icon-only button an `aria-label`. Headings descend in order. A sortable column says its sort with `aria-sort`. Colour is never the only signal." |
 | 0 | New: **Trust** | "Hiding or disabling a control is a courtesy, never the check: the API refuses, and the page handles the refusal. A secret such as an invite code stays out of query keys that outlive the page, toasts and logs. No `dangerouslySetInnerHTML`." |
 | 0 | Toasts | "What the user reads is in sentence case, and a failure says what to do next." |
