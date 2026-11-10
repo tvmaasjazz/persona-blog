@@ -15,6 +15,7 @@ import {
   generateBlogPostFormSchema,
   type GenerateBlogPostFormValues,
 } from '@/features/generate-text/generate-blog-post-form-schema'
+import { startRunErrorMessage } from '@/features/generate-text/generate-text-error-messages'
 import { describeSteps } from '@/features/generate-text/run-steps'
 
 type WriteBlogPostFormProps = {
@@ -36,8 +37,8 @@ export function WriteBlogPostForm({ personas, initialValues }: WriteBlogPostForm
       try {
         const run = await generateBlogPost.mutateAsync(generateBlogPostFormSchema.parse(value))
         navigate(`/write/runs/${run.run_identity}`)
-      } catch {
-        toast.error("Couldn't write the post. Try again.")
+      } catch (error) {
+        toast.error(startRunErrorMessage(error))
       }
     },
   })
