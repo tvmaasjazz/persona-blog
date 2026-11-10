@@ -118,6 +118,14 @@ describe('useListSearchParams writing the URL', () => {
     expect(result.current.location.search).toBe('?tag=ai')
   })
 
+  it('keeps a non-default direction when the sort goes back to the default', () => {
+    const { result } = renderListSearchParams('/posts?tag=ai&sort=title')
+
+    act(() => result.current.list.setSort('created_at', 'ASC'))
+
+    expect(result.current.location.search).toBe('?tag=ai&dir=ASC')
+  })
+
   it('writes a filter and returns to page 1, keeping the params it does not own', () => {
     const { result } = renderListSearchParams('/posts?q=cats&page=3')
 

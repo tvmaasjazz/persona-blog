@@ -39,6 +39,20 @@ describe('findSignInResult', () => {
     })
   })
 
+  it('shows the general invite message for an unknown invite result code', () => {
+    expect(findResult('invite=SOMETHING_NEW')).toEqual({
+      kind: 'invite-error',
+      message: "This invite didn't work. Ask for a new one.",
+    })
+  })
+
+  it('shows the sign-in error when an invite error comes with it', () => {
+    expect(findResult('error=EMAIL_TAKEN&invite_error=INVITE_USED')).toEqual({
+      kind: 'sign-in-error',
+      message: 'That email already belongs to another sign-in.',
+    })
+  })
+
   it('welcomes an accepted invite with the balance it was given', () => {
     expect(findResult('invite=ACCEPTED', '$5.00')).toEqual({
       kind: 'accepted',

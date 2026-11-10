@@ -29,7 +29,7 @@ function renderReadProgress({ top, height }: { top: number; height: number }) {
     })
   }
 
-  return { result: rendered.result, scrollPostTo }
+  return { result: rendered.result, unmount: rendered.unmount, scrollPostTo }
 }
 
 beforeEach(() => {
@@ -82,5 +82,40 @@ describe('useReadProgress', () => {
     const { result } = renderReadProgress({ top: 100, height: 300 })
 
     expect(result.current).toBe(100)
+  })
+
+  it('reads a post with no height as 100, even below the viewport', () => {
+    const { result } = renderReadProgress({ top: VIEWPORT_HEIGHT + 100, height: 0 })
+
+    expect(result.current).toBe(100)
+  })
+
+  it('measures again when the window is resized', () => {
+    const { result } = renderReadProgress({ top: 200, height: POST_HEIGHT })
+    expect(result.current).toBe(0)
+
+    // A taller viewport reaches half of the post
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(200 + POST_HEIGHT / 2)
+    act(() => {
+      window.dispatchEvent(new Event('resize'))
+      vi.advanceTimersToNextFrame()
+    })
+
+    expect(result.current).toBe(50)
+  })
+
+  it('stops listening for scroll and resize after unmount', () => {
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    const removeSpy = vi.spyOn(window, 'removeEventListener')
+    const { unmount } = renderReadProgress({ top: 200, height: POST_HEIGHT })
+
+    unmount()
+
+    for (const eventName of ['scroll', 'resize']) {
+      const added = addSpy.mock.calls.find(([name]) => name === eventName)
+      const removed = removeSpy.mock.calls.find(([name]) => name === eventName)
+      expect(added).toBeDefined()
+      expect(removed?.[1]).toBe(added?.[1])
+    }
   })
 })
