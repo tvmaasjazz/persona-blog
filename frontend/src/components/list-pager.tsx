@@ -23,7 +23,7 @@ export function ListPager({ pagination, onPageChange }: ListPagerProps) {
         onClick={() => onPageChange(pagination.page - 1)}
       >
         <ChevronLeft aria-hidden />
-        Previous
+        <span className="sr-only sm:not-sr-only">Previous</span>
       </Button>
       <p className="text-sm whitespace-nowrap text-muted-foreground">
         Page {pagination.page} of {pageCount}
@@ -33,7 +33,7 @@ export function ListPager({ pagination, onPageChange }: ListPagerProps) {
         disabled={pagination.page >= pageCount}
         onClick={() => onPageChange(pagination.page + 1)}
       >
-        Next
+        <span className="sr-only sm:not-sr-only">Next</span>
         <ChevronRight aria-hidden />
       </Button>
     </nav>

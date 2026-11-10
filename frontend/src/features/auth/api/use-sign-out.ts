@@ -1,12 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { apiClient } from '@/lib/api-client'
+import { createApiError } from '@/lib/api-error'
 
 async function signOut(): Promise<void> {
-  const { error } = await apiClient.POST('/auth/logout')
+  const { error, response } = await apiClient.POST('/auth/logout')
 
-  if (error) {
-    throw error
+  // A 401 means the session is already gone, which is what signing out wanted
+  if (error && response.status !== 401) {
+    throw createApiError(error, response)
   }
 }
 

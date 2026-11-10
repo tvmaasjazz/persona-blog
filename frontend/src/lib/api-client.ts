@@ -4,7 +4,9 @@ import { toast } from 'sonner'
 import { queryClient } from '@/app/query-client'
 import type { paths } from '@/lib/api-schema.gen'
 
-const CURRENT_USER_PATH = '/api/users/me'
+// A 401 from these says nothing new: /users/me reads signed out as null, and signing out
+// with a session the server already deleted is the outcome the user asked for
+const QUIET_UNAUTHORIZED_PATHS = new Set(['/api/users/me', '/api/auth/logout'])
 const CURRENT_USER_QUERY_KEY = ['users', 'me']
 
 export const apiClient = createClient<paths>({ baseUrl: '/api' })
@@ -14,7 +16,7 @@ export const apiClient = createClient<paths>({ baseUrl: '/api' })
 // signed out, and say so once.
 apiClient.use({
   onResponse({ request, response }) {
-    if (response.status !== 401 || new URL(request.url).pathname === CURRENT_USER_PATH) {
+    if (response.status !== 401 || QUIET_UNAUTHORIZED_PATHS.has(new URL(request.url).pathname)) {
       return undefined
     }
 

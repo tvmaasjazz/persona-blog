@@ -17,6 +17,7 @@ import {
 } from '@/features/generate-text/generate-blog-post-form-schema'
 import { startRunErrorMessage } from '@/features/generate-text/generate-text-error-messages'
 import { describeSteps } from '@/features/generate-text/run-steps'
+import { isSessionEndedError } from '@/lib/api-error'
 
 type WriteBlogPostFormProps = {
   personas: PersonaChoice[]
@@ -38,6 +39,9 @@ export function WriteBlogPostForm({ personas, initialValues }: WriteBlogPostForm
         const run = await generateBlogPost.mutateAsync(generateBlogPostFormSchema.parse(value))
         navigate(`/write/runs/${run.run_identity}`)
       } catch (error) {
+        if (isSessionEndedError(error)) {
+          return
+        }
         toast.error(startRunErrorMessage(error))
       }
     },

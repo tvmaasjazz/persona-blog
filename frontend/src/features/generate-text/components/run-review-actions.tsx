@@ -6,6 +6,7 @@ import { useResumeGenerateText } from '@/features/generate-text/api/use-resume-g
 import { RequestChangesForm } from '@/features/generate-text/components/request-changes-form'
 import { resumeRunErrorMessage } from '@/features/generate-text/generate-text-error-messages'
 import { findReviewStepName } from '@/features/generate-text/run-steps'
+import { isSessionEndedError } from '@/lib/api-error'
 
 type RunReviewActionsProps = {
   runIdentity: string
@@ -31,6 +32,9 @@ export function RunReviewActions({ runIdentity, lastStep }: RunReviewActionsProp
         resume: { is_approved: isApproved, feedback_text: feedbackText },
       })
     } catch (error) {
+      if (isSessionEndedError(error)) {
+        return
+      }
       toast.error(resumeRunErrorMessage(error))
     }
   }

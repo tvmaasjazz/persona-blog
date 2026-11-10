@@ -12,7 +12,7 @@ import {
   personaFormSchema,
   toPersonaFormValues,
 } from '@/features/personas/persona-form-schema'
-import { ApiError, apiErrorMessage } from '@/lib/api-error'
+import { ApiError, apiErrorMessage, isSessionEndedError } from '@/lib/api-error'
 import type { components } from '@/lib/api-schema.gen'
 
 type PersonaResponseDto = components['schemas']['PersonaResponseDto']
@@ -66,6 +66,9 @@ function LoadedEditPersonaForm({ persona }: LoadedEditPersonaFormProps) {
         toast.success('Persona saved')
         navigate(`/personas/${persona.identity}`)
       } catch (error) {
+        if (isSessionEndedError(error)) {
+          return
+        }
         if (error instanceof ApiError && error.status === 409) {
           setFieldServerError(formApi, 'name', apiErrorMessage(error))
         } else {

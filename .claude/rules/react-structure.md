@@ -340,8 +340,10 @@ missing. A feature other than `auth` never reads the current user; it may invali
 
 When the server deletes a session, the API's 401 clears its cookie. On a 401 from any
 path but `/users/me`, `lib/api-client.ts` sets `['users', 'me']` to `null` and, if a
-user was signed in, toasts "You were signed out. Sign in again." once, and `app/query-client.ts` retries a query once after a 401, so an open route
-succeeds signed out and a guarded one redirects.
+user was signed in, toasts "You were signed out. Sign in again." once. `app/query-client.ts`
+retries a query once after a 401, so an open route succeeds signed out and a guarded one
+redirects. A mutation's caller skips its own failure toast for a 401
+(`isSessionEndedError(error)` from `lib/api-error.ts`), since that toast has said it.
 
 ## Naming
 

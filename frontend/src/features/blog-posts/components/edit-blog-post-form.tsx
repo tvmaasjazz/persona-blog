@@ -14,7 +14,7 @@ import {
   publishingValuesFromPost,
   toPublishedAt,
 } from '@/features/blog-posts/publishing-form-schema'
-import { apiErrorMessage } from '@/lib/api-error'
+import { apiErrorMessage, isSessionEndedError } from '@/lib/api-error'
 import type { components } from '@/lib/api-schema.gen'
 
 type BlogPostResponseDto = components['schemas']['BlogPostResponseDto']
@@ -80,6 +80,9 @@ function LoadedEditBlogPostForm({ blogPost, isPersonaPublic }: LoadedEditBlogPos
         toast.success('Post saved')
         navigate(`/posts/${blogPost.identity}`)
       } catch (error) {
+        if (isSessionEndedError(error)) {
+          return
+        }
         toast.error(apiErrorMessage(error))
       }
     },

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { generateTextRunQueryOptions } from '@/features/generate-text/api/generate-text-run-query'
 import { apiClient } from '@/lib/api-client'
-import { createApiError } from '@/lib/api-error'
+import { ApiError, createApiError } from '@/lib/api-error'
 import type { components } from '@/lib/api-schema.gen'
 
 type ResumeGenerateTextDto = components['schemas']['ResumeGenerateTextDto']
@@ -37,9 +37,14 @@ export function useResumeGenerateText() {
       queryClient.setQueryData(generateTextRunQueryOptions(run.run_identity).queryKey, run)
     },
     // A failed resume marks the run FAILED on the server, so refetch to show it.
-    onError: (_error, { runIdentity }) =>
-      queryClient.invalidateQueries({
+    onError: (error, { runIdentity }) => {
+      void queryClient.invalidateQueries({
         queryKey: generateTextRunQueryOptions(runIdentity).queryKey,
-      }),
+      })
+      // A 402 means the balance has changed since it was shown, so refetch it.
+      if (error instanceof ApiError && error.status === 402) {
+        void queryClient.invalidateQueries({ queryKey: ['users', 'me'] })
+      }
+    },
   })
 }
