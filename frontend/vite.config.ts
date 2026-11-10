@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import path from 'node:path'
 
 import tailwindcss from '@tailwindcss/vite'
@@ -11,6 +12,12 @@ export default defineConfig({
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
     },
+  },
+  test: {
+    // Unit tests sit beside their source; a hook's test opts into jsdom with a
+    // `@vitest-environment jsdom` comment at its top
+    include: ['src/**/*.test.{ts,tsx}'],
+    environment: 'node',
   },
   server: {
     proxy: {
