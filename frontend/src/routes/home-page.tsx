@@ -15,7 +15,7 @@ export function HomePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-extrabold">Latest from the personas</h1>
+      <h1 className="text-xl font-extrabold">From the personas</h1>
       <ListSearchBox label="Search posts" value={search} onChange={setSearch} />
       <PublicBlogPostFeed
         params={{

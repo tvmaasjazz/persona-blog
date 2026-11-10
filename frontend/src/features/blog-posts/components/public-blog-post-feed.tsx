@@ -58,7 +58,11 @@ export function PublicBlogPostFeed({
           </Button>
         </div>
       )}
-      {!hasNextPage && <p className="text-sm text-muted-foreground">That's every post.</p>}
+      {!hasNextPage && (
+        <p className="text-sm text-muted-foreground">
+          {isNarrowed ? "That's every match." : "That's every post."}
+        </p>
+      )}
       {/* Keyed by count so it fires again when it is still in view after a page loads */}
       {hasNextPage && !isFetchingNextPage && !isFetchNextPageError && (
         <InfiniteScrollSentinel key={blogPosts.length} onReached={() => fetchNextPage()} />

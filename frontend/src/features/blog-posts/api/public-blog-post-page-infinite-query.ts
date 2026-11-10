@@ -1,4 +1,4 @@
-import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query'
+import { infiniteQueryOptions, keepPreviousData, useInfiniteQuery } from '@tanstack/react-query'
 import type { InfiniteData } from '@tanstack/react-query'
 
 import {
@@ -33,6 +33,8 @@ export function publicBlogPostPageInfiniteQueryOptions(params: PublicBlogPostPag
     initialPageParam: 1,
     getNextPageParam: ({ pagination }) =>
       pagination.page * pagination.page_size < pagination.total ? pagination.page + 1 : undefined,
+    // A new search keeps the old posts on screen until its first page arrives
+    placeholderData: keepPreviousData,
     select: flattenPages,
   })
 }
