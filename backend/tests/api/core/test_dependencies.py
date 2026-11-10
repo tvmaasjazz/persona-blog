@@ -1,7 +1,7 @@
 from unittest.mock import ANY
 
 import pytest
-from fastapi import Depends, FastAPI
+from fastapi import BackgroundTasks, Depends, FastAPI
 from httpx import AsyncClient
 from redis.asyncio import Redis
 from sqlalchemy import select
@@ -56,6 +56,30 @@ async def test_get_db_session_rolls_back_on_error(
     user_query = select(UserOrm).where(UserOrm.email == "ada@example.com")
     inserted_user_record = await db_session.scalar(user_query)
     assert inserted_user_record is None
+
+
+async def test_get_db_session_commits_before_after_response_tasks_run(
+    fastapi_app: FastAPI, api_client: AsyncClient
+) -> None:
+    # The test shares one connection with the app, so a task's own session would see the
+    # write even uncommitted. Watching the request session's transaction is what shows
+    # whether the commit came first.
+    transaction_open_in_task: list[bool] = []
+
+    def record_transaction_state(task_db_session: AsyncSession) -> None:
+        transaction_open_in_task.append(task_db_session.in_transaction())
+
+    @fastapi_app.post("/insert-user-then-queue-task")
+    async def insert_user_then_queue_task(
+        request_db_session: DbSessionDep, after_response_tasks: BackgroundTasks
+    ) -> None:
+        await insert_user_row(request_db_session, email="ada@example.com")
+        after_response_tasks.add_task(record_transaction_state, request_db_session)
+
+    insert_user_response = await api_client.post("/insert-user-then-queue-task")
+
+    assert insert_user_response.status_code == 200
+    assert transaction_open_in_task == [False]
 
 
 @pytest.mark.usefixtures("signed_in_user")
