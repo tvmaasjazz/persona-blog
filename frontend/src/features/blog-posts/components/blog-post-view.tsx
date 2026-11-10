@@ -3,21 +3,17 @@ import { Link } from 'react-router'
 
 import { MarkdownContent } from '@/components/markdown-content'
 import { PersonaAvatar } from '@/components/persona-avatar'
+import { QueryErrorState } from '@/components/query-error-state'
 import { Button } from '@/components/ui/button'
 import { useBlogPost } from '@/features/blog-posts/api/blog-post-query'
 import { DeleteBlogPostButton } from '@/features/blog-posts/components/delete-blog-post-button'
 import { PostStatusBadges } from '@/features/blog-posts/components/post-status-badges'
-import { ApiError, apiErrorMessage } from '@/lib/api-error'
-import type { components } from '@/lib/api-schema.gen'
-
-type PersonaResponseDto = components['schemas']['PersonaResponseDto']
 
 type BlogPostViewProps = {
   blogPostIdentity: string
-  personas: PersonaResponseDto[]
 }
 
-export function BlogPostView({ blogPostIdentity, personas }: BlogPostViewProps) {
+export function BlogPostView({ blogPostIdentity }: BlogPostViewProps) {
   // Load the post
   const { data: blogPost, isPending, error } = useBlogPost(blogPostIdentity)
 
@@ -25,44 +21,36 @@ export function BlogPostView({ blogPostIdentity, personas }: BlogPostViewProps) 
     return <div className="h-40 rounded-2xl bg-accent" />
   }
 
-  // Not found or failed
   if (error) {
-    const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
-
     return (
-      <div className="flex flex-col items-start gap-4">
-        <p className="text-muted-foreground">
-          {isNotFound ? 'Post not found' : apiErrorMessage(error)}
-        </p>
-        <Button asChild variant="secondary">
-          <Link to="/posts">Back to posts</Link>
-        </Button>
-      </div>
+      <QueryErrorState
+        error={error}
+        notFoundMessage="Post not found."
+        backTo={{ to: '/posts', label: 'Back to posts' }}
+      />
     )
   }
 
   // Header with author and actions, then the body
-  const persona = personas.find((candidate) => candidate.identity === blogPost.persona_identity)
-
   return (
     <article className="flex flex-col gap-8">
       <header className="flex flex-col gap-4">
         <h1 className="text-xl font-extrabold break-words">{blogPost.title}</h1>
         {blogPost.subtitle && <p className="text-muted-foreground italic">{blogPost.subtitle}</p>}
         <div className="flex items-center gap-2">
-          <PersonaAvatar
-            name={persona?.name ?? 'Unknown persona'}
-            avatarUrl={persona?.avatar_url ?? null}
-          />
-          {persona ? (
-            <Link to={`/personas/${persona.identity}`} className="font-semibold text-primary-text">
-              {persona.name}
-            </Link>
-          ) : (
-            <span className="text-muted-foreground">Unknown persona</span>
-          )}
+          <PersonaAvatar name={blogPost.persona_name} avatarUrl={blogPost.persona_avatar_url} />
+          <Link
+            to={`/personas/${blogPost.persona_identity}`}
+            className="font-semibold text-primary-text"
+          >
+            {blogPost.persona_name}
+          </Link>
         </div>
-        <PostStatusBadges publishedAt={blogPost.published_at} isPublic={blogPost.is_public} />
+        <PostStatusBadges
+          publishedAt={blogPost.published_at}
+          isPublic={blogPost.is_public}
+          isPersonaPublic={blogPost.is_persona_public}
+        />
         <div className="flex items-center gap-2">
           <Button asChild variant="secondary">
             <Link to={`/posts/${blogPost.identity}/edit`}>

@@ -1,57 +1,58 @@
 import type { ReactNode } from 'react'
 
-import { useBlogPostList } from '@/features/blog-posts/api/blog-post-list-query'
+import { CardListSkeleton } from '@/components/card-list-skeleton'
+import { QueryErrorState } from '@/components/query-error-state'
 import { BlogPostCard } from '@/features/blog-posts/components/blog-post-card'
 import type { components } from '@/lib/api-schema.gen'
 
-type PersonaResponseDto = components['schemas']['PersonaResponseDto']
+type BlogPostSummaryResponseDto = components['schemas']['BlogPostSummaryResponseDto']
 
 type BlogPostListProps = {
-  personaIdentity?: string
-  personas: PersonaResponseDto[]
+  blogPosts: BlogPostSummaryResponseDto[] | undefined
+  isPending: boolean
+  error: Error | null
+  // A search or filter is narrowing the list
+  isNarrowed: boolean
   // Titles and status only, for a sidebar
   isCompact?: boolean
   emptyState: ReactNode
 }
 
 export function BlogPostList({
-  personaIdentity,
-  personas,
+  blogPosts,
+  isPending,
+  error,
+  isNarrowed,
   isCompact = false,
   emptyState,
 }: BlogPostListProps) {
-  // Load the posts
-  const { data: blogPostList, isPending, isError } = useBlogPostList(personaIdentity)
-
   if (isPending) {
+    return <CardListSkeleton />
+  }
+
+  if (error || !blogPosts) {
     return (
-      <div className="flex flex-col gap-3">
-        <div className="h-24 rounded-2xl bg-accent" />
-        <div className="h-24 rounded-2xl bg-accent" />
-        <div className="h-24 rounded-2xl bg-accent" />
-      </div>
+      <QueryErrorState
+        error={error ?? new Error('Posts not loaded')}
+        notFoundMessage="Posts not found."
+      />
     )
   }
 
-  // Failed or empty
-  if (isError) {
-    return <p className="text-muted-foreground">Couldn't load your posts. Try again.</p>
-  }
-
-  if (blogPostList.blog_posts.length === 0) {
-    return emptyState
+  // Nothing matched, or nothing exists
+  if (blogPosts.length === 0) {
+    return isNarrowed ? (
+      <p className="text-muted-foreground">No posts match your search or filter.</p>
+    ) : (
+      emptyState
+    )
   }
 
   // One card per post
   return (
     <div className="flex flex-col gap-3">
-      {blogPostList.blog_posts.map((blogPost) => (
-        <BlogPostCard
-          key={blogPost.identity}
-          blogPost={blogPost}
-          persona={personas.find((persona) => persona.identity === blogPost.persona_identity)}
-          isCompact={isCompact}
-        />
+      {blogPosts.map((blogPost) => (
+        <BlogPostCard key={blogPost.identity} blogPost={blogPost} isCompact={isCompact} />
       ))}
     </div>
   )

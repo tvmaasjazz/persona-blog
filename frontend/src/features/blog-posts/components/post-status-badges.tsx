@@ -1,16 +1,18 @@
 import { Badge } from '@/components/ui/badge'
 import { findPublishStatus } from '@/features/blog-posts/publishing-form-schema'
+import { formatDate } from '@/lib/format-date'
 
 type PostStatusBadgesProps = {
   publishedAt: string | null | undefined
   isPublic: boolean
+  isPersonaPublic: boolean
 }
 
-function formatDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString(undefined, { dateStyle: 'medium' })
-}
-
-export function PostStatusBadges({ publishedAt, isPublic }: PostStatusBadgesProps) {
+export function PostStatusBadges({
+  publishedAt,
+  isPublic,
+  isPersonaPublic,
+}: PostStatusBadgesProps) {
   const status = findPublishStatus(publishedAt ?? null)
 
   return (
@@ -22,7 +24,13 @@ export function PostStatusBadges({ publishedAt, isPublic }: PostStatusBadgesProp
       {status === 'PUBLISHED' && publishedAt && (
         <Badge variant="default">Published {formatDate(publishedAt)}</Badge>
       )}
-      <Badge variant={isPublic ? 'secondary' : 'outline'}>{isPublic ? 'Public' : 'Private'}</Badge>
+      <Badge variant={isPublic ? 'secondary' : 'outline'}>
+        {isPublic
+          ? isPersonaPublic
+            ? 'Public'
+            : 'Public · hidden while the persona is private'
+          : 'Private'}
+      </Badge>
     </div>
   )
 }

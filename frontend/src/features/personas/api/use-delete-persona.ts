@@ -20,7 +20,7 @@ export function useDeletePersona() {
     mutationFn: deletePersona,
     onSuccess: (_result, personaIdentity) => {
       queryClient.removeQueries({ queryKey: ['personas', personaIdentity] })
-      return queryClient.invalidateQueries({ queryKey: ['personas'], exact: true })
+      return queryClient.invalidateQueries({ queryKey: ['personas'] })
     },
   })
 }

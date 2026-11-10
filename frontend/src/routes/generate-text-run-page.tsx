@@ -1,11 +1,10 @@
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 
-import { Button } from '@/components/ui/button'
+import { QueryErrorState } from '@/components/query-error-state'
 import { SaveRunAsPostForm } from '@/features/blog-posts/components/save-run-as-post-form'
 import { useGenerateTextRun } from '@/features/generate-text/api/generate-text-run-query'
 import { GenerateTextRunView } from '@/features/generate-text/components/generate-text-run-view'
-import { usePersonaList } from '@/features/personas/api/persona-list-query'
-import { ApiError, apiErrorMessage } from '@/lib/api-error'
+import { usePersonaOptions } from '@/features/personas/api/user-persona-page-query'
 
 type LoadedRunProps = {
   runIdentity: string
@@ -14,32 +13,24 @@ type LoadedRunProps = {
 function LoadedRun({ runIdentity }: LoadedRunProps) {
   // Load the run and personas
   const { data: run, isPending, error } = useGenerateTextRun(runIdentity)
-  const { data: personaList } = usePersonaList()
+  const { data: personas } = usePersonaOptions()
 
   if (isPending) {
     return <div className="mx-auto h-40 max-w-[720px] rounded-2xl bg-accent" />
   }
 
-  // Not found or failed
   if (error) {
-    const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
-
     return (
-      <div className="mx-auto flex max-w-[720px] flex-col items-start gap-4">
-        <p className="text-muted-foreground">
-          {isNotFound ? 'Run not found' : apiErrorMessage(error)}
-        </p>
-        <Button asChild variant="secondary">
-          <Link to="/write">Back to writing</Link>
-        </Button>
-      </div>
+      <QueryErrorState
+        error={error}
+        notFoundMessage="Run not found."
+        backTo={{ to: '/write', label: 'Back to writing' }}
+      />
     )
   }
 
   // Run view with the save form from blog-posts
-  const persona = personaList?.personas.find(
-    (candidate) => candidate.identity === run.persona_identity,
-  )
+  const persona = personas?.find((candidate) => candidate.identity === run.persona_identity)
 
   return (
     <GenerateTextRunView

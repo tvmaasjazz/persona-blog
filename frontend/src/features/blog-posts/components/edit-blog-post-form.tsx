@@ -1,8 +1,8 @@
-import { Link, useNavigate } from 'react-router'
+import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { useAppForm } from '@/components/form/use-app-form'
-import { Button } from '@/components/ui/button'
+import { QueryErrorState } from '@/components/query-error-state'
 import { useBlogPost } from '@/features/blog-posts/api/blog-post-query'
 import { useUpdateBlogPost } from '@/features/blog-posts/api/use-update-blog-post'
 import {
@@ -14,18 +14,16 @@ import {
   publishingValuesFromPost,
   toPublishedAt,
 } from '@/features/blog-posts/publishing-form-schema'
-import { ApiError, apiErrorMessage } from '@/lib/api-error'
+import { apiErrorMessage } from '@/lib/api-error'
 import type { components } from '@/lib/api-schema.gen'
 
 type BlogPostResponseDto = components['schemas']['BlogPostResponseDto']
-type PersonaResponseDto = components['schemas']['PersonaResponseDto']
 
 type EditBlogPostFormProps = {
   blogPostIdentity: string
-  personas: PersonaResponseDto[]
 }
 
-export function EditBlogPostForm({ blogPostIdentity, personas }: EditBlogPostFormProps) {
+export function EditBlogPostForm({ blogPostIdentity }: EditBlogPostFormProps) {
   // Load the post
   const { data: blogPost, isPending, error } = useBlogPost(blogPostIdentity)
 
@@ -33,28 +31,18 @@ export function EditBlogPostForm({ blogPostIdentity, personas }: EditBlogPostFor
     return <div className="h-40 rounded-2xl bg-accent" />
   }
 
-  // Not found or failed
   if (error) {
-    const isNotFound = error instanceof ApiError && (error.status === 404 || error.status === 422)
-
     return (
-      <div className="flex flex-col items-start gap-4">
-        <p className="text-muted-foreground">
-          {isNotFound ? 'Post not found' : apiErrorMessage(error)}
-        </p>
-        <Button asChild variant="secondary">
-          <Link to="/posts">Back to posts</Link>
-        </Button>
-      </div>
+      <QueryErrorState
+        error={error}
+        notFoundMessage="Post not found."
+        backTo={{ to: '/posts', label: 'Back to posts' }}
+      />
     )
   }
 
   // The post's persona decides whether it can be public
-  const persona = personas.find((candidate) => candidate.identity === blogPost.persona_identity)
-
-  return (
-    <LoadedEditBlogPostForm blogPost={blogPost} isPersonaPublic={persona?.is_public ?? false} />
-  )
+  return <LoadedEditBlogPostForm blogPost={blogPost} isPersonaPublic={blogPost.is_persona_public} />
 }
 
 type LoadedEditBlogPostFormProps = {

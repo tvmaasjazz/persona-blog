@@ -1,29 +1,36 @@
 import { Link } from 'react-router'
 
+import { CardListSkeleton } from '@/components/card-list-skeleton'
+import { ListPager } from '@/components/list-pager'
+import { QueryErrorState } from '@/components/query-error-state'
 import { Button } from '@/components/ui/button'
-import { usePersonaList } from '@/features/personas/api/persona-list-query'
 import { PersonaCard } from '@/features/personas/components/persona-card'
+import type { components } from '@/lib/api-schema.gen'
 
-export function PersonaList() {
-  // Load the personas
-  const { data: personaList, isPending, isError } = usePersonaList()
+type UserPersonaPageResponseDto = components['schemas']['UserPersonaPageResponseDto']
 
-  if (isPending) {
-    return (
-      <div className="flex flex-col gap-3">
-        <div className="h-24 rounded-2xl bg-accent" />
-        <div className="h-24 rounded-2xl bg-accent" />
-        <div className="h-24 rounded-2xl bg-accent" />
-      </div>
-    )
+type PersonaListProps = {
+  page: UserPersonaPageResponseDto | undefined
+  error: Error | null
+  search: string
+  onPageChange: (page: number) => void
+}
+
+export function PersonaList({ page, error, search, onPageChange }: PersonaListProps) {
+  if (error) {
+    return <QueryErrorState error={error} notFoundMessage="Personas not found." />
   }
 
-  // Failed or empty
-  if (isError) {
-    return <p className="text-muted-foreground">Couldn't load your personas. Try again.</p>
+  if (!page) {
+    return <CardListSkeleton />
   }
 
-  if (personaList.personas.length === 0) {
+  // No match for the search, which differs from having no personas
+  if (page.personas.length === 0 && search) {
+    return <p className="text-muted-foreground">No personas match "{search}".</p>
+  }
+
+  if (page.personas.length === 0) {
     return (
       <div className="flex flex-col items-start gap-4 rounded-2xl border bg-card p-6">
         <p className="text-muted-foreground">
@@ -36,12 +43,15 @@ export function PersonaList() {
     )
   }
 
-  // One card per persona
+  // One card per persona, then the pager
   return (
-    <div className="flex flex-col gap-3">
-      {personaList.personas.map((persona) => (
-        <PersonaCard key={persona.identity} persona={persona} />
-      ))}
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        {page.personas.map((persona) => (
+          <PersonaCard key={persona.identity} persona={persona} />
+        ))}
+      </div>
+      <ListPager pagination={page.pagination} onPageChange={onPageChange} />
     </div>
   )
 }
