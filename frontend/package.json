@@ -10,7 +10,7 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "preview": "vite preview",
-    "test": "LANG=en_US.UTF-8 vitest run",
+    "test": "LC_ALL=en_US.UTF-8 vitest run",
     "api:types": "openapi-typescript http://localhost:8000/openapi.json -o src/lib/api-schema.gen.ts"
   },
   "dependencies": {

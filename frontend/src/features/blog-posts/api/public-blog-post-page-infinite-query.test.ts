@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { components } from '@/lib/api-schema.gen'
 
-import { flattenPages } from './public-blog-post-page-infinite-query'
+import { flattenPublicBlogPostPages } from './public-blog-post-page-infinite-query'
 
 type BlogPostSummaryResponseDto = components['schemas']['BlogPostSummaryResponseDto']
 type PublicBlogPostPageResponseDto = components['schemas']['PublicBlogPostPageResponseDto']
@@ -46,11 +46,11 @@ const secondPost = buildBlogPostSummary('post-2', 'Second')
 const thirdPost = buildBlogPostSummary('post-3', 'Third')
 const fourthPost = buildBlogPostSummary('post-4', 'Fourth')
 
-describe('flattenPages', () => {
+describe('flattenPublicBlogPostPages', () => {
   it('returns the posts of a single page in order', () => {
     const infiniteData = buildInfiniteData([[firstPost, secondPost]])
 
-    expect(flattenPages(infiniteData)).toEqual([firstPost, secondPost])
+    expect(flattenPublicBlogPostPages(infiniteData)).toEqual([firstPost, secondPost])
   })
 
   it('joins pages with no overlap in page order', () => {
@@ -59,7 +59,12 @@ describe('flattenPages', () => {
       [thirdPost, fourthPost],
     ])
 
-    expect(flattenPages(infiniteData)).toEqual([firstPost, secondPost, thirdPost, fourthPost])
+    expect(flattenPublicBlogPostPages(infiniteData)).toEqual([
+      firstPost,
+      secondPost,
+      thirdPost,
+      fourthPost,
+    ])
   })
 
   it('keeps the first copy of a post that appears on two pages, where it first appeared', () => {
@@ -70,18 +75,18 @@ describe('flattenPages', () => {
       [movedSecondPost, thirdPost],
     ])
 
-    expect(flattenPages(infiniteData)).toEqual([firstPost, secondPost, thirdPost])
+    expect(flattenPublicBlogPostPages(infiniteData)).toEqual([firstPost, secondPost, thirdPost])
   })
 
   it('skips empty pages', () => {
     const infiniteData = buildInfiniteData([[], [firstPost], []])
 
-    expect(flattenPages(infiniteData)).toEqual([firstPost])
+    expect(flattenPublicBlogPostPages(infiniteData)).toEqual([firstPost])
   })
 
   it('returns no posts when every page is empty', () => {
     const infiniteData = buildInfiniteData([[], []])
 
-    expect(flattenPages(infiniteData)).toEqual([])
+    expect(flattenPublicBlogPostPages(infiniteData)).toEqual([])
   })
 })

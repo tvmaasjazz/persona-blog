@@ -16,6 +16,7 @@ export default defineConfig({
   test: {
     // Unit tests sit beside their source (.claude/rules/react-testing.md)
     include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['src/test-setup.ts'],
     environment: 'node',
   },
   server: {

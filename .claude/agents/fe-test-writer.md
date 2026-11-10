@@ -45,7 +45,7 @@ call in `src/lib/api-schema.gen.ts`.
 
 Run commands from `frontend/`, and only these:
 
-- `npx vitest run <your files>` for unit tests
+- `npm run test -- <your files>` for unit tests (the script pins the locale)
 - `npx playwright test <your files>` for end-to-end flows
 - `npm run fmt -- <your files>` and `npm run lint -- <your files>`
 
