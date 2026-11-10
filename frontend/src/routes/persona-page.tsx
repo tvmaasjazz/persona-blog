@@ -1,40 +1,72 @@
 import { useParams } from 'react-router'
 
-import { useUserBlogPostPage } from '@/features/blog-posts/api/user-blog-post-page-query'
-import { BlogPostList } from '@/features/blog-posts/components/blog-post-list'
-import { PersonaProfile } from '@/features/personas/components/persona-profile'
+import { QueryErrorState } from '@/components/query-error-state'
+import { useCurrentUser } from '@/features/auth/api/current-user-query'
+import { hasPermission } from '@/features/auth/permissions'
+import { PublicBlogPostFeed } from '@/features/blog-posts/components/public-blog-post-feed'
+import { usePublicPersona } from '@/features/personas/api/public-persona-query'
+import { PersonaHeader } from '@/features/personas/components/persona-header'
+import { PersonaVoiceDetails } from '@/features/personas/components/persona-voice-details'
 
 export function PersonaPage() {
   const { personaIdentity } = useParams()
-  const {
-    data: blogPostPage,
-    isPending,
-    error,
-  } = useUserBlogPostPage({
-    page: 1,
-    page_size: 20,
-    persona_identity: personaIdentity,
-    sort_by: 'CREATED_AT',
-    sort_direction: 'DESC',
-  })
 
   if (!personaIdentity) {
     return null
   }
 
+  return <LoadedPersonaPage personaIdentity={personaIdentity} />
+}
+
+type LoadedPersonaPageProps = {
+  personaIdentity: string
+}
+
+// Split out so the hooks run only with an identity.
+function LoadedPersonaPage({ personaIdentity }: LoadedPersonaPageProps) {
+  const { data: persona, isPending, error } = usePublicPersona(personaIdentity)
+  const { data: currentUser } = useCurrentUser()
+
+  if (isPending) {
+    return <div className="h-40 rounded-2xl bg-accent" />
+  }
+
+  // Not found, or someone else's private persona
+  if (error) {
+    return (
+      <QueryErrorState
+        error={error}
+        notFoundMessage="Persona not found."
+        backTo={{ to: '/', label: 'Back home' }}
+      />
+    )
+  }
+
+  // Owner actions need both ownership and the permission
+  const canEdit = persona.is_owner && hasPermission(currentUser, 'PERSONA_WRITE')
+  const canWritePost = persona.is_owner && hasPermission(currentUser, 'GENERATE_TEXT_RUN_WRITE')
+  const canManagePosts = persona.is_owner && hasPermission(currentUser, 'BLOG_POST_WRITE')
+
+  // Header, the owner's voice details, then the posts
   return (
-    <PersonaProfile
-      personaIdentity={personaIdentity}
-      posts={
-        <BlogPostList
-          blogPosts={blogPostPage?.blog_posts}
-          isPending={isPending}
-          error={error}
-          isNarrowed={false}
-          isCompact
-          emptyState={<p className="text-muted-foreground">No posts from this persona yet.</p>}
-        />
-      }
-    />
+    <div className="flex flex-col gap-8">
+      <PersonaHeader
+        persona={persona}
+        canEdit={canEdit}
+        canWritePost={canWritePost}
+        canManagePosts={canManagePosts}
+      />
+      {persona.is_owner && <PersonaVoiceDetails personaIdentity={persona.identity} />}
+      <PublicBlogPostFeed
+        params={{
+          persona_identity: persona.identity,
+          sort_by: 'PUBLISHED_AT',
+          sort_direction: 'DESC',
+        }}
+        isNarrowed={false}
+        emptyMessage={<p className="text-muted-foreground">No posts yet.</p>}
+        noMatchMessage={<p className="text-muted-foreground">No posts match your search.</p>}
+      />
+    </div>
   )
 }
