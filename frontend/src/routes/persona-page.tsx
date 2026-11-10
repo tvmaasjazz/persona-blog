@@ -6,7 +6,11 @@ import { PersonaProfile } from '@/features/personas/components/persona-profile'
 
 export function PersonaPage() {
   const { personaIdentity } = useParams()
-  const { data, isPending, error } = useUserBlogPostPage({
+  const {
+    data: blogPostPage,
+    isPending,
+    error,
+  } = useUserBlogPostPage({
     page: 1,
     page_size: 20,
     persona_identity: personaIdentity,
@@ -23,7 +27,7 @@ export function PersonaPage() {
       personaIdentity={personaIdentity}
       posts={
         <BlogPostList
-          blogPosts={data?.blog_posts}
+          blogPosts={blogPostPage?.blog_posts}
           isPending={isPending}
           error={error}
           isNarrowed={false}

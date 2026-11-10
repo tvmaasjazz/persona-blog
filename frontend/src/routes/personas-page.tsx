@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react'
 import { Link } from 'react-router'
 
+import { ListPager } from '@/components/list-pager'
 import { ListSearchBox } from '@/components/list-search-box'
 import { Button } from '@/components/ui/button'
 import { useUserPersonaPage } from '@/features/personas/api/user-persona-page-query'
@@ -20,7 +21,11 @@ export function PersonasPage() {
     defaultSort: 'CREATED_AT',
     defaultDirection: 'DESC',
   })
-  const { data, error } = useUserPersonaPage({
+  const {
+    data: personaPage,
+    isPending,
+    error,
+  } = useUserPersonaPage({
     page,
     page_size: PAGE_SIZE,
     search: search || undefined,
@@ -42,7 +47,19 @@ export function PersonasPage() {
       <div className="mb-6">
         <ListSearchBox label="Search personas" value={search} onChange={setSearch} />
       </div>
-      <PersonaList page={data} error={error} search={search} onPageChange={setPage} />
+      <PersonaList
+        personas={personaPage?.personas}
+        isPending={isPending}
+        error={error}
+        isNarrowed={search !== ''}
+        pagination={personaPage?.pagination}
+        onPageChange={setPage}
+      />
+      {personaPage && (
+        <div className="mt-6">
+          <ListPager pagination={personaPage.pagination} onPageChange={setPage} />
+        </div>
+      )}
     </>
   )
 }

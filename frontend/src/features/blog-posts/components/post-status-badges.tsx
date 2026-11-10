@@ -24,13 +24,10 @@ export function PostStatusBadges({
       {status === 'PUBLISHED' && publishedAt && (
         <Badge variant="default">Published {formatDate(publishedAt)}</Badge>
       )}
-      <Badge variant={isPublic ? 'secondary' : 'outline'}>
-        {isPublic
-          ? isPersonaPublic
-            ? 'Public'
-            : 'Public · hidden while the persona is private'
-          : 'Private'}
-      </Badge>
+      <Badge variant={isPublic ? 'secondary' : 'outline'}>{isPublic ? 'Public' : 'Private'}</Badge>
+      {isPublic && !isPersonaPublic && (
+        <span className="text-xs text-muted-foreground">Hidden while the persona is private</span>
+      )}
     </div>
   )
 }

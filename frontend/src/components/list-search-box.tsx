@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useDebouncedCallback } from '@/lib/use-debounced-callback'
 
 const SEARCH_DEBOUNCE_MS = 300
+// The backend's SearchStr limit
+const SEARCH_MAX_LENGTH = 200
 
 type ListSearchBoxProps = {
   label: string
@@ -14,6 +16,7 @@ type ListSearchBoxProps = {
 }
 
 export function ListSearchBox({ label, value, onChange, placeholder }: ListSearchBoxProps) {
+  const inputId = useId()
   const [draft, setDraft] = useState(value)
   const [previousValue, setPreviousValue] = useState(value)
   const notifyChange = useDebouncedCallback(onChange, SEARCH_DEBOUNCE_MS)
@@ -26,11 +29,11 @@ export function ListSearchBox({ label, value, onChange, placeholder }: ListSearc
 
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor="list-search">{label}</Label>
+      <Label htmlFor={inputId}>{label}</Label>
       <Input
-        id="list-search"
+        id={inputId}
         type="search"
-        className="h-12 rounded-xl"
+        maxLength={SEARCH_MAX_LENGTH}
         value={draft}
         placeholder={placeholder}
         onChange={(event) => {

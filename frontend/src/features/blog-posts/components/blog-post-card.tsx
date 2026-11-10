@@ -43,9 +43,11 @@ export function BlogPostCard({ blogPost, isCompact = false }: BlogPostCardProps)
       </div>
       <div className="flex items-center gap-2">
         <PersonaAvatar name={blogPost.persona_name} avatarUrl={blogPost.persona_avatar_url} />
-        <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+        <span className="min-w-0 truncate text-sm text-muted-foreground">
           {blogPost.persona_name}
         </span>
+      </div>
+      <div>
         <PostStatusBadges
           publishedAt={blogPost.published_at}
           isPublic={blogPost.is_public}
