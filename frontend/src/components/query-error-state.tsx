@@ -22,7 +22,7 @@ export function QueryErrorState({ error, notFoundMessage, backTo }: QueryErrorSt
   if (isNotFound) {
     message = `${notFoundMessage} It may have been deleted, or the link is wrong.`
   } else if (hasApiMessage) {
-    message = apiErrorMessage(error)
+    message = `${apiErrorMessage(error)} Try again, or reload the page.`
   }
 
   return (

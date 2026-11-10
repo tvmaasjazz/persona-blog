@@ -47,13 +47,11 @@ export function BlogPostCard({ blogPost, isCompact = false }: BlogPostCardProps)
           {blogPost.persona_name}
         </span>
       </div>
-      <div>
-        <PostStatusBadges
-          publishedAt={blogPost.published_at}
-          isPublic={blogPost.is_public}
-          isPersonaPublic={blogPost.is_persona_public}
-        />
-      </div>
+      <PostStatusBadges
+        publishedAt={blogPost.published_at}
+        isPublic={blogPost.is_public}
+        isPersonaPublic={blogPost.is_persona_public}
+      />
     </Link>
   )
 }

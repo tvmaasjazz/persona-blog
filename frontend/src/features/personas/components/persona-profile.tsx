@@ -69,7 +69,7 @@ export function PersonaProfile({ personaIdentity, posts }: PersonaProfileProps) 
             </div>
           </div>
           <p className="whitespace-pre-wrap">{persona.bio}</p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="secondary">
               <Link to={`/personas/${persona.identity}/edit`}>
                 <Pencil aria-hidden />

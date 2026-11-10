@@ -25,7 +25,7 @@ export function ListPager({ pagination, onPageChange }: ListPagerProps) {
         <ChevronLeft aria-hidden />
         Previous
       </Button>
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm whitespace-nowrap text-muted-foreground">
         Page {pagination.page} of {pageCount}
       </p>
       <Button

@@ -14,12 +14,12 @@ type LoadedRunProps = {
   runIdentity: string
 }
 
-type RunViewWithPersonaProps = {
+type RunWithSaveFormProps = {
   run: GenerateTextRunResponseDto
   persona: PersonaResponseDto | undefined
 }
 
-type RunWithPersonaProps = {
+type RunPersonaLoaderProps = {
   run: GenerateTextRunResponseDto
   personaIdentity: string
 }
@@ -44,20 +44,42 @@ function LoadedRun({ runIdentity }: LoadedRunProps) {
 
   // A run whose persona was deleted has none to load
   return run.persona_identity ? (
-    <RunWithPersona run={run} personaIdentity={run.persona_identity} />
+    <RunPersonaLoader run={run} personaIdentity={run.persona_identity} />
   ) : (
-    <RunViewWithPersona run={run} persona={undefined} />
+    <RunWithSaveForm run={run} persona={undefined} />
   )
 }
 
-function RunWithPersona({ run, personaIdentity }: RunWithPersonaProps) {
-  const { data: persona } = usePersona(personaIdentity)
+function RunPersonaLoader({ run, personaIdentity }: RunPersonaLoaderProps) {
+  const { data: persona, isPending, error } = usePersona(personaIdentity)
 
-  return <RunViewWithPersona run={run} persona={persona} />
+  return (
+    <GenerateTextRunView
+      run={run}
+      personaName={persona?.name ?? null}
+      renderCompletedActions={({ onSaved, discardButton }) => {
+        // The save form needs the persona's visibility, so wait for it
+        if (isPending) {
+          return <div className="h-40 rounded-2xl bg-accent" />
+        }
+        if (error) {
+          return <QueryErrorState error={error} />
+        }
+        return (
+          <SaveRunAsPostForm
+            runIdentity={run.run_identity}
+            isPersonaPublic={persona.is_public}
+            onSaved={onSaved}
+            secondaryAction={discardButton}
+          />
+        )
+      }}
+    />
+  )
 }
 
-function RunViewWithPersona({ run, persona }: RunViewWithPersonaProps) {
-  // Run view with the save form from blog-posts
+// A run whose persona was deleted: no persona to read, so its posts can't be public
+function RunWithSaveForm({ run, persona }: RunWithSaveFormProps) {
   return (
     <GenerateTextRunView
       run={run}
@@ -65,7 +87,7 @@ function RunViewWithPersona({ run, persona }: RunViewWithPersonaProps) {
       renderCompletedActions={({ onSaved, discardButton }) => (
         <SaveRunAsPostForm
           runIdentity={run.run_identity}
-          isPersonaPublic={persona?.is_public ?? false}
+          isPersonaPublic={false}
           onSaved={onSaved}
           secondaryAction={discardButton}
         />

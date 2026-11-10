@@ -12,7 +12,7 @@ type UseListSearchParamsOptions<TSort extends string> = {
   defaultDirection: SortDirection
 }
 
-// Reads and writes page, q, sort and dir in the URL, leaving any other param alone.
+// Reads and writes page, q, sort and dir, plus any named filter, in the URL, leaving other params alone.
 export function useListSearchParams<TSort extends string>({
   sortValues,
   defaultSort,
