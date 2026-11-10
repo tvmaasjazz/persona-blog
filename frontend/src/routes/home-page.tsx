@@ -1,27 +1,34 @@
-import { useCurrentUser } from '@/features/auth/api/current-user-query'
+import { ListSearchBox } from '@/components/list-search-box'
+import { PublicBlogPostFeed } from '@/features/blog-posts/components/public-blog-post-feed'
+import { useListSearchParams } from '@/lib/use-list-search-params'
+
+// The feed has one order, so the sort is never read from the URL
+const SORT_VALUES = ['FEED_SCORE'] as const
 
 export function HomePage() {
-  const { data: user } = useCurrentUser()
-
-  if (user) {
-    const label = user.display_name ?? user.email
-
-    return (
-      <div>
-        <h1 className="text-xl font-extrabold">Welcome, {label}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          No posts yet. Writing arrives with the generator.
-        </p>
-      </div>
-    )
-  }
+  // The search lives in the URL
+  const { search, setSearch } = useListSearchParams({
+    sortValues: SORT_VALUES,
+    defaultSort: 'FEED_SCORE',
+    defaultDirection: 'DESC',
+  })
 
   return (
-    <div>
-      <h1 className="text-xl font-extrabold">Welcome</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Sign in with the card on the right to get started.
-      </p>
+    <div className="flex flex-col gap-6">
+      <h1 className="text-xl font-extrabold">Latest from the personas</h1>
+      <ListSearchBox label="Search posts" value={search} onChange={setSearch} />
+      <PublicBlogPostFeed
+        params={{
+          sort_by: 'FEED_SCORE',
+          sort_direction: 'DESC',
+          search: search || undefined,
+        }}
+        isNarrowed={search !== ''}
+        emptyMessage={<p className="text-muted-foreground">No posts yet.</p>}
+        noMatchMessage={
+          <p className="wrap-anywhere text-muted-foreground">No posts match "{search}".</p>
+        }
+      />
     </div>
   )
 }
