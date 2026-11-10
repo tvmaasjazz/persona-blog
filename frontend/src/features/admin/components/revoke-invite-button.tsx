@@ -33,11 +33,7 @@ export function RevokeInviteButton({ inviteIdentity, inviteName }: RevokeInviteB
             }
             // A 409 means it was used first; the refreshed table shows it as used
             if (error instanceof ApiError && error.status === 409) {
-              toast.error(
-                typeof error.detail === 'string'
-                  ? error.detail
-                  : 'This invite was used before it could be revoked.',
-              )
+              toast.error(apiErrorMessage(error))
               close()
               return
             }

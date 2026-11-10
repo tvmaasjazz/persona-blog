@@ -2,29 +2,20 @@ import { formOptions, revalidateLogic } from '@tanstack/react-form'
 import { z } from 'zod'
 
 import { focusFirstInvalidField } from '@/components/form/form-errors'
+import { creditAmountUsdSchema } from '@/features/admin/credit-grant-form-schema'
 
 // The limits in libs.invites.constants and libs.admin.constants.
 export const DEFAULT_INVITE_EXPIRES_IN_DAYS = 7
 export const MAX_INVITE_EXPIRES_IN_DAYS = 30
-export const MAX_INVITE_AMOUNT_USD = 100
 
-// Limits mirror AdminInviteDto in the backend, with the amount held to cents.
+// Limits mirror AdminInviteDto in the backend.
 export const inviteFormSchema = z.object({
   name: z
     .string()
     .trim()
     .min(1, 'Name is required')
     .max(200, 'Name must be 200 characters or fewer'),
-  credit_amount_usd: z
-    .string()
-    .trim()
-    .min(1, 'Amount is required')
-    .regex(/^\d+(\.\d{1,2})?$/, 'Amount must be a number with up to two decimals')
-    .refine((amount) => Number(amount) > 0, 'Amount must be more than $0')
-    .refine(
-      (amount) => Number(amount) <= MAX_INVITE_AMOUNT_USD,
-      `Amount must be $${MAX_INVITE_AMOUNT_USD} or less`,
-    ),
+  credit_amount_usd: creditAmountUsdSchema,
   note: z
     .string()
     .trim()

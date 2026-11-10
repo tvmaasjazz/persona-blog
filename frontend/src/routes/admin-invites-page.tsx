@@ -38,7 +38,11 @@ export function AdminInvitesPage() {
     <div className="flex flex-col gap-6">
       <AdminSectionNav canReadInvites />
       <h1 className="text-xl font-extrabold">Invites</h1>
-      {canCreateInvites && <CreateInviteForm />}
+      {canCreateInvites && (
+        <div className="max-w-xl">
+          <CreateInviteForm />
+        </div>
+      )}
       <ListSearchBox label="Search invites" value={list.search} onChange={list.setSearch} />
       <DataTable
         columns={buildAdminInviteColumns(canCreateInvites)}

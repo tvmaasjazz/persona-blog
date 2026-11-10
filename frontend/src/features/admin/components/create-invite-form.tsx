@@ -5,8 +5,8 @@ import { useAppForm } from '@/components/form/use-app-form'
 import { useCreateInvite } from '@/features/admin/api/use-create-invite'
 import { InviteLinkDialog } from '@/features/admin/components/invite-link-dialog'
 import { SectionCard } from '@/features/admin/components/section-card'
+import { MAX_CREDIT_GRANT_USD } from '@/features/admin/credit-grant-form-schema'
 import {
-  MAX_INVITE_AMOUNT_USD,
   MAX_INVITE_EXPIRES_IN_DAYS,
   inviteFormOptions,
   inviteFormSchema,
@@ -15,7 +15,7 @@ import { apiErrorMessage, isSessionEndedError } from '@/lib/api-error'
 
 export function CreateInviteForm() {
   const createInvite = useCreateInvite()
-  // The link lives only here, and is dropped when the dialog closes
+  // The link is also in the mutation's data, so closing the dialog drops both
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
 
   const form = useAppForm({
@@ -56,7 +56,7 @@ export function CreateInviteForm() {
           {(field) => (
             <field.TextField
               label="Amount (USD)"
-              description={`Credit given on sign-up. More than $0 and up to $${MAX_INVITE_AMOUNT_USD}, to the cent.`}
+              description={`Credit given on sign-up. More than $0 and up to $${MAX_CREDIT_GRANT_USD}, to the cent.`}
             />
           )}
         </form.AppField>
@@ -75,7 +75,13 @@ export function CreateInviteForm() {
           <form.SubmitButton label="Create invite" pendingLabel="Creating…" />
         </form.AppForm>
       </form>
-      <InviteLinkDialog inviteUrl={inviteUrl} onClose={() => setInviteUrl(null)} />
+      <InviteLinkDialog
+        inviteUrl={inviteUrl}
+        onClose={() => {
+          setInviteUrl(null)
+          createInvite.reset()
+        }}
+      />
     </SectionCard>
   )
 }

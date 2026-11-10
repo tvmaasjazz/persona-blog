@@ -30,7 +30,6 @@ export function InviteLinkDialog({ inviteUrl, onClose }: InviteLinkDialogProps) 
     try {
       await navigator.clipboard.writeText(inviteUrl)
       setIsCopied(true)
-      toast.success('Link copied')
     } catch {
       toast.error("Couldn't copy the link. Select it and copy it by hand.")
     }
@@ -45,7 +44,8 @@ export function InviteLinkDialog({ inviteUrl, onClose }: InviteLinkDialogProps) 
 
   return (
     <Dialog open={inviteUrl !== null} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      {/* A stray click outside would lose the link for good */}
+      <DialogContent onInteractOutside={(event) => event.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Invite link</DialogTitle>
           <DialogDescription>
@@ -63,7 +63,7 @@ export function InviteLinkDialog({ inviteUrl, onClose }: InviteLinkDialogProps) 
             Close
           </Button>
           <Button type="button" onClick={() => void handleCopy()}>
-            {isCopied ? 'Copied' : 'Copy link'}
+            <span aria-live="polite">{isCopied ? 'Copied' : 'Copy link'}</span>
           </Button>
         </DialogFooter>
       </DialogContent>
