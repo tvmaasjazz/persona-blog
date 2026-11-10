@@ -49,8 +49,22 @@ export function AppLayout() {
         <Sparkles aria-hidden className="mb-4 size-6 self-center text-primary-text md:self-start" />
         <ul className="flex flex-col gap-1">
           <NavItem to="/" label="Home" icon={Home} isExact />
-          {canWritePersonas && <NavItem to="/personas" label="My Personas" icon={Users} />}
-          {canWritePosts && <NavItem to="/posts" label="My Posts" icon={FileText} />}
+          {canWritePersonas && (
+            <NavItem
+              to="/personas"
+              label="My Personas"
+              icon={Users}
+              activePatterns={['/personas', '/personas/new', '/personas/:id/edit']}
+            />
+          )}
+          {canWritePosts && (
+            <NavItem
+              to="/posts"
+              label="My Posts"
+              icon={FileText}
+              activePatterns={['/posts', '/posts/:id/edit']}
+            />
+          )}
           {canReadUsers && <NavItem to="/admin/users" label="Admin" icon={Shield} />}
         </ul>
         {canGenerate && (

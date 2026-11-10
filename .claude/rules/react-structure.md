@@ -212,7 +212,8 @@ A paged route is read through a page query. The pattern is
 - A list a reader scrolls is infinite: `useInfiniteQuery` over the same paged route,
   its pages flattened and de-duplicated by `identity`, with `InfiniteScrollSentinel`
   from `components/` at the end. Its key ends in `'infinite'`, so it never shares one
-  with a `useQuery` over the same route. The pattern is
+  with a `useQuery` over the same route. It keeps `keepPreviousData` too, so a new
+  search shows the old posts until the first new page arrives. The pattern is
   `features/blog-posts/api/public-blog-post-page-infinite-query.ts`.
 
 ### Toasts
