@@ -52,6 +52,8 @@ frontend/src/
 │   ├── ui/                    # shadcn/ui, added with the CLI, never hand-created
 │   ├── form/                  # the form layer: useAppForm, field components
 │   ├── layout/                # app shell and page layouts: AppLayout, PageWithSidebar
+│   ├── confirm-action-button.tsx  # ConfirmActionButton
+│   ├── data-table.tsx         # DataTable
 │   ├── google-sign-in-button.tsx  # GoogleSignInButton
 │   └── list-pager.tsx         # components more than one feature uses, like the list parts
 └── lib/
@@ -320,9 +322,9 @@ A route that needs something from the layout says so in its `handle`, typed as
 
 A view that loads data has a loading, an empty and an error state, and a not-found
 state when it's read by identity. A button is disabled while its request runs. A
-destructive action confirms in an `AlertDialog` first; `delete-persona-button.tsx` is
-the pattern. Build the states from `CardListSkeleton` and `QueryErrorState` in
-`components/`. A list with a search tells an empty search apart from having nothing.
+destructive or far-reaching action confirms first through `ConfirmActionButton`
+(`components/`); its caller closes the dialog on success, so a failure leaves it open. Build the states from `CardListSkeleton` and `QueryErrorState` in
+`components/`; a table uses `DataTable`, which has them built in. A list with a search tells an empty search apart from having nothing.
 
 ## Accessibility
 

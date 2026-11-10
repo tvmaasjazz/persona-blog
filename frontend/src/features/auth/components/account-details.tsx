@@ -1,5 +1,6 @@
 import { READER_NO_ACCESS_MESSAGE } from '@/features/auth/no-access-message'
 import type { components } from '@/lib/api-schema.gen'
+import { formatRole } from '@/lib/format-role'
 import { formatUsd } from '@/lib/format-usd'
 
 type UserResponseDto = components['schemas']['UserResponseDto']
@@ -18,7 +19,7 @@ export function AccountDetails({ user, canGenerate }: AccountDetailsProps) {
         <dt className="text-muted-foreground">Email</dt>
         <dd className="break-all">{user.email}</dd>
         <dt className="text-muted-foreground">Role</dt>
-        <dd className="capitalize">{user.role.toLowerCase()}</dd>
+        <dd>{formatRole(user.role)}</dd>
         {canGenerate && (
           <>
             <dt className="text-muted-foreground">Balance</dt>
