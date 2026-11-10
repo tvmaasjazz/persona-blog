@@ -42,6 +42,7 @@ npm run fmt                  # format with oxfmt
 npm run fmt:check            # check formatting without writing
 npm run lint                 # oxlint
 npm run build                # type-check and build to dist/
+npm run api:types            # regenerate src/lib/api-schema.gen.ts (needs the API on 8000)
 npx shadcn@latest add <name> # add a shadcn/ui component to src/components/ui/
 ```
 

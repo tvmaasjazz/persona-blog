@@ -30,7 +30,8 @@ You cover the frontend. Backend files are `be-docs-auditor`'s, so skip them.
 
 If the task explicitly asks for a full audit, the scope is `.claude/rules/react-*.md`,
 every agent prefixed `react-` or `fe-`, and `frontend/README.md`, all read in full,
-plus the frontend parts of `CLAUDE.md` and `plans/plan.md`. If the task names no
+plus the frontend parts of `CLAUDE.md`, `plans/plan.md` and
+`plans/frontend-plan.md`. If the task names no
 changed files and doesn't ask for a full audit, stop and ask which files changed.
 
 ## Who owns what
