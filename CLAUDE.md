@@ -50,7 +50,8 @@ npx shadcn@latest add <name> # add a shadcn/ui component to src/components/ui/
 
 Before committing, run `ruff check` and `ruff format --check` for backend changes, and
 `npm run fmt:check`, `npm run lint`, `npm run build` and `npm run test` for frontend
-changes. `pytest` must pass before the PR is ready to merge (see Pull requests).
+changes, and `npm run test:e2e` when a flow or a page it walks changed. `pytest` must
+pass before the PR is ready to merge (see Pull requests).
 
 ### Commands for Tyler to run
 
@@ -150,9 +151,10 @@ Split work across parallel agents only along files they don't share.
   its own files (`react-coder.md` › Commands). Run `fmt`, `lint` and `build` once at
   the end.
 - **Frontend tests.** `fe-test-writer` agents split by test file, one kind each (unit
-  or end-to-end), and each runs only its own files. End-to-end writers write in
-  parallel, but their runs share the dev database, so each runs its files alone. Run
-  `npm run test` and `npm run test:e2e` once at the end.
+  or end-to-end), and each runs only its own files. End-to-end runs share the dev
+  database and the e2e dev server, so a flow that fails on another writer's data is
+  rerun alone before it's called a bug. Run `npm run test` and `npm run test:e2e` once
+  at the end.
 
 ## Pull requests
 

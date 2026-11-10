@@ -33,8 +33,8 @@ and anything the generated types or the build already prove.
   `// @vitest-environment jsdom` comment at the top of its file, and renders the hook
   with `renderHook` from `@testing-library/react`, wrapped in what it needs (a
   `MemoryRouter` for a hook that reads the URL). `src/test-setup.ts` unmounts rendered
-  hooks after each test. A hook that navigates is checked through `useLocation()` and `useNavigationType()`
-  called in the same `renderHook` callback.
+  hooks after each test. A hook that navigates is checked through `useLocation()` and
+  `useNavigationType()` called in the same `renderHook` callback.
 - A hook that waits for a frame or a timer runs under `vi.useFakeTimers()`, advanced
   inside `act`. A browser measurement (`getBoundingClientRect`, `innerHeight`) is
   stubbed with `vi.spyOn`. Every fake is restored in an `after` hook: the one matching
@@ -62,9 +62,9 @@ A flow walks the real app against the real local API and its dev seed
 - Find elements by role and label (`getByRole`, `getByLabel`), never by class or test
   id. A selector that needs a class means the page is missing a label.
 - A test reads the seeded data, and makes anything it changes itself, through the UI or
-  the API, undoing it before it ends where later tests rely on the seed (a suspended
-  user is reactivated). It never relies on another test's changes, so any one runs
-  alone.
+  the API (`page.request`, which carries the signed-in context's cookie). It undoes
+  the change before it ends where later tests rely on the seed (a suspended user is
+  reactivated), and never relies on another test's changes, so any one runs alone.
 - No real generate run: a flow never reaches the model. The 402 path uses the seeded
   creator at $0.
 - Local only: `e2e/global-setup.ts` stops the run unless the API on `localhost:8000`

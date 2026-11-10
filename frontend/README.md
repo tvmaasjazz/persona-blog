@@ -10,6 +10,7 @@ npm install       # install dependencies
 npm run dev       # dev server at http://localhost:5173
 npm run build     # type-check and build to dist/
 npm run test      # Vitest unit tests
+npm run test:e2e  # Playwright flows (needs the API on port 8000 and the dev seed)
 npm run fmt       # format with oxfmt
 npm run fmt:check # check formatting without writing
 npm run lint      # oxlint

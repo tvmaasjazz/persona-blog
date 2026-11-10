@@ -29,8 +29,9 @@ call in `src/lib/api-schema.gen.ts`.
 
 - **Unit tests:** `<name>.test.ts` or `.test.tsx` beside the source, with the cases
   `react-testing.md` › Unit tests asks for.
-- **End-to-end flows:** one file per flow in `frontend/e2e/`, plus the fixtures and
-  helpers they need there, as `react-testing.md` › End-to-end tests says.
+- **End-to-end flows:** one file per flow in `frontend/e2e/`, as `react-testing.md` ›
+  End-to-end tests says. `e2e/fixtures.ts` and `e2e/global-setup.ts` are shared: change
+  them only when the brief says so. A new helper goes in a new file in `e2e/`.
 
 ## What you don't write
 
@@ -49,9 +50,8 @@ Run commands from `frontend/`, and only these:
 - `npm run test:e2e -- <your files>` for end-to-end flows
 - `npm run fmt -- <your files>` and `npm run lint -- <your files>`
 
-Write end-to-end flows only once `react-testing.md` › End-to-end tests is filled in;
-until then, report that the setup is missing. Run only your own files, never the whole
-suite: other test writers may be running in parallel. No `npm install`, no `git`, and
+Run only your own files, never the whole suite: other test writers may be running in
+parallel (`CLAUDE.md` › Running agents in parallel). No `npm install`, no `git`, and
 don't start or stop servers.
 
 When a test fails, work out which side is wrong before changing anything:
