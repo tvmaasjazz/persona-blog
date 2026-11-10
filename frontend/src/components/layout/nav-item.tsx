@@ -24,7 +24,7 @@ export function NavItem({ to, label, icon: Icon, isExact }: NavItemProps) {
         }
       >
         <Icon aria-hidden className="size-5" />
-        <span className="hidden md:inline">{label}</span>
+        <span className="sr-only md:not-sr-only">{label}</span>
       </NavLink>
     </li>
   )

@@ -1,3 +1,5 @@
+import { INVITE_MESSAGES } from '@/lib/invite-messages'
+
 // The redirect's codes aren't in the OpenAPI schema. They mirror the backend's
 // SignInErrorType (libs/auth/types.py) and InviteSignInResultType (libs/invites/types.py).
 const SIGN_IN_ERROR_MESSAGES: Record<string, string> = {
@@ -8,10 +10,10 @@ const SIGN_IN_ERROR_MESSAGES: Record<string, string> = {
 }
 
 const INVITE_ERROR_MESSAGES: Record<string, string> = {
-  INVITE_NOT_FOUND: "This invite link isn't valid.",
-  INVITE_USED: 'This invite has already been used.',
-  INVITE_EXPIRED: 'This invite has expired. Ask for a new one.',
-  INVITE_REVOKED: 'This invite is no longer valid. Ask for a new one.',
+  INVITE_NOT_FOUND: INVITE_MESSAGES.NOT_FOUND,
+  INVITE_USED: INVITE_MESSAGES.USED,
+  INVITE_EXPIRED: INVITE_MESSAGES.EXPIRED,
+  INVITE_REVOKED: INVITE_MESSAGES.REVOKED,
 }
 
 const GENERAL_SIGN_IN_ERROR_MESSAGE = "Sign-in didn't work. Try again."
@@ -29,7 +31,7 @@ export function findSignInResult(
   balanceText: string | null,
 ): SignInResult | null {
   const errorCode = searchParams.get('error')
-  const inviteCode = searchParams.get('invite')
+  const inviteResultCode = searchParams.get('invite')
   const inviteErrorCode = searchParams.get('invite_error')
 
   if (errorCode !== null) {
@@ -46,8 +48,8 @@ export function findSignInResult(
     }
   }
 
-  if (inviteCode !== null) {
-    if (inviteCode !== 'ACCEPTED') {
+  if (inviteResultCode !== null) {
+    if (inviteResultCode !== 'ACCEPTED') {
       return { kind: 'invite-error', message: GENERAL_INVITE_ERROR_MESSAGE }
     }
     const balanceSentence = balanceText === null ? '' : ` Your balance is ${balanceText}.`

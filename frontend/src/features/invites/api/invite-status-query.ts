@@ -21,7 +21,6 @@ export function inviteStatusQueryOptions(inviteCode: string) {
     queryKey: ['invites', 'check', inviteCode],
     queryFn: () => findInviteStatus(inviteCode),
     gcTime: 0,
-    retry: false,
   })
 }
 

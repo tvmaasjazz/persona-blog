@@ -7,9 +7,14 @@ export function InvitePage() {
   const { inviteCode } = useParams()
   const { data: user, isPending } = useCurrentUser()
 
-  if (!inviteCode || isPending) {
-    return <div className="h-40 rounded-2xl bg-accent" />
-  }
-
-  return <InviteOffer inviteCode={inviteCode} isSignedIn={Boolean(user)} />
+  return (
+    <div className="flex max-w-sm flex-col gap-4">
+      <h1 className="text-xl font-extrabold">Invite</h1>
+      {!inviteCode || isPending ? (
+        <div className="h-40 rounded-2xl bg-accent" />
+      ) : (
+        <InviteOffer inviteCode={inviteCode} isSignedIn={Boolean(user)} />
+      )}
+    </div>
+  )
 }

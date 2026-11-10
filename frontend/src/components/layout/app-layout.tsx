@@ -10,8 +10,9 @@ import { UserMenu } from '@/features/auth/components/user-menu'
 import { hasPermission } from '@/features/auth/permissions'
 import { cn } from '@/lib/utils'
 
-// A route's handle; hasSidebar makes the main area span the space right of the nav.
+// A route's handle: what it needs from the layout
 export type AppRouteHandle = {
+  // The main area spans the space right of the nav
   hasSidebar?: boolean
   // The right column's sign-in card is hidden where the page is the sign-in
   isSignInCardHidden?: boolean
@@ -49,7 +50,7 @@ export function AppLayout() {
           <Button asChild className="mt-3 w-full px-0 md:px-4">
             <Link to="/write">
               <Plus aria-hidden className="size-5 md:hidden" />
-              <span className="hidden md:inline">Create</span>
+              <span className="sr-only md:not-sr-only">Create</span>
             </Link>
           </Button>
         )}
