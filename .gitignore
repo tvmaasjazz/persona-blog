@@ -35,3 +35,8 @@ CLAUDE.local.md
 
 # Downloaded third-party docs, kept locally for reference
 .reference/
+.gstack/
+
+# Playwright's output (frontend/e2e)
+frontend/test-results/
+frontend/playwright-report/
