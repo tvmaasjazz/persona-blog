@@ -43,8 +43,10 @@ frontend/src/
 │       │   └── use-sign-out.ts         # useSignOut mutation
 │       ├── components/
 │       │   ├── require-auth.tsx        # RequireAuth route guard
+│       │   ├── require-permission.tsx  # RequirePermission route guard
 │       │   └── sign-in-card.tsx        # SignInCard
 │       ├── hooks/             # hooks with no API call, if the feature has any
+│       ├── permissions.ts     # hasPermission
 │       └── <what-it-holds>.ts # plain helpers for this feature only, like run-steps.ts
 ├── components/
 │   ├── ui/                    # shadcn/ui, added with the CLI, never hand-created
@@ -153,6 +155,7 @@ export function useCurrentUser() {
   tell a 409 from anything else. The one exception is the 401 below.
 - A 401 from `/users/me` means signed out. Its query function returns `null` rather
   than throwing, so `useCurrentUser()` gives the user or `null`, never an error state.
+  A 401 from any other route is a deleted session (› Permissions and sessions).
 - Never copy query data into `useState` or context. Read it from the hook wherever
   it's needed; TanStack Query dedupes the request.
 - No `useEffect` for fetching data or for deriving one value from another.
@@ -289,7 +292,9 @@ validation:
 The route tree lives in `app/router.tsx`. Paths are kebab-case (`/blog-posts`), like
 the backend's. A section that needs sign-in is a layout route wrapped in
 `<RequireAuth>`, which renders the child route, redirects when signed out, and shows
-a loading state while the current user loads. Pages don't check auth themselves.
+a loading state while the current user loads. A route that needs a permission is
+wrapped in `<RequirePermission>` too (› Permissions and sessions). Pages don't check auth
+themselves.
 
 `AppLayout` renders `<ScrollRestoration />`, so every navigation opens at the top. A
 page that changes in place scrolls to the top itself: the run page when its polled
@@ -325,14 +330,17 @@ outlive the page, toasts and logs. No `dangerouslySetInnerHTML`.
 ## Permissions and sessions
 
 The UI checks permissions, never roles: `hasPermission(user, 'PERSONA_WRITE')` from
-`features/auth/permissions.ts`. Only three places check: the nav, the
-`RequirePermission` layout route (the pattern is
-`features/auth/components/require-permission.tsx`), and a route file passing `canEdit`
-to a feature component. A feature other than `auth` never reads the current user.
+`features/auth/permissions.ts`. Only these check: the nav in `AppLayout`, the `auth`
+feature's own components (the user menu, the balance banner), the `RequirePermission`
+layout route (the pattern is `features/auth/components/require-permission.tsx`), and a
+route file passing `canEdit` or the like to a feature component. `RequirePermission`
+redirects when signed out and shows a no-access message when the permission is
+missing. A feature other than `auth` never reads the current user; it may invalidate
+`['users', 'me']` by key (› Mutations).
 
-When the server deletes a session, the API's 401 clears its cookie. `lib/api-client.ts`
-then sets `['users', 'me']` to `null` and toasts "You were signed out. Sign in again."
-once, and `app/query-client.ts` retries a query once after a 401, so an open route
+When the server deletes a session, the API's 401 clears its cookie. On a 401 from any
+path but `/users/me`, `lib/api-client.ts` sets `['users', 'me']` to `null` and, if a
+user was signed in, toasts "You were signed out. Sign in again." once, and `app/query-client.ts` retries a query once after a 401, so an open route
 succeeds signed out and a guarded one redirects.
 
 ## Naming
