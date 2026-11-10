@@ -14,6 +14,9 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: E2E_BASE_URL,
+    // Pinned, so a date or an amount reads the same on any machine
+    locale: 'en-US',
+    timezoneId: 'UTC',
     trace: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],

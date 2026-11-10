@@ -66,12 +66,22 @@ A flow walks the real app against the real local API and its dev seed
   the change before it ends where later tests rely on the seed (a suspended user is
   reactivated), and never relies on another test's changes, so any one runs alone.
   The undo goes in a `finally`, so a failure part-way still leaves the seed as it was.
+  It goes through `page.request` and is unconditional: it reads the state from the API
+  and restores what the test read before its change, never only when a button happens
+  to be on screen. A change the API can't undo (a grant) is read before and compared,
+  never asserted as a seeded value.
 - A count or total that the seed doesn't fix (other runs add posts) is read from the
   API in the test, never written as a literal.
+- An absence check (count 0, `not.toBeVisible()`) passes at once, so it follows a
+  positive wait for the state it checks. That a request wasn't sent is checked by
+  recording requests (`page.on('request')`), not by a toast's absence.
+- A response read through `page.request` is typed from `../src/lib/api-schema.gen.ts`,
+  as app code is; `react-structure.md` › TypeScript applies.
 - No real generate run: a flow never reaches the model. The 402 path uses the seeded
   creator at $0.
 - Local only: `e2e/global-setup.ts` stops the run unless the API on `localhost:8000`
   answers and has the seed. Flows run one at a time (`workers: 1`), since they share
   the database.
 - Run with `npm run test:e2e -- <files>`; the config starts its own dev server on
-  port 5181.
+  port 5181, and pins Chromium's locale and time zone. `react/rules-of-hooks` is off
+  for `e2e/` in `.oxlintrc.json`, since Playwright's fixture callback is called `use`.
