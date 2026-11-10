@@ -53,6 +53,7 @@ frontend/src/
 │   ├── form/                  # the form layer: useAppForm, field components
 │   ├── layout/                # app shell and page layouts: AppLayout, PageWithSidebar
 │   ├── confirm-action-button.tsx  # ConfirmActionButton
+│   ├── confirm-dialog.tsx     # ConfirmDialog
 │   ├── data-table.tsx         # DataTable
 │   ├── google-sign-in-button.tsx  # GoogleSignInButton
 │   ├── infinite-scroll-sentinel.tsx  # InfiniteScrollSentinel
@@ -336,6 +337,8 @@ A view that loads data has a loading, an empty and an error state, and a not-fou
 state when it's read by identity. A button is disabled while its request runs. A
 destructive or far-reaching action confirms first through `ConfirmActionButton`
 (`components/`); its caller closes the dialog on success, so a failure leaves it open.
+A confirm opened from state rather than its own button, such as a form's submit, uses
+`ConfirmDialog` (`components/`), which `ConfirmActionButton` is built on.
 Build the states from `CardListSkeleton` and `QueryErrorState` in `components/`; a
 table uses `DataTable`, which has them built in. A list with a search tells an empty
 search apart from having nothing.
@@ -365,8 +368,10 @@ missing. A feature other than `auth` never reads the current user; it may invali
 `['users', 'me']` by key (› Mutations).
 
 When the server deletes a session, the API's 401 clears its cookie. On a 401 from any
-path but `/users/me` and `/auth/logout`, `lib/api-client.ts` sets `['users', 'me']` to
-`null` and, if a user was signed in, toasts "You were signed out. Sign in again." once.
+path but `/users/me` and `/auth/logout`, if a user was signed in, `lib/api-client.ts`
+sets `['users', 'me']` to `null`, resets every other query, and toasts "You were signed
+out. Sign in again.", so it happens once. Signing out resets the queries too: an open route's answer depends
+on who asked (`is_owner`, an owner's private record), and its key doesn't say who.
 `app/query-client.ts` retries a query once after a 401, so an open route succeeds
 signed out and a guarded one redirects. A mutation's caller skips its own failure toast
 for a 401 (`isSessionEndedError(error)` from `lib/api-error.ts`), since that toast has

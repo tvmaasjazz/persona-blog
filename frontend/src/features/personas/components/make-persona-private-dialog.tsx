@@ -1,19 +1,11 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 
 type MakePersonaPrivateDialogProps = {
   isOpen: boolean
   onOpenChange: (isOpen: boolean) => void
   personaName: string
-  publicPostCount: number
+  // Undefined when the count is unknown
+  publicPostCount: number | undefined
   isPending: boolean
   onConfirm: () => void
 }
@@ -27,32 +19,20 @@ export function MakePersonaPrivateDialog({
   isPending,
   onConfirm,
 }: MakePersonaPrivateDialogProps) {
-  const postsLabel = publicPostCount === 1 ? '1 public post' : `${publicPostCount} public posts`
+  let postsLabel = 'Its public posts'
+  if (publicPostCount !== undefined) {
+    postsLabel = publicPostCount === 1 ? 'Its 1 public post' : `Its ${publicPostCount} public posts`
+  }
 
   return (
-    <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="wrap-anywhere">Make {personaName} private?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Its {postsLabel} will be hidden until the persona is public again.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            disabled={isPending}
-            onClick={(event) => {
-              // Keep the dialog open until the save finishes
-              event.preventDefault()
-              onConfirm()
-            }}
-          >
-            Make private
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      isOpen={isOpen}
+      onOpenChange={onOpenChange}
+      title={`Make ${personaName} private?`}
+      description={`${postsLabel} will be hidden until the persona is public again.`}
+      actionLabel="Make private"
+      isPending={isPending}
+      onConfirm={onConfirm}
+    />
   )
 }

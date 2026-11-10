@@ -9,6 +9,10 @@ import type { paths } from '@/lib/api-schema.gen'
 const QUIET_UNAUTHORIZED_PATHS = new Set(['/api/users/me', '/api/auth/logout'])
 const CURRENT_USER_QUERY_KEY = ['users', 'me']
 
+function isCurrentUserQuery(queryKey: readonly unknown[]): boolean {
+  return queryKey[0] === CURRENT_USER_QUERY_KEY[0] && queryKey[1] === CURRENT_USER_QUERY_KEY[1]
+}
+
 export const apiClient = createClient<paths>({ baseUrl: '/api' })
 
 // A 401 from any other route means the server deleted the session (a grant, a role
@@ -22,6 +26,9 @@ apiClient.use({
 
     if (queryClient.getQueryData(CURRENT_USER_QUERY_KEY)) {
       queryClient.setQueryData(CURRENT_USER_QUERY_KEY, null)
+      // An open route's answer depends on who asked (is_owner, an owner's private
+      // record), so everything else cached is reset and an open page refetches signed out
+      queryClient.resetQueries({ predicate: (query) => !isCurrentUserQuery(query.queryKey) })
       toast.error('You were signed out. Sign in again.')
     }
 

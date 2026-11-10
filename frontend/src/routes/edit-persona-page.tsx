@@ -1,6 +1,6 @@
 import { useParams } from 'react-router'
 
-import { usePublicBlogPostCount } from '@/features/blog-posts/api/public-blog-post-page-infinite-query'
+import { usePublicBlogPostCount } from '@/features/blog-posts/api/public-blog-post-count-query'
 import { EditPersonaForm } from '@/features/personas/components/edit-persona-form'
 
 export function EditPersonaPage() {

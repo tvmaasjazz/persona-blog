@@ -19,7 +19,11 @@ export function useSignOut() {
     mutationFn: signOut,
     onSuccess: () => {
       queryClient.setQueryData(['users', 'me'], null)
-      queryClient.invalidateQueries({ queryKey: ['users', 'me'] })
+      // An open page's answer depends on who asked (is_owner, an owner's private record),
+      // so everything else cached is reset and an open page refetches signed out
+      queryClient.resetQueries({
+        predicate: (query) => !(query.queryKey[0] === 'users' && query.queryKey[1] === 'me'),
+      })
     },
   })
 }

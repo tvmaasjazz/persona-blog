@@ -66,8 +66,8 @@ function LoadedEditPersonaForm({ persona, publicPostCount }: LoadedEditPersonaFo
     ...personaFormOptions,
     defaultValues: toPersonaFormValues(persona),
     onSubmit: async ({ value, formApi }) => {
-      // Ask first when this hides public posts
-      const isHidingPosts = persona.is_public && !value.is_public && (publicPostCount ?? 0) > 0
+      // Ask first when this may hide public posts, including when the count is unknown
+      const isHidingPosts = persona.is_public && !value.is_public && publicPostCount !== 0
       if (isHidingPosts) {
         setIsConfirmOpen(true)
         return
@@ -115,7 +115,7 @@ function LoadedEditPersonaForm({ persona, publicPostCount }: LoadedEditPersonaFo
         isOpen={isConfirmOpen}
         onOpenChange={setIsConfirmOpen}
         personaName={persona.name}
-        publicPostCount={publicPostCount ?? 0}
+        publicPostCount={publicPostCount}
         isPending={updatePersona.isPending}
         onConfirm={handleConfirm}
       />

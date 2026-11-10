@@ -52,7 +52,7 @@ export const PersonaForm = withForm({
             {(field) => (
               <field.SwitchField
                 label="Public"
-                description="Other signed-in people can view a public persona's profile. Only you can edit it."
+                description="Anyone can view a public persona's profile. Only you can edit it."
               />
             )}
           </form.AppField>

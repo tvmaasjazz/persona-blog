@@ -13,14 +13,14 @@ import { FeedPostCard } from '@/features/blog-posts/components/feed-post-card'
 type PublicBlogPostFeedProps = {
   params: PublicBlogPostPageInfiniteParams
   // A search is narrowing the feed
-  isNarrowed: boolean
+  isNarrowed?: boolean
   emptyMessage: ReactNode
-  noMatchMessage: ReactNode
+  noMatchMessage?: ReactNode
 }
 
 export function PublicBlogPostFeed({
   params,
-  isNarrowed,
+  isNarrowed = false,
   emptyMessage,
   noMatchMessage,
 }: PublicBlogPostFeedProps) {

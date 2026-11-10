@@ -32,14 +32,15 @@ export function BlogPostView({ blogPost, canEdit }: BlogPostViewProps) {
             >
               {blogPost.persona_name}
             </Link>
-            {blogPost.published_at && (
+            {/* The owner's badges show the date, which may be a scheduled one */}
+            {!blogPost.is_owner && blogPost.published_at && (
               <time dateTime={blogPost.published_at} className="text-sm text-muted-foreground">
                 {formatDate(blogPost.published_at)}
               </time>
             )}
           </div>
         </div>
-        {/* The owner's badges already show the date and visibility */}
+        {/* The owner's badges show the date and visibility */}
         {blogPost.is_owner && (
           <PostStatusBadges
             publishedAt={blogPost.published_at}
