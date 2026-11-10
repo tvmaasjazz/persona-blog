@@ -33,12 +33,12 @@ and anything the generated types or the build already prove.
   `// @vitest-environment jsdom` comment at the top of its file, and renders the hook
   with `renderHook` from `@testing-library/react`, wrapped in what it needs (a
   `MemoryRouter` for a hook that reads the URL). `src/test-setup.ts` unmounts rendered
-  hooks after each test, since the library can't without globals. A hook that navigates is checked through `useLocation()` and `useNavigationType()`
+  hooks after each test. A hook that navigates is checked through `useLocation()` and `useNavigationType()`
   called in the same `renderHook` callback.
 - A hook that waits for a frame or a timer runs under `vi.useFakeTimers()`, advanced
   inside `act`. A browser measurement (`getBoundingClientRect`, `innerHeight`) is
-  stubbed with `vi.spyOn`. Every fake is restored in the `after` hook matching the
-  `before` that set it.
+  stubbed with `vi.spyOn`. Every fake is restored in an `after` hook: the one matching
+  the `before` that set it, or `afterEach` for one set inside a test.
 - A date test pins a time zone away from UTC (`vi.stubEnv('TZ', 'Asia/Tokyo')`), so
   local time and UTC differ. The locale can't be set from a test, so `npm run test`
   runs with `LC_ALL=en_US.UTF-8`; run single files through `npm run test -- <files>`.

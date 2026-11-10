@@ -17,7 +17,7 @@ export function flattenPublicBlogPostPages(
   pages: InfiniteData<PublicBlogPostPageResponseDto, number>,
 ) {
   const blogPostsByIdentity = new Map<string, BlogPostSummaryResponseDto>()
-  for (const page of pages.pages) {
+  for (const page of infiniteData.pages) {
     for (const blogPost of page.blog_posts) {
       if (!blogPostsByIdentity.has(blogPost.identity)) {
         blogPostsByIdentity.set(blogPost.identity, blogPost)

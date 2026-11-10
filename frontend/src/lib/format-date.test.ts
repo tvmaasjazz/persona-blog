@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { formatDate, formatDateTime } from '@/lib/format-date'
 
-// The functions use the runtime's time zone, so pin one away from UTC; the locale comes from LANG (en-US here)
+// The functions use the runtime's time zone, so pin one away from UTC; the locale comes from LC_ALL in `npm run test` (en-US)
 beforeAll(() => {
   vi.stubEnv('TZ', 'Asia/Tokyo')
 })
