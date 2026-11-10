@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { useState } from 'react'
 
 import {
@@ -14,8 +14,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 
-type ButtonVariant = React.ComponentProps<typeof Button>['variant']
-type ActionVariant = React.ComponentProps<typeof AlertDialogAction>['variant']
+type ButtonVariant = ComponentProps<typeof Button>['variant']
 
 type ConfirmActionButtonProps = {
   triggerLabel: ReactNode
@@ -24,11 +23,17 @@ type ConfirmActionButtonProps = {
   title: ReactNode
   description: ReactNode
   actionLabel: string
-  actionVariant?: ActionVariant
+  actionVariant?: ButtonVariant
   cancelLabel?: string
   isPending?: boolean
   // Runs on confirm; call close() on success so the dialog stays open on failure
   onConfirm: (close: () => void) => void
+}
+
+type OpenedText = {
+  title: ReactNode
+  description: ReactNode
+  actionLabel: string
 }
 
 // A button that asks in a dialog before running a destructive or far-reaching action.
@@ -45,9 +50,18 @@ export function ConfirmActionButton({
   onConfirm,
 }: ConfirmActionButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [openedText, setOpenedText] = useState<OpenedText>({ title, description, actionLabel })
+
+  // Keep the text the dialog opened with, so it doesn't change while it fades out
+  function handleOpenChange(isNextOpen: boolean) {
+    if (isNextOpen) {
+      setOpenedText({ title, description, actionLabel })
+    }
+    setIsOpen(isNextOpen)
+  }
 
   return (
-    <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
+    <AlertDialog open={isOpen} onOpenChange={handleOpenChange}>
       <AlertDialogTrigger asChild>
         <Button type="button" variant={triggerVariant} aria-label={triggerAriaLabel}>
           {triggerLabel}
@@ -55,8 +69,8 @@ export function ConfirmActionButton({
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <AlertDialogTitle>{openedText.title}</AlertDialogTitle>
+          <AlertDialogDescription>{openedText.description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
@@ -69,7 +83,7 @@ export function ConfirmActionButton({
               onConfirm(() => setIsOpen(false))
             }}
           >
-            {actionLabel}
+            {openedText.actionLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

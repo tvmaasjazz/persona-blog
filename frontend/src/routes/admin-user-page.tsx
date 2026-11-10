@@ -62,7 +62,9 @@ export function AdminUserPage() {
       header={
         <div className="flex flex-col gap-4">
           <AdminSectionNav canReadInvites={hasPermission(currentUser, 'INVITE_READ')} />
-          <h1 className="text-xl font-extrabold break-all">{user?.email ?? 'User'}</h1>
+          <h1 className="text-xl font-extrabold [overflow-wrap:anywhere]">
+            {user?.email ?? 'User'}
+          </h1>
         </div>
       }
       sidebar={
@@ -80,7 +82,7 @@ export function AdminUserPage() {
       {/* The ledger, for those who can read it */}
       {canReadLedger && (
         <div className="flex flex-col gap-4">
-          <h2 className="text-xl font-extrabold">Credit ledger</h2>
+          <h2 className="text-lg font-bold">Credit ledger</h2>
           <ListSearchBox label="Search the ledger" value={list.search} onChange={list.setSearch} />
           <DataTable
             columns={CREDIT_LEDGER_COLUMNS}

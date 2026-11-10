@@ -14,7 +14,7 @@ type AdminUserSidebarProps = {
   canChangeUser: boolean
 }
 
-// The account and the write controls a user's role allows.
+// The account and the write controls that the user's role and the viewer's permissions allow.
 export function AdminUserSidebar({ user, canGrantCredits, canChangeUser }: AdminUserSidebarProps) {
   const isAdmin = user.role === 'ADMIN'
 

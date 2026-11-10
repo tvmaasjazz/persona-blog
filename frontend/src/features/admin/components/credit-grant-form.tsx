@@ -1,9 +1,10 @@
 import { toast } from 'sonner'
 
 import { useAppForm } from '@/components/form/use-app-form'
-import { SectionCard } from '@/components/section-card'
 import { useGrantUserCredits } from '@/features/admin/api/use-grant-user-credits'
+import { SectionCard } from '@/features/admin/components/section-card'
 import {
+  MAX_CREDIT_GRANT_USD,
   creditGrantFormOptions,
   creditGrantFormSchema,
 } from '@/features/admin/credit-grant-form-schema'
@@ -47,7 +48,7 @@ export function CreditGrantForm({ userIdentity, isReader }: CreditGrantFormProps
           {(field) => (
             <field.TextField
               label="Amount (USD)"
-              description="More than $0 and up to $100, to the cent."
+              description={`More than $0 and up to $${MAX_CREDIT_GRANT_USD}, to the cent.`}
               type="text"
             />
           )}

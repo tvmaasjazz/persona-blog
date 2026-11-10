@@ -1,8 +1,8 @@
 import { toast } from 'sonner'
 
 import { ConfirmActionButton } from '@/components/confirm-action-button'
-import { SectionCard } from '@/components/section-card'
 import { useSetUserActive } from '@/features/admin/api/use-set-user-active'
+import { SectionCard } from '@/features/admin/components/section-card'
 import { apiErrorMessage, isSessionEndedError } from '@/lib/api-error'
 
 type UserActiveControlProps = {

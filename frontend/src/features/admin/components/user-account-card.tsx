@@ -1,4 +1,4 @@
-import { SectionCard } from '@/components/section-card'
+import { SectionCard } from '@/features/admin/components/section-card'
 import type { components } from '@/lib/api-schema.gen'
 import { formatDateTime } from '@/lib/format-date'
 import { formatRole } from '@/lib/format-role'
@@ -15,7 +15,7 @@ export function UserAccountCard({ user }: UserAccountCardProps) {
     <SectionCard title="Account">
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
         <dt className="text-muted-foreground">Email</dt>
-        <dd className="break-all">{user.email}</dd>
+        <dd className="min-w-0 [overflow-wrap:anywhere]">{user.email}</dd>
         <dt className="text-muted-foreground">Name</dt>
         <dd className="min-w-0 break-words">
           {user.display_name ?? <span className="text-muted-foreground">No name</span>}

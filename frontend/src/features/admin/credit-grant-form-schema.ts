@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { focusFirstInvalidField } from '@/components/form/form-errors'
 
 // The grant limit in libs.admin.constants.MAX_CREDIT_GRANT_USD.
-const MAX_CREDIT_GRANT_USD = 100
+export const MAX_CREDIT_GRANT_USD = 100
 
 // Limits mirror AdminCreditGrantDto in the backend, with the amount held to cents.
 export const creditGrantFormSchema = z.object({

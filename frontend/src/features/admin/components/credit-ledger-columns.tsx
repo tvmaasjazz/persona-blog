@@ -1,7 +1,7 @@
 import type { DataTableColumn } from '@/components/data-table'
+import { formatLedgerEntryType } from '@/features/admin/credit-ledger-entry-type'
 import type { components } from '@/lib/api-schema.gen'
 import { formatDateTime } from '@/lib/format-date'
-import { formatLedgerEntryType } from '@/lib/format-role'
 import { formatLedgerUsd } from '@/lib/format-usd'
 
 type AdminCreditLedgerEntryResponseDto = components['schemas']['AdminCreditLedgerEntryResponseDto']
@@ -33,7 +33,7 @@ export const CREDIT_LEDGER_COLUMNS: DataTableColumn<
   },
   {
     header: 'Made by',
-    className: 'min-w-32 break-all whitespace-normal',
+    className: 'min-w-32 [overflow-wrap:anywhere] whitespace-normal',
     cell: (entry) => entry.created_by_email,
   },
 ]
