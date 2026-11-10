@@ -43,6 +43,7 @@ finding, even if the two copies agree today, because they will drift.
 | ----- | ----- |
 | Frontend layout, feature folders, API client, queries and mutations, toasts, forms, routing, naming, TypeScript | `.claude/rules/react-structure.md` |
 | Design tokens and what each is for, shape and type, layout, shadcn components, icons | `.claude/rules/react-styling.md` |
+| What gets a unit test or an end-to-end flow, where test files go, how they run | `.claude/rules/react-testing.md` |
 | Token values | `frontend/src/index.css`; the rules describe tokens, they don't copy values |
 | An agent's role, reading list, scope, allowed commands, report shape | `.claude/agents/<name>.md`, not conventions |
 | Frontend run commands, and which run before a commit | `CLAUDE.md` › Commands; `frontend/README.md` repeats them for people |

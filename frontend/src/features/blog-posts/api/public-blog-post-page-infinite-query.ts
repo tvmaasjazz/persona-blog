@@ -13,9 +13,11 @@ type PublicBlogPostPageResponseDto = components['schemas']['PublicBlogPostPageRe
 export type PublicBlogPostPageInfiniteParams = Omit<PublicBlogPostPageQuery, 'page'>
 
 // A read can move a post across a page boundary, so a post seen twice is kept once
-function flattenPages(data: InfiniteData<PublicBlogPostPageResponseDto, number>) {
+export function flattenPublicBlogPostPages(
+  infiniteData: InfiniteData<PublicBlogPostPageResponseDto, number>,
+) {
   const blogPostsByIdentity = new Map<string, BlogPostSummaryResponseDto>()
-  for (const page of data.pages) {
+  for (const page of infiniteData.pages) {
     for (const blogPost of page.blog_posts) {
       if (!blogPostsByIdentity.has(blogPost.identity)) {
         blogPostsByIdentity.set(blogPost.identity, blogPost)
@@ -35,7 +37,7 @@ export function publicBlogPostPageInfiniteQueryOptions(params: PublicBlogPostPag
       pagination.page * pagination.page_size < pagination.total ? pagination.page + 1 : undefined,
     // A new search keeps the old posts on screen until its first page arrives
     placeholderData: keepPreviousData,
-    select: flattenPages,
+    select: flattenPublicBlogPostPages,
   })
 }
 
