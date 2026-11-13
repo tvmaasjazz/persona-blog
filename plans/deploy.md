@@ -41,12 +41,20 @@ the same four services:
   `/frontend/**` for `web`, `/backend/**` for `api`.
 - **Each service's root directory is its folder,** `backend/` or `frontend/`, and it
   builds from the Dockerfile there.
-- **The config-as-code file lives in the service's folder** (`backend/railway.json`,
-  `frontend/railway.json`). Railway doesn't look in the root directory for it, so each
-  service's config path is set to it: `/backend/railway.json`, `/frontend/railway.json`.
+- **`.railway/railway.ts` defines every environment:** services, settings, replicas,
+  domains and variables, with what differs between environments in one table at its
+  top. Railway applies it only when told to:
+  - Change the file, then `railway config plan --environment <name>` from
+    `.railway/`, then `railway config apply --environment <name>`. Node 22.6 or later
+    runs it (`.railway/.nvmrc`).
+  - It owns the variables: one missing from a service is deleted on apply. A secret is
+    set in the dashboard and listed as `preserve()`, so its value never enters the repo.
+  - A change made in the dashboard is undone by the next apply, unless it's added to
+    the file first.
+  - Railway can't register a custom domain from the file, only keep one: a new domain
+    is added with `railway domain`, then switched on in the file.
 - **Redis must be version 8 or later,** since the graph checkpointer uses its search
-  module (`lifespan.py`). If Railway's Redis template is older, the service is the
-  `redis:8` image with a volume mounted at `/data`.
+  module (`lifespan.py`). Railway's Redis template is 8.2.
 - **Postgres** only needs the `citext` extension, which the migrations create.
 
 ### How the browser reaches the API
@@ -85,7 +93,9 @@ same in every environment.
 
 ### Variables
 
-Set per environment in Railway. Nothing secret goes in the repo or the config file.
+Set per environment in `.railway/railway.ts`. The secrets (`GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET`, `OPENAI_API_KEY`) are set in the dashboard and are
+`preserve()` in the file.
 
 | Variable                    | Staging                                                         |
 | --------------------------- | --------------------------------------------------------------- |
@@ -100,8 +110,8 @@ Set per environment in Railway. Nothing secret goes in the repo or the config fi
 | `AUTH__FRONTEND_URL`        | `https://staging.personagora.com`                               |
 | `OPENAI_API_KEY`            | a key for staging, so its usage shows apart                     |
 
-`web` gets one variable, `API_UPSTREAM=${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}`.
-Railway sets its `PORT`, which Caddy listens on.
+`web` gets `API_UPSTREAM=${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}`, and `PORT`
+fixed at 8080 so its domain has a known target port.
 
 LaunchDarkly adds `LAUNCHDARKLY_SDK_KEY` and `LAUNCHDARKLY__IS_ENABLED` when it lands
 (`launchdarkly-agentcontrol.md`), with a LaunchDarkly environment per Railway one.
@@ -133,8 +143,19 @@ Cloudflare's free plan serves `personagora.com`. Namecheap stays the registrar.
    nameservers in Namecheap to the two Cloudflare gives.
 2. For each custom domain added in Railway, add the CNAME and TXT records Railway
    shows. A CNAME on the bare domain works, since Cloudflare flattens it.
-3. Railway's records are **DNS only** (grey cloud). If one is ever proxied (orange
-   cloud), SSL/TLS must be **Full**, not Flexible, which loops redirects.
+3. Railway's records are **DNS only** (grey cloud), so Railway's edge sees the
+   client and issues each domain's certificate:
+   - **Proxied, the client's IP is lost.** Railway's edge sees a Cloudflare address,
+     so `X-Real-IP` carries that. The real IP is then in `CF-Connecting-IP`, which a
+     client can forge by going around Cloudflare, unless the app first checks that
+     `X-Real-IP` is one of Cloudflare's published ranges.
+   - **Railway may not issue a certificate for a proxied domain.** It answers with the
+     `*.up.railway.app` one, so SSL/TLS must be **Full**: Full (strict) rejects it,
+     and Flexible loops redirects.
+   - **Railway's edge already absorbs network-level attacks,** and its WAF has an
+     Under Attack Mode to switch on during a flood.
+   - Proxying is revisited with rate limiting (`plan.md` › Phase 2 › 3), which is
+     when Cloudflare's rules would earn the IP handling.
 
 ### Email
 
@@ -159,20 +180,31 @@ records sit beside Railway's without touching them.
 
 ## Steps for staging
 
-1. **Code** (one PR): the `STAGING` value, both Dockerfiles, both `railway.json`
-   files, and the Caddyfile.
+1. **Code** (one PR): the `STAGING` value, both Dockerfiles, and the Caddyfile.
 2. **Cloudflare:** move the nameservers (Tyler).
 3. **Google:** the project, consent screen and staging client (Tyler).
-4. **Railway:** the project, the `staging` environment, the four services, watch paths
-   and config paths, variables, and the custom domains.
-5. **DNS:** the records Railway shows for `staging.` and `api-staging.`.
-6. **Check:** `/health` on `api-staging.`, sign in on `staging.`, then the
+4. **Railway:** the project, the `staging` environment, the four services, the
+   custom domains (`railway domain`), and the repo connection. `.railway/railway.ts`
+   was then pulled from it and holds the rest.
+5. **Secrets:** the three secrets on `api`, in the dashboard (Tyler).
+6. **DNS:** the records Railway shows for `staging.` and `api-staging.`.
+7. **Check:** `/health` on `api-staging.`, sign in on `staging.`, then the
    `backend/scripts/e2e/` scripts against staging if they can (see To decide), and
    `plan.md` › 13's checks.
 
-Production adds the `production` branch and environment, its own OAuth client, and
-the bare domain and `api.`. `www.personagora.com` redirects to the bare domain at
-Cloudflare's edge and never reaches Railway:
+### Production
+
+1. Create the `production` branch from `main`.
+2. `railway config apply --environment production` creates the four services. Check
+   the plan creates one volume per database: the file declares the volumes `config
+   pull` imported, and the database helpers may make their own.
+3. Its own OAuth client, and the three secrets on `api` (Tyler).
+4. `railway domain personagora.com --service web --port 8080` and
+   `railway domain api.personagora.com --service api --port 8000`, the records they
+   show in Cloudflare, then `areDomainsRegistered: true` for production in the file.
+
+`www.personagora.com` redirects to the bare domain at Cloudflare's edge and never
+reaches Railway:
 
 - **DNS:** an `AAAA` record for `www` pointing at `100::`, **proxied** (orange cloud).
   The address is a placeholder; a proxied record only needs to exist for the redirect

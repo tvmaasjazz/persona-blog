@@ -10,6 +10,7 @@ frontend/            React + Vite app
 backend/
 └── apps/api/        FastAPI service (more services will land beside it)
 plans/               build plans — committed to the repo
+.railway/            Railway project config for every environment (plans/deploy.md)
 ```
 
 Save plans to `plans/`. The folder is committed and published with the repo, so
@@ -46,6 +47,13 @@ npm run test                 # Vitest unit tests
 npm run test:e2e             # Playwright flows (needs the API and the dev seed)
 npm run api:types            # regenerate src/lib/api-schema.gen.ts (needs the API on 8000)
 npx shadcn@latest add <name> # add a shadcn/ui component to src/components/ui/
+```
+
+Run from `.railway/`, with Node 22.6 or later:
+
+```bash
+railway config plan --environment staging    # preview a railway.ts change; changes nothing
+railway config apply --environment staging   # apply it, after Tyler has read the plan
 ```
 
 Before committing, run `ruff check` and `ruff format --check` for backend changes, and
