@@ -8,17 +8,17 @@ MIGRATION_RUNNER = MigrationRunner()
 
 def upgrade() -> None:
     MIGRATION_RUNNER.run_transactional(
-        "pb_generate_text_run/0001_create_pb_generate_text_run.up.sql"
+        "psg_generate_text_run/0001_create_psg_generate_text_run.up.sql"
     )
     MIGRATION_RUNNER.run_transactional(
-        "pb_generate_text_step/0001_create_pb_generate_text_step.up.sql"
+        "psg_generate_text_step/0001_create_psg_generate_text_step.up.sql"
     )
 
 
 def downgrade() -> None:
     MIGRATION_RUNNER.run_transactional(
-        "pb_generate_text_step/0001_create_pb_generate_text_step.down.sql"
+        "psg_generate_text_step/0001_create_psg_generate_text_step.down.sql"
     )
     MIGRATION_RUNNER.run_transactional(
-        "pb_generate_text_run/0001_create_pb_generate_text_run.down.sql"
+        "psg_generate_text_run/0001_create_psg_generate_text_run.down.sql"
     )

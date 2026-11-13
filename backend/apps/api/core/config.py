@@ -26,7 +26,7 @@ class AppSettings(BaseSettings):
         env_nested_delimiter="__",
     )
 
-    app_name: str = "Persona Blog API"
+    app_name: str = "Personagora API"
     environment: EnvironmentType
     database_url: str
     redis_url: str

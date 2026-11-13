@@ -7,7 +7,7 @@ from libs.llm.types import LlmCallReasonType
 
 
 class LlmException(Exception):
-    """Every LLM failure carries the reason recorded on its pb_llm_call row."""
+    """Every LLM failure carries the reason recorded on its psg_llm_call row."""
 
     reason: LlmCallReasonType
     message: str

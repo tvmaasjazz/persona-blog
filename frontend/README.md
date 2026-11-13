@@ -1,4 +1,4 @@
-# Persona Blog frontend
+# Personagora frontend
 
 React + Vite + TypeScript, styled with Tailwind and shadcn/ui. Conventions are in
 `.claude/rules/react-structure.md`, `react-styling.md` and `react-testing.md`.

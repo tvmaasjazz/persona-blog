@@ -1,0 +1,1 @@
+DELETE FROM psg_permission WHERE code IN ('INVITE_READ', 'INVITE_WRITE');

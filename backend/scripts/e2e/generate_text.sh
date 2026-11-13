@@ -198,19 +198,19 @@ check_status 401 "generating while signed out" \
         additional_context=null options='{"draft": {"is_auto_approved": true}}')"
 
 step "7. What the run recorded"
-docker compose exec -T postgres psql -U pb -d pb_local -c \
+docker compose exec -T postgres psql -U psg -d psg_local -c \
   "SELECT status, error_code, graph_version, llm_call_count, input_tokens, output_tokens, cost_usd
-   FROM pb_generate_text_run WHERE identity = '$RUN_IDENTITY';"
-docker compose exec -T postgres psql -U pb -d pb_local -c \
+   FROM psg_generate_text_run WHERE identity = '$RUN_IDENTITY';"
+docker compose exec -T postgres psql -U psg -d psg_local -c \
   "SELECT s.step_number, s.step_name, s.attempt, s.status, s.human_decision, s.llm_call_count, s.cost_usd, s.duration_ms
-   FROM pb_generate_text_step s
-   JOIN pb_generate_text_run r ON r.id = s.run_id
+   FROM psg_generate_text_step s
+   JOIN psg_generate_text_run r ON r.id = s.run_id
    WHERE r.identity = '$RUN_IDENTITY' ORDER BY s.step_number;"
-docker compose exec -T postgres psql -U pb -d pb_local -c \
+docker compose exec -T postgres psql -U psg -d psg_local -c \
   "SELECT c.purpose, c.model_name, c.status, c.input_tokens, c.output_tokens, c.cost_usd, s.step_name
-   FROM pb_llm_call c
-   JOIN pb_generate_text_run r ON r.id = c.run_id
-   LEFT JOIN pb_generate_text_step s ON s.id = c.step_id
+   FROM psg_llm_call c
+   JOIN psg_generate_text_run r ON r.id = c.run_id
+   LEFT JOIN psg_generate_text_step s ON s.id = c.step_id
    WHERE r.identity = '$RUN_IDENTITY' ORDER BY c.created_at;"
 
 printf '\n\033[32mAll steps passed.\033[0m One step row per node, and every LLM call tied to its step.\n'

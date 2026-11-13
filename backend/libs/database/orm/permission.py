@@ -6,8 +6,8 @@ from libs.permissions.types import PermissionType
 
 
 class PermissionOrm(BaseOrm):
-    __tablename__ = "pb_permission"
+    __tablename__ = "psg_permission"
 
     code: Mapped[PermissionType] = mapped_column(
-        Enum(PermissionType, name="pb_permission_type"), unique=True
+        Enum(PermissionType, name="psg_permission_type"), unique=True
     )

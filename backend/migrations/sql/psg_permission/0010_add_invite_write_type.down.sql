@@ -1,0 +1,1 @@
+-- Postgres can't remove an enum value, so 'INVITE_WRITE' stays in psg_permission_type; the up file uses IF NOT EXISTS so it can run again.

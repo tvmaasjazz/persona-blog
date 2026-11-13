@@ -211,8 +211,8 @@ SIGNED_OUT_STATUS="$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/personas")
 pass "listing while signed out → 401"
 
 step "8. What the table holds for these two"
-docker compose exec -T postgres psql -U pb -d pb_local -c \
+docker compose exec -T postgres psql -U psg -d psg_local -c \
   "SELECT name, is_public, created_at, updated_at, deleted_at IS NOT NULL AS is_deleted
-   FROM pb_persona WHERE identity IN ('$FIRST_IDENTITY', '$SECOND_IDENTITY') ORDER BY created_at;"
+   FROM psg_persona WHERE identity IN ('$FIRST_IDENTITY', '$SECOND_IDENTITY') ORDER BY created_at;"
 
 printf '\n\033[32mAll steps passed.\033[0m The deleted persona keeps its row, with deleted_at set.\n'

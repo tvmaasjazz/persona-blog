@@ -9,7 +9,7 @@
 #   ./scripts/e2e/blog_post_paging.sh
 #
 # It signs in as the first non-system user, and as a dedicated second user
-# (verify-second-user@persona-blog.invalid) that it creates in the local database the
+# (verify-second-user@personagora.invalid) that it creates in the local database the
 # first time it runs. Each run writes a new persona, so it can run again. No LLM calls.
 # It refuses to run unless .env points at a local development database.
 
@@ -123,7 +123,7 @@ from libs.database.session import create_db_session_factory
 from libs.permissions.services import PermissionService
 from libs.permissions.types import RoleType
 
-SECOND_USER_EMAIL = "verify-second-user@persona-blog.invalid"
+SECOND_USER_EMAIL = "verify-second-user@personagora.invalid"
 
 
 async def build_auth_user(db_session_factory, user_record) -> AuthUser:

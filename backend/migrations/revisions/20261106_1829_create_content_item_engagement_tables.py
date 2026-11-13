@@ -8,23 +8,23 @@ MIGRATION_RUNNER = MigrationRunner()
 
 def upgrade() -> None:
     MIGRATION_RUNNER.run_transactional(
-        "pb_content_item_view/0001_create_pb_content_item_view.up.sql"
+        "psg_content_item_view/0001_create_psg_content_item_view.up.sql"
     )
     MIGRATION_RUNNER.run_transactional(
-        "pb_content_item_engagement/0001_create_pb_content_item_engagement.up.sql"
+        "psg_content_item_engagement/0001_create_psg_content_item_engagement.up.sql"
     )
     MIGRATION_RUNNER.run_transactional(
-        "pb_content_item_engagement/0002_backfill_pb_content_item_engagement.up.sql"
+        "psg_content_item_engagement/0002_backfill_psg_content_item_engagement.up.sql"
     )
 
 
 def downgrade() -> None:
     MIGRATION_RUNNER.run_transactional(
-        "pb_content_item_engagement/0002_backfill_pb_content_item_engagement.down.sql"
+        "psg_content_item_engagement/0002_backfill_psg_content_item_engagement.down.sql"
     )
     MIGRATION_RUNNER.run_transactional(
-        "pb_content_item_engagement/0001_create_pb_content_item_engagement.down.sql"
+        "psg_content_item_engagement/0001_create_psg_content_item_engagement.down.sql"
     )
     MIGRATION_RUNNER.run_transactional(
-        "pb_content_item_view/0001_create_pb_content_item_view.down.sql"
+        "psg_content_item_view/0001_create_psg_content_item_view.down.sql"
     )

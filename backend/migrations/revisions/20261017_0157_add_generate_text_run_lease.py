@@ -7,8 +7,8 @@ MIGRATION_RUNNER = MigrationRunner()
 
 
 def upgrade() -> None:
-    MIGRATION_RUNNER.run_transactional("pb_generate_text_run/0004_add_lease.up.sql")
+    MIGRATION_RUNNER.run_transactional("psg_generate_text_run/0004_add_lease.up.sql")
 
 
 def downgrade() -> None:
-    MIGRATION_RUNNER.run_transactional("pb_generate_text_run/0004_add_lease.down.sql")
+    MIGRATION_RUNNER.run_transactional("psg_generate_text_run/0004_add_lease.down.sql")

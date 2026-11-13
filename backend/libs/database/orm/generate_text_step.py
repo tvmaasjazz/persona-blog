@@ -13,12 +13,12 @@ from libs.generate_text.types import GenerateTextStepStatusType, HumanDecisionTy
 
 
 class GenerateTextStepOrm(BaseOrm):
-    __tablename__ = "pb_generate_text_step"
+    __tablename__ = "psg_generate_text_step"
     __table_args__ = (
         UniqueConstraint(
-            "run_id", "step_number", name="pb_generate_text_step_run_id_step_number_key"
+            "run_id", "step_number", name="psg_generate_text_step_run_id_step_number_key"
         ),
-        Index("pb_generate_text_step_run_id_step_number_idx", "run_id", "step_number"),
+        Index("psg_generate_text_step_run_id_step_number_idx", "run_id", "step_number"),
     )
 
     run_id: Mapped[int] = mapped_column(
@@ -28,7 +28,7 @@ class GenerateTextStepOrm(BaseOrm):
     step_name: Mapped[str]
     attempt: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     status: Mapped[GenerateTextStepStatusType] = mapped_column(
-        Enum(GenerateTextStepStatusType, name="pb_generate_text_step_status_type")
+        Enum(GenerateTextStepStatusType, name="psg_generate_text_step_status_type")
     )
     input: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     output: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -39,7 +39,7 @@ class GenerateTextStepOrm(BaseOrm):
     charge_usd: Mapped[Decimal] = mapped_column(Numeric(16, 10), server_default=text("0"))
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     human_decision: Mapped[HumanDecisionType | None] = mapped_column(
-        Enum(HumanDecisionType, name="pb_human_decision_type")
+        Enum(HumanDecisionType, name="psg_human_decision_type")
     )
     human_feedback: Mapped[str | None]
     decided_by_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey(UserOrm.id))

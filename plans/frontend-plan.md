@@ -43,7 +43,7 @@ Regenerating it is the first frontend step.
   it does once posts are read signed out on a phone. PR 4 fixes it.
 - **Spectral isn't loaded.** `react-styling.md` says loading it "is decided when post
   pages land". Post bodies render in Georgia. Left as it is; see Decisions.
-- **`POST /blog-posts` has no screen.** The archive planned it for posts written by
+- **`POST /blog-posts` has no screen.** An earlier plan had it for posts written by
   hand. Every post today comes from a run. Not in this work; see Decisions.
 
 ## Backend changes this needs

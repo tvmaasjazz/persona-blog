@@ -6,10 +6,10 @@ from libs.database.orm.content_item import ContentItemOrm
 
 
 class ContentItemEngagementOrm(BaseOrm):
-    __tablename__ = "pb_content_item_engagement"
+    __tablename__ = "psg_content_item_engagement"
     __table_args__ = (
         Index(
-            "pb_content_item_engagement_feed_score_idx",
+            "psg_content_item_engagement_feed_score_idx",
             text("feed_score DESC NULLS LAST"),
         ),
     )

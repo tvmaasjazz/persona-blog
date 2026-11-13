@@ -1,0 +1,1 @@
+ALTER TABLE psg_user ALTER COLUMN role_id DROP NOT NULL;

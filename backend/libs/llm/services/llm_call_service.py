@@ -19,7 +19,7 @@ logger = structlog.get_logger(__name__)
 
 
 class LlmCallService:
-    """Writes pb_llm_call rows, each in its own committed transaction so it survives a rollback."""
+    """Writes psg_llm_call rows, each in its own committed transaction so it survives a rollback."""
 
     def __init__(self, db_session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._db_session_factory = db_session_factory

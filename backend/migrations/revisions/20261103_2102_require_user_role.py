@@ -7,8 +7,8 @@ MIGRATION_RUNNER = MigrationRunner()
 
 
 def upgrade() -> None:
-    MIGRATION_RUNNER.run_transactional("pb_user/0005_set_role_id_not_null.up.sql")
+    MIGRATION_RUNNER.run_transactional("psg_user/0005_set_role_id_not_null.up.sql")
 
 
 def downgrade() -> None:
-    MIGRATION_RUNNER.run_transactional("pb_user/0005_set_role_id_not_null.down.sql")
+    MIGRATION_RUNNER.run_transactional("psg_user/0005_set_role_id_not_null.down.sql")

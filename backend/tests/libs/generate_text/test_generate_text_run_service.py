@@ -999,7 +999,7 @@ async def test_claim_expired_run_soft_deleted_run_returns_none(
     )
 
     pickup_count_query = text(
-        "SELECT pickup_count FROM pb_generate_text_run WHERE id = :run_id"
+        "SELECT pickup_count FROM psg_generate_text_run WHERE id = :run_id"
     ).bindparams(run_id=run_record.id)
     pickup_count_scalar = await db_session.scalar(pickup_count_query)
     assert claim_expired_run_result is None

@@ -1,0 +1,1 @@
+DELETE FROM psg_role WHERE code IN ('ADMIN', 'CREATOR', 'READER', 'SYSTEM');

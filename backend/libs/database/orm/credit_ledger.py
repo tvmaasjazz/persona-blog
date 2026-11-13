@@ -12,19 +12,19 @@ from libs.database.orm.user import UserOrm
 
 
 class CreditLedgerOrm(BaseOrm):
-    __tablename__ = "pb_credit_ledger"
+    __tablename__ = "psg_credit_ledger"
     __table_args__ = (
-        Index("pb_credit_ledger_user_id_created_at_idx", "user_id", desc("created_at")),
-        Index("pb_credit_ledger_generate_text_run_id_idx", "generate_text_run_id"),
+        Index("psg_credit_ledger_user_id_created_at_idx", "user_id", desc("created_at")),
+        Index("psg_credit_ledger_generate_text_run_id_idx", "generate_text_run_id"),
         Index(
-            "pb_credit_ledger_generate_text_step_id_entry_type_idx",
+            "psg_credit_ledger_generate_text_step_id_entry_type_idx",
             "generate_text_step_id",
             "entry_type",
             unique=True,
             postgresql_where=text("entry_type IN ('CHARGE', 'REFUND') AND deleted_at IS NULL"),
         ),
         Index(
-            "pb_credit_ledger_invite_id_idx",
+            "psg_credit_ledger_invite_id_idx",
             "invite_id",
             unique=True,
             postgresql_where=text("invite_id IS NOT NULL"),
@@ -34,7 +34,7 @@ class CreditLedgerOrm(BaseOrm):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey(UserOrm.id))
     amount_usd: Mapped[Decimal] = mapped_column(Numeric(16, 10))
     entry_type: Mapped[CreditLedgerEntryType] = mapped_column(
-        Enum(CreditLedgerEntryType, name="pb_credit_ledger_entry_type")
+        Enum(CreditLedgerEntryType, name="psg_credit_ledger_entry_type")
     )
     generate_text_run_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey(GenerateTextRunOrm.id)

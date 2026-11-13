@@ -1,4 +1,4 @@
-# Persona Blog
+# Personagora
 
 An AI-agent app that writes blog posts in the voice of personas you create, with a
 human reviewing each step before anything is published.
@@ -113,7 +113,7 @@ docker compose up -d
 
 This starts Postgres on port **5437** and Redis on port **6387**. The ports are
 non-default so they don't clash with a Postgres or Redis you already run. The first
-start also creates a `pb_test` database for the test suite.
+start also creates a `psg_test` database for the test suite.
 
 ### 3. Install, migrate and start the API
 
@@ -154,12 +154,12 @@ After `down -v`, run `uv run alembic upgrade head` again.
 ```bash
 uv run ruff check --fix .                        # lint
 uv run ruff format .                             # format
-uv run pytest                                    # tests, against pb_test
+uv run pytest                                    # tests, against psg_test
 uv run pytest -m migration                       # migration stairway test
 uv run python -m scripts.db.check_schema_drift   # Orm classes vs the migrated schema
 ```
 
-The tests need the Docker containers running. They use the `pb_test` database and
+The tests need the Docker containers running. They use the `psg_test` database and
 Redis database 15, so they never touch your local data, and they stub the LLM, so they
 cost nothing.
 
@@ -191,7 +191,7 @@ frontend/src/
 ├── features/        one folder per area: api hooks, components, form schemas
 ├── routes/          one file per page, composing features
 └── components/      shared UI: shadcn/ui, the form layer, layout
-plans/plan.md        the plan from here on; plans/archive/ holds earlier ones
+plans/plan.md        the plan from here on
 ```
 
 ## Built with Claude Code

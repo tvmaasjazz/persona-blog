@@ -28,7 +28,7 @@ from libs.generate_text.types import (
 
 
 class GenerateTextStepService:
-    """Writes pb_generate_text_step, each write in its own session and transaction."""
+    """Writes psg_generate_text_step, each write in its own session and transaction."""
 
     def __init__(
         self,
@@ -286,7 +286,7 @@ class GenerateTextStepService:
     async def _find_llm_call_rollup(
         self, db_session: AsyncSession, step_id: int
     ) -> FindLlmCallRollupResult:
-        """Sums this step's pb_llm_call rows."""
+        """Sums this step's psg_llm_call rows."""
         query = select(
             func.count(LlmCallOrm.id),
             func.coalesce(func.sum(LlmCallOrm.input_tokens), 0),

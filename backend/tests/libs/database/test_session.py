@@ -17,7 +17,7 @@ async def test_orm_select_excludes_soft_deleted_rows(db_session: AsyncSession) -
     user_id_query = select(UserOrm.id).where(UserOrm.id.in_(user_ids))
     visible_user_ids = (await db_session.scalars(user_id_query)).all()
     stored_row_count = await db_session.scalar(
-        text("SELECT count(*) FROM pb_user WHERE id = ANY(:user_ids)"),
+        text("SELECT count(*) FROM psg_user WHERE id = ANY(:user_ids)"),
         {"user_ids": user_ids},
     )
 

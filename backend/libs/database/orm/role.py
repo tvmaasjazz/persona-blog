@@ -6,6 +6,6 @@ from libs.permissions.types import RoleType
 
 
 class RoleOrm(BaseOrm):
-    __tablename__ = "pb_role"
+    __tablename__ = "psg_role"
 
-    code: Mapped[RoleType] = mapped_column(Enum(RoleType, name="pb_role_type"), unique=True)
+    code: Mapped[RoleType] = mapped_column(Enum(RoleType, name="psg_role_type"), unique=True)

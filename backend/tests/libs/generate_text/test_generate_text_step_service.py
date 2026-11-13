@@ -483,7 +483,8 @@ async def test_complete_step_empty_output_stores_sql_null(
     await step_service.complete_step(create_step_result.id, "", 5)
 
     output_query = text(
-        "SELECT output IS NULL, jsonb_typeof(output) FROM pb_generate_text_step WHERE id = :step_id"
+        "SELECT output IS NULL, jsonb_typeof(output) "
+        "FROM psg_generate_text_step WHERE id = :step_id"
     )
     output_query_result = await db_session.execute(output_query, {"step_id": create_step_result.id})
     assert output_query_result.one() == (True, None)

@@ -18,7 +18,7 @@ from libs.database.session import create_db_session_factory
 
 TEST_ENVIRONMENT_VARIABLES = {
     "ENVIRONMENT": "TEST",
-    "DATABASE_URL": "postgresql+asyncpg://pb:pb@localhost:5437/pb_test",
+    "DATABASE_URL": "postgresql+asyncpg://psg:psg@localhost:5437/psg_test",
     "REDIS_URL": "redis://localhost:6387/15",
     "GOOGLE_CLIENT_ID": "test-google-client-id",
     "GOOGLE_CLIENT_SECRET": "test-google-client-secret",

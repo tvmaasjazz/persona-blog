@@ -1,1 +1,0 @@
-DELETE FROM pb_permission WHERE code IN ('INVITE_READ', 'INVITE_WRITE');

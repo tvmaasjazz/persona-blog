@@ -8,7 +8,7 @@
 #   ./scripts/e2e/blog_posts.sh
 #
 # It signs in as the first non-system user, and as a dedicated second user
-# (verify-second-user@persona-blog.invalid) that it creates in the local database the
+# (verify-second-user@personagora.invalid) that it creates in the local database the
 # first time it runs. Names carry a timestamp, so it can run again.
 # The LLM calls are real and billed to the OPENAI_API_KEY in .env. It refuses to run
 # unless .env points at a local development database.
@@ -131,7 +131,7 @@ from libs.database.session import create_db_session_factory
 from libs.permissions.services import PermissionService
 from libs.permissions.types import RoleType
 
-SECOND_USER_EMAIL = "verify-second-user@persona-blog.invalid"
+SECOND_USER_EMAIL = "verify-second-user@personagora.invalid"
 
 
 async def build_auth_user(db_session_factory, user_record) -> AuthUser:
@@ -296,24 +296,24 @@ SIGNED_OUT_STATUS="$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/blog-posts
 pass "listing while signed out → 401"
 
 step "13. What the database holds"
-docker compose exec -T postgres psql -U pb -d pb_local -c \
+docker compose exec -T postgres psql -U psg -d psg_local -c \
   "SELECT b.identity AS blog_post, b.title, b.subtitle, left(b.body, 40) AS body_start,
           c.is_public, c.published_at, b.deleted_at IS NOT NULL AS b_deleted,
           c.deleted_at IS NOT NULL AS c_deleted
-   FROM pb_blog_post b JOIN pb_content_item c ON c.id = b.content_item_id
+   FROM psg_blog_post b JOIN psg_content_item c ON c.id = b.content_item_id
    WHERE b.identity IN ('$SAVED_POST_IDENTITY', '$MANUAL_POST_IDENTITY') ORDER BY b.created_at;"
-docker compose exec -T postgres psql -U pb -d pb_local -c \
+docker compose exec -T postgres psql -U psg -d psg_local -c \
   "SELECT r.identity AS run, r.status, r.graph_version, b.identity AS linked_blog_post
-   FROM pb_generate_text_run r
-   LEFT JOIN pb_content_item c ON c.id = r.content_item_id
-   LEFT JOIN pb_blog_post b ON b.content_item_id = c.id
+   FROM psg_generate_text_run r
+   LEFT JOIN psg_content_item c ON c.id = r.content_item_id
+   LEFT JOIN psg_blog_post b ON b.content_item_id = c.id
    WHERE r.identity = '$RUN_IDENTITY';"
-docker compose exec -T postgres psql -U pb -d pb_local -c \
+docker compose exec -T postgres psql -U psg -d psg_local -c \
   "SELECT s.step_name, c.status,
           c.system_prompt LIKE '%single \`# Title\` line%' AS has_format_rules
-   FROM pb_llm_call c
-   JOIN pb_generate_text_run r ON r.id = c.run_id
-   LEFT JOIN pb_generate_text_step s ON s.id = c.step_id
+   FROM psg_llm_call c
+   JOIN psg_generate_text_run r ON r.id = c.run_id
+   LEFT JOIN psg_generate_text_step s ON s.id = c.step_id
    WHERE r.identity = '$RUN_IDENTITY' ORDER BY c.created_at;"
 
 printf '\n\033[32mAll steps passed.\033[0m The draft and humanize calls carry the format rules; the outline does not.\n'
