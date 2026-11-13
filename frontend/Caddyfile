@@ -1,0 +1,30 @@
+# Serves the built app and forwards /api to the API, as Vite's proxy does in development.
+# PORT is Railway's; API_UPSTREAM is the API's private host and port.
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:{$PORT:8080} {
+	encode zstd gzip
+
+	# The API has no /api prefix of its own, so handle_path strips it
+	handle_path /api/* {
+		reverse_proxy {$API_UPSTREAM}
+	}
+
+	handle {
+		root * /srv
+
+		# Built assets have hashed names, so they never change; index.html always might
+		@assets path /assets/*
+		@notAssets not path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		header @notAssets Cache-Control "no-cache"
+
+		# Client-side routes answer with the app
+		try_files {path} /index.html
+		file_server
+	}
+}
