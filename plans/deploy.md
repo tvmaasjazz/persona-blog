@@ -167,7 +167,14 @@ records sit beside Railway's without touching them.
    `plan.md` › 13's checks.
 
 Production adds the `production` branch and environment, its own OAuth client, and
-the bare domain and `api.`.
+the bare domain and `api.`. `www.personagora.com` redirects to the bare domain at
+Cloudflare's edge and never reaches Railway:
+
+- **DNS:** an `AAAA` record for `www` pointing at `100::`, **proxied** (orange cloud).
+  The address is a placeholder; a proxied record only needs to exist for the redirect
+  rule to catch its traffic.
+- **Rules → Redirect Rules:** Cloudflare's "Redirect from WWW to root" template, a 301
+  to `https://personagora.com` with the path and query string kept.
 
 ## To decide
 
