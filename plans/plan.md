@@ -494,38 +494,42 @@ then the admin panel and invites, then the homepage and persona pages.
 
 ### 12. Deploy readiness
 
-Assume any worker can restart mid-run and any request can land on any replica. The
+Where everything runs, the domains and the staging steps are in `deploy.md`. Assume
+any worker can restart mid-run and any request can land on any replica. The
 generate-text run lease, handoff and drain already cover runs a redeploy stops.
 
-- [ ] A Dockerfile for the backend that starts granian directly (exec form), so it's
+- [x] A Dockerfile for the backend that starts granian directly (exec form), so it's
   PID 1 and gets `SIGTERM`. A wrapper like a shell script swallows it
-- [ ] Granian `--workers` read from an env var (start with 2; raise toward the vCPU
+- [x] Granian `--workers` read from an env var (start with 2; raise toward the vCPU
   count if CPU nears one core)
-- [ ] `--workers-kill-timeout` above the 150s drain deadline, so granian only kills a
+- [x] `--workers-kill-timeout` above the 150s drain deadline, so granian only kills a
   worker that hangs past it. Leave `--workers-lifetime` and `--workers-max-rss` off:
   each recycles a worker, which stops its runs
-- [ ] Railway's config-as-code file: `healthcheckPath = "/health"`, `overlapSeconds`
+- [x] Railway's config-as-code file: `healthcheckPath = "/health"`, `overlapSeconds`
   short (~10s), `drainingSeconds` above the drain deadline (180s)
-- [ ] Migrations run as a pre-deploy step, before the new version takes traffic
-- [ ] Size the database connection pool for workers × replicas, so it stays under
-  Postgres's connection limit
+- [x] Migrations run as a pre-deploy step, before the new version takes traffic
+- [x] Size the database connection pool for workers × replicas, so it stays under
+  Postgres's connection limit. SQLAlchemy's default, 5 plus 10 overflow, is 15 per
+  worker: 30 for one replica, 60 while a deploy overlaps the old one, under
+  Postgres's default of 100. Revisit before adding a replica
 - [ ] Secrets (API keys, the database URL) only in Railway variables
-- [ ] The frontend's production build pointed at the API's URL, the API's CORS allowing
-  the frontend's origin, and Google sign-in's redirect URIs for the production domain
+- [x] The frontend's server forwarding `/api/*` to the API over the private network,
+  so the browser stays on one origin with no CORS (`deploy.md` › How the browser
+  reaches the API)
+- [ ] Google sign-in's redirect URI on each environment's frontend domain
 - [ ] During a running generation, hit `/health` repeatedly; it should answer in
   milliseconds
 - [ ] Check STRONG's `gpt-5.6-sol` price in `model_pricing` ($4 / $20) against OpenAI's
   page: sources list it at $5 / $30, with $4 / $20 as a promotion
-- [ ] The frontend at `personagora.com` and the API at `api.personagora.com`, which
-  are the same site, so the API's cookies are first-party. Check once that Safari keeps
-  the session cookie past 7 days: it caps cookies from a subdomain whose IP differs
-  from the main site's
-- [ ] Check which header Railway's proxy sets to the client's IP, and that a client
+- [ ] Check once that Safari keeps the session cookie past 7 days. The cookie is set on
+  the frontend's own domain, which should keep it clear of Safari's cap on cookies
+  from a subdomain whose IP differs from the main site's
+- [ ] Check on staging that `X-Real-IP` carries the client's IP, and that a client
   can't set it, since signed-out views are counted by it (item 8)
 
 ### 13. Initial deploy
 
-- [ ] Deploy the frontend, the backend, Postgres and Redis on Railway
+- [ ] Stand up staging, then production, as `deploy.md` › Steps for staging lists
 - [ ] Run the `backend/scripts/e2e/` scripts against the deployed API
 - [ ] Give Tyler's user the admin role, and grant it credits
 - [ ] Send the first invite links
