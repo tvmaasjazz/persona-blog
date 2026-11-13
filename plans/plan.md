@@ -524,13 +524,13 @@ generate-text run lease, handoff and drain already cover runs a redeploy stops.
 - [ ] Check once that Safari keeps the session cookie past 7 days. The cookie is set on
   the frontend's own domain, which should keep it clear of Safari's cap on cookies
   from a subdomain whose IP differs from the main site's
-- [ ] Check on staging that `X-Real-IP` carries the client's IP, and that a client
-  can't set it, since signed-out views are counted by it (item 8)
+- [ ] Check on staging that `/health` shows your own IP through Cloudflare, and that a
+  request sent around Cloudflare with a made-up `CF-Connecting-IP` gets its real
+  one, since signed-out views are counted by it (item 8)
 
 ### 13. Initial deploy
 
 - [ ] Stand up staging, then production, as `deploy.md` › Steps for staging lists
-- [ ] Run the `backend/scripts/e2e/` scripts against the deployed API
 - [ ] Give Tyler's user the admin role, and grant it credits
 - [ ] Send the first invite links
 
@@ -574,8 +574,15 @@ response instead of running twice.
   (Phase 1 › 8) uses. Not by that key: the client sets its user agent, so changing it
   would give each request a new limit.
 - Input size limits on the endpoints that send text to an LLM.
+- Cloudflare stands in front (`deploy.md` › DNS). Its free plan adds one edge
+  rate-limiting rule, a coarse cap such as requests per IP to `/api/`; the
+  per-endpoint rules stay in the app. A Cloudflare rule binds only traffic that goes
+  through Cloudflare, so relying on one means locking Railway to it first: a secret
+  header Cloudflare adds to every request, which the app requires, except on
+  `/health` for Railway's health checks.
 
-**To decide:** the library (a new dependency), and each endpoint's limits.
+**To decide:** the library (a new dependency), each endpoint's limits, and whether to
+lock Railway to Cloudflare and use its rule.
 
 ### 4. Email and password sign-in
 
@@ -654,6 +661,26 @@ worker carries on to the next step:
 original is still mid-step runs that step twice at worst: the ownership check stops the
 original at its next check, but not the LLM call already in flight. Keeping the deadline
 short and the heartbeat steady makes it rare.
+
+### 6. Testing deployed environments
+
+The e2e scripts and Playwright flows run locally against the dev stack. Nothing yet
+checks a deployed environment beyond its health check.
+
+**To decide:**
+
+- **Smoke checks after each staging deploy:** what they check (`/health` and the IP it
+  resolves, the app loading, `/api` reaching the API through Caddy, Google sign-in's
+  redirect URI), and what runs them: by hand, or a GitHub workflow on the deployment
+  status Railway reports.
+- **Where the full suites run:** CI against its own Postgres and Redis, as the backend
+  tests do now, or a Railway environment per pull request. Shared staging is the wrong
+  place: the suites write data and would collide with each other and with manual
+  testing.
+- **Signed-in tests on a deployed environment:** Google sign-in can't be scripted, so
+  they'd need a test-only sign-in path, off in production and guarded by a secret.
+  Only if something needs it.
+- **Production:** read-only checks only, if any.
 
 ## Phase 3 — Features
 

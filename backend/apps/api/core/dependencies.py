@@ -14,7 +14,9 @@ from libs.llm.services import LlmCallService, LlmService, OpenAiLlmService
 from libs.llm.types import LlmProviderType
 from libs.permissions.types import PermissionType
 from libs.users.after_response_tasks import record_user_activity
+from libs.users.constants import CLOUDFLARE_CONNECTING_IP_HEADER_NAME, REAL_IP_HEADER_NAME
 from libs.users.services import AnonymousUserKeyService
+from libs.users.utils import ClientIpUtils
 
 # Used when a request carries neither the proxy header nor a client address
 UNKNOWN_CLIENT_IP = "unknown"
@@ -112,18 +114,17 @@ DbSessionDep = Annotated[AsyncSession, Depends(get_db_session, scope="function")
 
 
 def get_client_ip(request: Request) -> str:
-    """Returns the client's IP: the last entry of the configured proxy header when the
-    request has it, otherwise the connection's own address."""
+    """Returns the client's IP, read as the configured client IP source says, or
+    "unknown" when nothing names one."""
     app_settings: AppSettings = request.app.state.settings
-    client_ip_header = app_settings.users.client_ip_header
-    if client_ip_header is not None:
-        client_ip_header_value = request.headers.get(client_ip_header)
-        if client_ip_header_value:
-            # A proxy appends the address it saw, so the last entry is the one to trust
-            return client_ip_header_value.split(",")[-1].strip()
-    if request.client is not None:
-        return request.client.host
-    return UNKNOWN_CLIENT_IP
+    connection_ip = request.client.host if request.client is not None else None
+    client_ip = ClientIpUtils.resolve_client_ip(
+        client_ip_source=app_settings.users.client_ip_source,
+        connection_ip=connection_ip,
+        real_ip=request.headers.get(REAL_IP_HEADER_NAME),
+        cloudflare_connecting_ip=request.headers.get(CLOUDFLARE_CONNECTING_IP_HEADER_NAME),
+    )
+    return client_ip or UNKNOWN_CLIENT_IP
 
 
 ClientIpDep = Annotated[str, Depends(get_client_ip)]

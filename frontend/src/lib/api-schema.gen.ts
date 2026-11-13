@@ -1004,6 +1004,8 @@ export interface components {
             /** App Name */
             app_name: string;
             environment: components["schemas"]["EnvironmentType"];
+            /** Client Ip */
+            client_ip: string;
         };
         /**
          * HealthStatusType

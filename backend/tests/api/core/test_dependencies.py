@@ -22,6 +22,7 @@ from libs.auth.services import AuthSessionService
 from libs.database.orm import UserOrm
 from libs.permissions.types import PermissionType, RoleType
 from libs.users.settings import UserSettings
+from libs.users.types import ClientIpSourceType
 from tests.factories.auth import build_auth_user
 from tests.factories.database import fetch_database_utc_now
 from tests.factories.users import insert_user_row
@@ -234,7 +235,7 @@ async def test_get_optional_auth_user_valid_session_records_user_activity(
     assert persisted_last_activity_at == database_utc_now
 
 
-async def test_get_client_ip_header_unset_returns_connection_address(
+async def test_get_client_ip_returns_connection_address(
     fastapi_app: FastAPI, api_client: AsyncClient, app_settings: AppSettings
 ) -> None:
     fastapi_app.state.settings = app_settings.model_copy(update={"users": UserSettings()})
@@ -244,17 +245,17 @@ async def test_get_client_ip_header_unset_returns_connection_address(
         return {"client_ip": client_ip}
 
     client_ip_response = await api_client.get(
-        "/client-ip-route", headers={"X-Forwarded-For": "1.1.1.1"}
+        "/client-ip-route", headers={"X-Real-IP": "198.51.100.7"}
     )
 
     assert client_ip_response.json() == {"client_ip": "127.0.0.1"}
 
 
-async def test_get_client_ip_header_set_returns_last_entry(
+async def test_get_client_ip_cloudflare_source_returns_cloudflare_connecting_ip(
     fastapi_app: FastAPI, api_client: AsyncClient, app_settings: AppSettings
 ) -> None:
     fastapi_app.state.settings = app_settings.model_copy(
-        update={"users": UserSettings(client_ip_header="X-Forwarded-For")}
+        update={"users": UserSettings(client_ip_source=ClientIpSourceType.CLOUDFLARE)}
     )
 
     @fastapi_app.get("/client-ip-route")
@@ -262,26 +263,11 @@ async def test_get_client_ip_header_set_returns_last_entry(
         return {"client_ip": client_ip}
 
     client_ip_response = await api_client.get(
-        "/client-ip-route", headers={"X-Forwarded-For": "1.1.1.1, 2.2.2.2"}
+        "/client-ip-route",
+        headers={"X-Real-IP": "172.64.1.2", "CF-Connecting-IP": "203.0.113.9"},
     )
 
-    assert client_ip_response.json() == {"client_ip": "2.2.2.2"}
-
-
-async def test_get_client_ip_header_set_but_missing_returns_connection_address(
-    fastapi_app: FastAPI, api_client: AsyncClient, app_settings: AppSettings
-) -> None:
-    fastapi_app.state.settings = app_settings.model_copy(
-        update={"users": UserSettings(client_ip_header="X-Forwarded-For")}
-    )
-
-    @fastapi_app.get("/client-ip-route")
-    async def client_ip_route(client_ip: ClientIpDep) -> dict[str, str]:
-        return {"client_ip": client_ip}
-
-    client_ip_response = await api_client.get("/client-ip-route")
-
-    assert client_ip_response.json() == {"client_ip": "127.0.0.1"}
+    assert client_ip_response.json() == {"client_ip": "203.0.113.9"}
 
 
 def test_get_client_ip_no_client_returns_unknown(

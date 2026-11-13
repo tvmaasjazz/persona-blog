@@ -80,8 +80,8 @@ export default defineRailway((ctx) => {
       AUTH__FRONTEND_URL: frontendUrl,
       // Through the frontend's domain, so the session cookie lands where the browser is
       GOOGLE_AUTH__REDIRECT_URL: `${frontendUrl}/api/auth/google/callback`,
-      // Railway's edge sets it, and Caddy passes it through to the API
-      USERS__CLIENT_IP_HEADER: "X-Real-IP",
+      // Cloudflare in front of Railway's edge (plans/deploy.md › How the browser reaches the API)
+      USERS__CLIENT_IP_SOURCE: "CLOUDFLARE",
       GOOGLE_CLIENT_ID: preserve(),
       GOOGLE_CLIENT_SECRET: preserve(),
       OPENAI_API_KEY: preserve(),
