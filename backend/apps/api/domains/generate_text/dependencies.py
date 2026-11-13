@@ -11,7 +11,6 @@ from apps.api.core.dependencies import (
     build_llm_service,
 )
 from apps.api.domains.generate_text.dtos import GenerateBlogPostDto
-from libs.core.exceptions import ServiceUnavailableException
 from libs.credits.services import CreditValidationService
 from libs.database.services import PaginationService
 from libs.generate_text.graphs.generate_text_graph_builder_registry import (
@@ -36,10 +35,6 @@ from libs.personas.services import PersonaService
 def build_generate_text_service(app_state: State, llm_service: LlmService) -> GenerateTextService:
     """Builds the generate-text service from app state."""
     graph_checkpointer = app_state.graph_checkpointer
-    if graph_checkpointer is None:
-        # No checkpointer when Redis isn't on database 0
-        raise ServiceUnavailableException("Text generation is unavailable")
-
     app_settings: AppSettings = app_state.settings
     db_session_factory = app_state.db_session_factory
     generate_text_run_service = GenerateTextRunService(db_session_factory=db_session_factory)
@@ -103,7 +98,7 @@ def build_generate_text_run_pickup_service(app_state: State) -> GenerateTextRunP
 
 
 def get_generate_text_service(request: Request, llm_service: LlmServiceDep) -> GenerateTextService:
-    """Builds the generate text service; ServiceUnavailableException with no checkpointer."""
+    """Builds the generate text service."""
     return build_generate_text_service(request.app.state, llm_service)
 
 
