@@ -22,4 +22,5 @@ async def test_get_health_returns_status_and_settings(
         "status": "OK",
         "app_name": "Health Test API",
         "environment": "TEST",
+        "client_ip": "127.0.0.1",
     }

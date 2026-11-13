@@ -70,10 +70,18 @@ same in every environment.
   cookie, since that cookie belongs to the frontend's domain.
 - **`web` is Caddy** (`frontend/Caddyfile`) serving `dist/`, with any path that isn't
   a file answered by `index.html`, and `/api/*` forwarded to `API_UPSTREAM`.
-- **The client's IP is read from `X-Real-IP`,** which Railway's edge sets and Caddy
-  passes through untouched. `X-Forwarded-For` won't do: the API reads its last entry,
-  which behind Caddy is Railway's edge, not the client. `plan.md` › 12 still checks on
-  staging that the header carries the real IP and that a client can't forge it.
+- **The client's IP comes through Cloudflare** (`USERS__CLIENT_IP_SOURCE=CLOUDFLARE`,
+  read by `ClientIpUtils`). Railway's edge sets `X-Real-IP` to whatever connected to
+  it, which is a Cloudflare server, and Cloudflare sets `CF-Connecting-IP` to the
+  client. Caddy passes both through untouched.
+  - `CF-Connecting-IP` is trusted only when `X-Real-IP` is in Cloudflare's published
+    ranges (`libs/users/constants.py`). Anyone can send the header, so a request that
+    went around Cloudflare to Railway's edge keeps the address it really came from.
+  - The `cloudflare-ips` workflow compares the constant with Cloudflare's API every
+    Monday and fails, which emails Tyler, when they differ; its output says which
+    ranges to add and remove. A missing range makes those visitors look like
+    Cloudflare's address, never lets anyone choose their own.
+  - `/health` returns the IP the API resolved, to check this on a deploy.
 - **`api` listens on `::`,** so it answers on the private network whether that runs
   over IPv6 or IPv4.
 
@@ -100,7 +108,7 @@ Set per environment in `.railway/railway.ts`. The secrets (`GOOGLE_CLIENT_ID`,
 | --------------------------- | --------------------------------------------------------------- |
 | `ENVIRONMENT`               | `STAGING`                                                       |
 | `PORT`                      | `8000`                                                          |
-| `USERS__CLIENT_IP_HEADER`   | `X-Real-IP`                                                     |
+| `USERS__CLIENT_IP_SOURCE`   | `CLOUDFLARE`                                                    |
 | `DATABASE_URL`              | `postgresql+asyncpg://` built from the Postgres service's `PGUSER`, `PGPASSWORD`, `PGHOST`, `PGPORT` and `PGDATABASE`. Railway's own `DATABASE_URL` uses the `postgresql://` scheme, which asyncpg won't take |
 | `REDIS_URL`                 | Redis's private URL. Its database must be 0, the default, since Redis only indexes database 0 and the graph checkpointer needs the index |
 | `GOOGLE_CLIENT_ID`          | the staging OAuth client's                                      |
@@ -142,19 +150,17 @@ Cloudflare's free plan serves `personagora.com`. Namecheap stays the registrar.
    nameservers in Namecheap to the two Cloudflare gives.
 2. For each custom domain added in Railway, add the CNAME and TXT records Railway
    shows. A CNAME on the bare domain works, since Cloudflare flattens it.
-3. Railway's records are **DNS only** (grey cloud), so Railway's edge sees the
-   client and issues each domain's certificate:
-   - **Proxied, the client's IP is lost.** Railway's edge sees a Cloudflare address,
-     so `X-Real-IP` carries that. The real IP is then in `CF-Connecting-IP`, which a
-     client can forge by going around Cloudflare, unless the app first checks that
-     `X-Real-IP` is one of Cloudflare's published ranges.
-   - **Railway may not issue a certificate for a proxied domain.** It answers with the
-     `*.up.railway.app` one, so SSL/TLS must be **Full**: Full (strict) rejects it,
-     and Flexible loops redirects.
-   - **Railway's edge already absorbs network-level attacks,** and its WAF has an
-     Under Attack Mode to switch on during a flood.
-   - Proxying is revisited with rate limiting (`plan.md` › Phase 2 › 3), which is
-     when Cloudflare's rules would earn the IP handling.
+3. Railway's CNAMEs are **proxied** (orange cloud) from the moment they're added, so
+   the Railway target never appears in public DNS history. Its TXT records can't be.
+4. Cloudflare's settings:
+   - **SSL/TLS: Full.** Railway may not issue a certificate for a proxied domain and
+     answers with its `*.up.railway.app` one, which Full (strict) rejects. Flexible
+     loops redirects.
+   - **Always Use HTTPS: on.**
+   - **Bot Fight Mode: off.** It blocks scripts and `curl`, so checks against the API
+     would fail.
+   - **Caching: the defaults.** Cloudflare caches the built assets, which Caddy marks
+     immutable, and never HTML or API responses.
 
 ### Email
 
@@ -187,9 +193,9 @@ records sit beside Railway's without touching them.
    was then pulled from it and holds the rest.
 5. **Secrets:** the three secrets on `api`, in the dashboard (Tyler).
 6. **DNS:** the records Railway shows for `staging.` and `api-staging.`.
-7. **Check:** `/health` on `api-staging.`, sign in on `staging.`, then the
-   `backend/scripts/e2e/` scripts against staging if they can (see To decide), and
-   `plan.md` › 13's checks.
+7. **Check:** `/health` on `api-staging.` shows your own IP, sign in on `staging.`,
+   and `plan.md` › 12 and 13's checks. Testing deployed environments beyond that is
+   `plan.md` › Phase 2 › 6.
 
 ### Production
 
@@ -210,8 +216,3 @@ reaches Railway:
   rule to catch its traffic.
 - **Rules → Redirect Rules:** Cloudflare's "Redirect from WWW to root" template, a 301
   to `https://personagora.com` with the path and query string kept.
-
-## To decide
-
-- Whether the e2e scripts run against staging, and how they get a signed-in session
-  there without the dev session script, which only runs in development.
