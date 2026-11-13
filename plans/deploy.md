@@ -73,7 +73,11 @@ same in every environment.
 ### `api`
 
 - **Start:** granian in exec form, configured by `GRANIAN_*` variables in the
-  Dockerfile, any of which a Railway variable overrides. `GRANIAN_WORKERS` starts at 2.
+  Dockerfile, any of which a Railway variable overrides.
+- **Scaled by instances, not workers:** one granian worker per instance, and two
+  instances (`numReplicas`) in every environment, so staging runs the same
+  cross-process paths (run handoff, lease pickup) production does, and a redeploy or
+  a crashed instance leaves the other serving.
 - **Port 8000, fixed.** Exec form can't expand `$PORT`, so `PORT` is set to 8000 in
   Railway, which routes and health-checks on it.
 - **Pre-deploy:** `alembic upgrade head`. A migration that fails stops the deploy.

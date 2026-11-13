@@ -500,8 +500,8 @@ generate-text run lease, handoff and drain already cover runs a redeploy stops.
 
 - [x] A Dockerfile for the backend that starts granian directly (exec form), so it's
   PID 1 and gets `SIGTERM`. A wrapper like a shell script swallows it
-- [x] Granian `--workers` read from an env var (start with 2; raise toward the vCPU
-  count if CPU nears one core)
+- [x] Granian `--workers` read from an env var: 1, with two Railway instances. Scale
+  by adding instances, which also survive a host failure
 - [x] `--workers-kill-timeout` above the 150s drain deadline, so granian only kills a
   worker that hangs past it. Leave `--workers-lifetime` and `--workers-max-rss` off:
   each recycles a worker, which stops its runs
@@ -510,8 +510,8 @@ generate-text run lease, handoff and drain already cover runs a redeploy stops.
 - [x] Migrations run as a pre-deploy step, before the new version takes traffic
 - [x] Size the database connection pool for workers × replicas, so it stays under
   Postgres's connection limit. SQLAlchemy's default, 5 plus 10 overflow, is 15 per
-  worker: 30 for one replica, 60 while a deploy overlaps the old one, under
-  Postgres's default of 100. Revisit before adding a replica
+  worker: 30 for two instances, 60 while a deploy overlaps the old ones, under
+  Postgres's default of 100. Revisit before adding an instance
 - [ ] Secrets (API keys, the database URL) only in Railway variables
 - [x] The frontend's server forwarding `/api/*` to the API over the private network,
   so the browser stays on one origin with no CORS (`deploy.md` › How the browser
