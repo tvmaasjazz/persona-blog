@@ -924,7 +924,7 @@ export interface components {
          * EnvironmentType
          * @enum {string}
          */
-        EnvironmentType: "DEVELOPMENT" | "TEST" | "PRODUCTION";
+        EnvironmentType: "DEVELOPMENT" | "TEST" | "STAGING" | "PRODUCTION";
         /** GenerateBlogPostDto */
         GenerateBlogPostDto: {
             /** Prompt Text */

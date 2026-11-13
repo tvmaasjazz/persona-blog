@@ -53,11 +53,12 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     fastapi_app.state.http_client = http_client
     fastapi_app.state.openai_client = openai_client
 
-    # Set up the graph checkpointer: RediSearch only indexes Redis database 0, so
-    # production on any other database fails here and other environments go without
+    # Set up the graph checkpointer: RediSearch only indexes Redis database 0, so a
+    # deployed environment on any other database fails here and the rest go without
     redis_database_index = redis_client.connection_pool.connection_kwargs.get("db")
     fastapi_app.state.graph_checkpointer = None
-    if redis_database_index != 0 and app_settings.environment is EnvironmentType.PRODUCTION:
+    is_deployed = app_settings.environment in (EnvironmentType.STAGING, EnvironmentType.PRODUCTION)
+    if redis_database_index != 0 and is_deployed:
         raise RuntimeError(
             f"REDIS_URL must use database 0 for graph checkpointing, not {redis_database_index}"
         )
