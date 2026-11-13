@@ -11,7 +11,8 @@ REAL_IP_HEADER_NAME = "X-Real-IP"
 # Set by Cloudflare to the client's address; anyone can send it, so it's trusted only
 # from a request that came from one of Cloudflare's addresses
 CLOUDFLARE_CONNECTING_IP_HEADER_NAME = "CF-Connecting-IP"
-# Cloudflare's published ranges (https://www.cloudflare.com/ips/), fetched 2026-11-13
+# Cloudflare's published ranges (https://www.cloudflare.com/ips/). The weekly
+# cloudflare-ips workflow fails when they change; update this list to match
 CLOUDFLARE_IP_NETWORKS = tuple(
     ip_network(cloudflare_ip_network)
     for cloudflare_ip_network in (

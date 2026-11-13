@@ -78,9 +78,10 @@ same in every environment.
   - `CF-Connecting-IP` is trusted only when `X-Real-IP` is in Cloudflare's published
     ranges (`libs/users/constants.py`). Anyone can send the header, so a request that
     went around Cloudflare to Railway's edge keeps the address it really came from.
-  - Cloudflare announces changes to its ranges ahead of time; the constant is updated
-    then. A missing range makes those visitors look like Cloudflare's address, never
-    lets anyone choose their own.
+  - The `cloudflare-ips` workflow compares the constant with Cloudflare's API every
+    Monday and fails, which emails Tyler, when they differ; its output says which
+    ranges to add and remove. A missing range makes those visitors look like
+    Cloudflare's address, never lets anyone choose their own.
   - `/health` returns the IP the API resolved, to check this on a deploy.
 - **`api` listens on `::`,** so it answers on the private network whether that runs
   over IPv6 or IPv4.
