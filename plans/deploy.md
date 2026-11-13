@@ -20,8 +20,7 @@ the first-deploy checks.
   "Wait for CI"). A build or migration that breaks shows up there before a release.
 - **A release merges `main` into `production`.** Nothing else merges into it.
 - **`STAGING` behaves like `PRODUCTION`** everywhere the code checks the environment:
-  secure cookies, Redis database 0 for the graph checkpointer, and the dev-only
-  scripts refusing to run. It exists so staging can differ later without a deploy
+  secure cookies and the dev-only scripts refusing to run. It exists so staging can differ later without a deploy
   pretending to be production.
 
 ## Railway
@@ -93,7 +92,7 @@ Set per environment in Railway. Nothing secret goes in the repo or the config fi
 | `PORT`                      | `8000`                                                          |
 | `USERS__CLIENT_IP_HEADER`   | `X-Real-IP`                                                     |
 | `DATABASE_URL`              | `postgresql+asyncpg://` built from the Postgres service's `PGUSER`, `PGPASSWORD`, `PGHOST`, `PGPORT` and `PGDATABASE`. Railway's own `DATABASE_URL` uses the `postgresql://` scheme, which asyncpg won't take |
-| `REDIS_URL`                 | Redis's private URL, database 0                                 |
+| `REDIS_URL`                 | Redis's private URL. Its database must be 0, the default, since Redis only indexes database 0 and the graph checkpointer needs the index |
 | `GOOGLE_CLIENT_ID`          | the staging OAuth client's                                      |
 | `GOOGLE_CLIENT_SECRET`      | the staging OAuth client's                                      |
 | `GOOGLE_AUTH__REDIRECT_URL` | `https://staging.personagora.com/api/auth/google/callback`      |

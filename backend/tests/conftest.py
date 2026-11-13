@@ -23,6 +23,8 @@ TEST_ENVIRONMENT_VARIABLES = {
     "GOOGLE_CLIENT_ID": "test-google-client-id",
     "GOOGLE_CLIENT_SECRET": "test-google-client-secret",
     "OPENAI_API_KEY": "test-openai-api-key",
+    # The suite's Redis database isn't 0, which Redis's checkpoint index needs
+    "GENERATE_TEXT__CHECKPOINTER": "MEMORY",
 }
 TEST_DATABASE_NAME_SUFFIX = "_test"
 TEST_REDIS_DB_INDEX = 15

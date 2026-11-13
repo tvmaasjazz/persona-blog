@@ -1,9 +1,12 @@
 from pydantic import BaseModel, ConfigDict
 
+from libs.generate_text.types import GraphCheckpointerType
+
 
 class GenerateTextSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    checkpointer: GraphCheckpointerType = GraphCheckpointerType.REDIS
     max_rewrite_passes: int = 3
     checkpoint_ttl_minutes: int = 10080
     max_output_format_retries: int = 1

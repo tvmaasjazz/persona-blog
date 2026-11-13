@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI
 from httpx import AsyncClient
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 from openai import AsyncOpenAI
 from redis.asyncio import Redis
@@ -20,6 +21,7 @@ from apps.api.core.types import EnvironmentType
 from apps.api.domains.generate_text.dependencies import build_generate_text_run_pickup_service
 from libs.core.services import BackgroundJobService
 from libs.database.session import create_db_session_factory
+from libs.generate_text.types import GraphCheckpointerType
 
 logger = structlog.get_logger(__name__)
 
@@ -53,16 +55,10 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     fastapi_app.state.http_client = http_client
     fastapi_app.state.openai_client = openai_client
 
-    # Set up the graph checkpointer: RediSearch only indexes Redis database 0, so a
-    # deployed environment on any other database fails here and the rest go without
-    redis_database_index = redis_client.connection_pool.connection_kwargs.get("db")
-    fastapi_app.state.graph_checkpointer = None
-    is_deployed = app_settings.environment in (EnvironmentType.STAGING, EnvironmentType.PRODUCTION)
-    if redis_database_index != 0 and is_deployed:
-        raise RuntimeError(
-            f"REDIS_URL must use database 0 for graph checkpointing, not {redis_database_index}"
-        )
-    if redis_database_index == 0:
+    # Set up the graph checkpointer. Redis only indexes database 0, so on any other
+    # database its setup refuses to create the index and the app stops here
+    is_redis_checkpointer = app_settings.generate_text.checkpointer is GraphCheckpointerType.REDIS
+    if is_redis_checkpointer:
         graph_checkpointer = AsyncRedisSaver(
             redis_client=redis_client,
             ttl={
@@ -73,7 +69,7 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
         await graph_checkpointer.asetup()
         fastapi_app.state.graph_checkpointer = graph_checkpointer
     else:
-        logger.warning("graph_checkpointer_unavailable", redis_database_index=redis_database_index)
+        fastapi_app.state.graph_checkpointer = InMemorySaver()
 
     logger.info(
         "api_started",
@@ -86,10 +82,8 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
         event_loop_monitor_task = asyncio.create_task(monitor_event_loop_lag())
     generate_text_run_pickup_task = None
     generate_text_run_handoff_task = None
-    if (
-        app_settings.environment is not EnvironmentType.TEST
-        and fastapi_app.state.graph_checkpointer is not None
-    ):
+    # Picking up another process's run needs the state it left in Redis
+    if app_settings.environment is not EnvironmentType.TEST and is_redis_checkpointer:
         generate_text_run_pickup_service = build_generate_text_run_pickup_service(fastapi_app.state)
         generate_text_run_pickup_task = asyncio.create_task(
             generate_text_run_pickup_service.pick_up_expired_runs()

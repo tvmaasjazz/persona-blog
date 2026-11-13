@@ -1,6 +1,15 @@
 from enum import StrEnum
 
 
+class GraphCheckpointerType(StrEnum):
+    """Where the graph keeps its state between steps."""
+
+    # Shared by every process, so a run another process stopped can be picked up
+    REDIS = "REDIS"
+    # This process only, for tests
+    MEMORY = "MEMORY"
+
+
 class TextType(StrEnum):
     BLOG_POST = "BLOG_POST"
 
