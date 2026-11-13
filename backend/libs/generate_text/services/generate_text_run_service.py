@@ -24,7 +24,7 @@ from libs.generate_text.types import GenerateTextRunStatusType, GenerateTextStep
 
 
 class GenerateTextRunService:
-    """Writes pb_generate_text_run, each write in its own session and transaction."""
+    """Writes psg_generate_text_run, each write in its own session and transaction."""
 
     def __init__(self, db_session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._db_session_factory = db_session_factory
@@ -333,7 +333,7 @@ class GenerateTextRunService:
     async def _find_llm_call_rollup(
         self, db_session: AsyncSession, run_id: int
     ) -> FindLlmCallRollupResult:
-        """Sums this run's pb_llm_call rows, including calls made outside a step."""
+        """Sums this run's psg_llm_call rows, including calls made outside a step."""
         query = select(
             func.count(LlmCallOrm.id),
             func.coalesce(func.sum(LlmCallOrm.input_tokens), 0),

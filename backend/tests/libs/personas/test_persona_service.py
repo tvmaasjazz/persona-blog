@@ -885,7 +885,7 @@ async def test_delete_persona_soft_deletes_row(
     orm_query = select(PersonaOrm).where(PersonaOrm.identity == persona_record.identity)
     orm_result = await db_session.scalar(orm_query)
     database_utc_now = await fetch_database_utc_now(db_session)
-    raw_query = text("SELECT deleted_at, deleted_by_id FROM pb_persona WHERE identity = :identity")
+    raw_query = text("SELECT deleted_at, deleted_by_id FROM psg_persona WHERE identity = :identity")
     raw_result = (
         await db_session.execute(raw_query, {"identity": str(persona_record.identity)})
     ).one()

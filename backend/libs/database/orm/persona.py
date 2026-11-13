@@ -5,17 +5,17 @@ from libs.database.base import BaseOrm
 
 
 class PersonaOrm(BaseOrm):
-    __tablename__ = "pb_persona"
+    __tablename__ = "psg_persona"
     __table_args__ = (
         Index(
-            "pb_persona_created_by_id_name_idx",
+            "psg_persona_created_by_id_name_idx",
             "created_by_id",
             "name",
             unique=True,
             postgresql_where=text("deleted_at IS NULL"),
         ),
         Index(
-            "pb_persona_created_by_id_created_at_idx",
+            "psg_persona_created_by_id_created_at_idx",
             "created_by_id",
             desc("created_at"),
         ),

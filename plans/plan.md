@@ -1,9 +1,8 @@
-# Persona Blog — plan
+# Personagora — plan
 
 The plan from here on, in three phases: get to an initial deploy, then harden the app
 (security, idempotency, visibility), then add features. Detail gets added to each item
-as it comes up. What was built before this plan, and how it was designed, is in
-[`archive/build-plan-v1.md`](archive/build-plan-v1.md).
+as it comes up.
 
 Each item lists the decisions it still needs. They're made when the item comes up, not
 before.
@@ -61,7 +60,7 @@ frontend comes in item 11.
 - Each LLM call keeps its cost to us, `cost_usd`. Beside it, a step and its run get
   `charge_usd`, what the user pays, from one function. For now the function returns the
   cost unchanged; later it applies a markup.
-- `pb_credit_ledger` records every change to a balance: the user, a signed USD amount,
+- `psg_credit_ledger` records every change to a balance: the user, a signed USD amount,
   the kind (`GRANT` for free credits, `CHARGE`, `REFUND`, `ADJUSTMENT`, and `PURCHASE`
   with payments), the run and step it concerns, a note, and who made it. It's the source
   of truth, and a balance cached on the user is updated in the same transaction as each
@@ -195,9 +194,9 @@ who it's for, since the invite isn't tied to an email, so the list shows who eac
 went to.
 
 - **Permissions:** `INVITE_READ` and `INVITE_WRITE`, held by the admin only.
-- **Table `pb_invite`:** the name, `credit_amount_usd` (over $0, up to $100, as grants),
+- **Table `psg_invite`:** the name, `credit_amount_usd` (over $0, up to $100, as grants),
   the note, `code_hash` (unique), `expires_at`, `used_at`, `used_by_user_id` and
-  `revoked_at`. `pb_credit_ledger` gets a nullable `invite_id`, so the invite's grant is
+  `revoked_at`. `psg_credit_ledger` gets a nullable `invite_id`, so the invite's grant is
   found by key rather than by its note.
 - **The code** is 16 random bytes, about 22 characters in the link. Only its SHA-256 is
   stored; a slow hash only matters for a guessable secret. The link is
@@ -369,7 +368,7 @@ Built in #50. Simple counts of how posts are read, and a score to order the home
   get views too. One view per viewer, per item, per UTC day, holding the furthest
   quarter read. A view by the item's own author isn't recorded: the frontend doesn't
   send one, and the backend ignores one that arrives.
-  - Each is a row in `pb_content_item_view`: by user when signed in, else by the
+  - Each is a row in `psg_content_item_view`: by user when signed in, else by the
     anonymous user key. Signed-out rows are the history of what was read and how far,
     without saying who.
   - **The anonymous user key** is a hash of the client IP (the hop Railway's proxy
@@ -401,7 +400,7 @@ Built in #50. Simple counts of how posts are read, and a score to order the home
   changing one, `scripts/recompute_feed_scores.py` rescores every item from its view
   count and summed read shares.
 - **Where it's kept:** the view count, summed read shares and score live in
-  `pb_content_item_engagement`, one row per content item, not on the content item
+  `psg_content_item_engagement`, one row per content item, not on the content item
   itself. A view write then rewrites a small row and its own indexes, not the content
   item's row and every index on it.
 - Authors seeing their posts' views and reads waits for Phase 3 › 7.
@@ -496,7 +495,7 @@ then the admin panel and invites, then the homepage and persona pages.
 ### 12. Deploy readiness
 
 Assume any worker can restart mid-run and any request can land on any replica. The
-lease, handoff and drain work in the archive covers runs a redeploy stops.
+generate-text run lease, handoff and drain already cover runs a redeploy stops.
 
 - [ ] A Dockerfile for the backend that starts granian directly (exec form), so it's
   PID 1 and gets `SIGTERM`. A wrapper like a shell script swallows it

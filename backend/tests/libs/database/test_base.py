@@ -21,7 +21,7 @@ async def test_base_insert_populates_server_defaults(db_session: AsyncSession) -
 async def test_base_orm_update_sets_updated_at(db_session: AsyncSession) -> None:
     user_record = await insert_user_row(db_session)
     await db_session.execute(
-        text("UPDATE pb_user SET updated_at = '2020-01-01' WHERE id = :user_id"),
+        text("UPDATE psg_user SET updated_at = '2020-01-01' WHERE id = :user_id"),
         {"user_id": user_record.id},
     )
 
@@ -39,7 +39,7 @@ async def test_base_orm_update_statement_sets_updated_at_to_database_now(
 ) -> None:
     user_record = await insert_user_row(db_session)
     await db_session.execute(
-        text("UPDATE pb_user SET updated_at = '2020-01-01' WHERE id = :user_id"),
+        text("UPDATE psg_user SET updated_at = '2020-01-01' WHERE id = :user_id"),
         {"user_id": user_record.id},
     )
     user_update = (

@@ -9,11 +9,11 @@ from libs.database.orm.user import UserOrm
 
 
 class InviteOrm(BaseOrm):
-    __tablename__ = "pb_invite"
+    __tablename__ = "psg_invite"
     __table_args__ = (
         CheckConstraint("(used_at IS NULL) = (used_by_user_id IS NULL)", name="used"),
         CheckConstraint("used_at IS NULL OR revoked_at IS NULL", name="used_revoked"),
-        Index("pb_invite_created_at_idx", desc("created_at")),
+        Index("psg_invite_created_at_idx", desc("created_at")),
     )
 
     name: Mapped[str]

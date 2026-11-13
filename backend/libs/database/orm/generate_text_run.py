@@ -16,32 +16,32 @@ if TYPE_CHECKING:
 
 
 class GenerateTextRunOrm(BaseOrm):
-    __tablename__ = "pb_generate_text_run"
+    __tablename__ = "psg_generate_text_run"
     __table_args__ = (
         Index(
-            "pb_generate_text_run_created_by_id_created_at_idx",
+            "psg_generate_text_run_created_by_id_created_at_idx",
             "created_by_id",
             desc("created_at"),
         ),
         Index(
-            "pb_generate_text_run_status_idx",
+            "psg_generate_text_run_status_idx",
             "status",
             postgresql_where=text("status IN ('PENDING', 'RUNNING', 'AWAITING_REVIEW')"),
         ),
         Index(
-            "pb_generate_text_run_lease_expires_at_idx",
+            "psg_generate_text_run_lease_expires_at_idx",
             "lease_expires_at",
             postgresql_where=text("status IN ('PENDING', 'RUNNING')"),
         ),
-        Index("pb_generate_text_run_persona_id_idx", "persona_id"),
-        Index("pb_generate_text_run_content_item_id_idx", "content_item_id"),
+        Index("psg_generate_text_run_persona_id_idx", "persona_id"),
+        Index("psg_generate_text_run_content_item_id_idx", "content_item_id"),
     )
 
-    text_type: Mapped[TextType] = mapped_column(Enum(TextType, name="pb_text_type"))
+    text_type: Mapped[TextType] = mapped_column(Enum(TextType, name="psg_text_type"))
     graph_name: Mapped[str]
     graph_version: Mapped[str]
     status: Mapped[GenerateTextRunStatusType] = mapped_column(
-        Enum(GenerateTextRunStatusType, name="pb_generate_text_run_status_type"),
+        Enum(GenerateTextRunStatusType, name="psg_generate_text_run_status_type"),
         server_default=text("'PENDING'"),
     )
     prompt_text: Mapped[str]

@@ -1403,13 +1403,13 @@ async def test_delete_blog_post_soft_deletes_both_rows(
     content_item_orm_result = await db_session.scalar(content_item_orm_query)
     database_utc_now = await fetch_database_utc_now(db_session)
     raw_blog_post_query = text(
-        "SELECT deleted_at, deleted_by_id FROM pb_blog_post WHERE identity = :identity"
+        "SELECT deleted_at, deleted_by_id FROM psg_blog_post WHERE identity = :identity"
     )
     raw_blog_post_result = (
         await db_session.execute(raw_blog_post_query, {"identity": str(blog_post_record.identity)})
     ).one()
     raw_content_item_query = text(
-        "SELECT deleted_at, deleted_by_id FROM pb_content_item WHERE id = :content_item_id"
+        "SELECT deleted_at, deleted_by_id FROM psg_content_item WHERE id = :content_item_id"
     )
     raw_content_item_result = (
         await db_session.execute(

@@ -30,18 +30,18 @@ class BaseOrm(SoftDeleteMixin, DeclarativeBase):
         server_default=text(UTC_NOW_SQL), onupdate=DatabaseClockUtils.build_utc_now_sql()
     )
 
-    # The audit columns name pb_user because UserOrm extends BaseOrm and can't be imported
+    # The audit columns name psg_user because UserOrm extends BaseOrm and can't be imported
     @declared_attr
     def created_by_id(cls) -> Mapped[int]:
         """The user who created the row."""
-        return mapped_column(BigInteger, ForeignKey("pb_user.id"))
+        return mapped_column(BigInteger, ForeignKey("psg_user.id"))
 
     @declared_attr
     def updated_by_id(cls) -> Mapped[int]:
         """The user who last changed the row."""
-        return mapped_column(BigInteger, ForeignKey("pb_user.id"))
+        return mapped_column(BigInteger, ForeignKey("psg_user.id"))
 
     @declared_attr
     def deleted_by_id(cls) -> Mapped[int | None]:
         """The user who soft-deleted the row; null while it is live."""
-        return mapped_column(BigInteger, ForeignKey("pb_user.id"))
+        return mapped_column(BigInteger, ForeignKey("psg_user.id"))

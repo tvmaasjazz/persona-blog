@@ -12,16 +12,16 @@ from libs.llm.types import LlmCallReasonType, LlmCallStatusType, LlmProviderType
 
 
 class LlmCallOrm(BaseOrm):
-    __tablename__ = "pb_llm_call"
+    __tablename__ = "psg_llm_call"
     __table_args__ = (
-        Index("pb_llm_call_created_by_id_idx", "created_by_id"),
-        Index("pb_llm_call_run_id_idx", "run_id"),
-        Index("pb_llm_call_step_id_idx", "step_id"),
+        Index("psg_llm_call_created_by_id_idx", "created_by_id"),
+        Index("psg_llm_call_run_id_idx", "run_id"),
+        Index("psg_llm_call_step_id_idx", "step_id"),
     )
 
-    llm_type: Mapped[LlmType] = mapped_column(Enum(LlmType, name="pb_llm_type"))
+    llm_type: Mapped[LlmType] = mapped_column(Enum(LlmType, name="psg_llm_type"))
     provider: Mapped[LlmProviderType] = mapped_column(
-        Enum(LlmProviderType, name="pb_llm_provider_type")
+        Enum(LlmProviderType, name="psg_llm_provider_type")
     )
     model_name: Mapped[str]
     purpose: Mapped[str]
@@ -30,10 +30,10 @@ class LlmCallOrm(BaseOrm):
     response_text: Mapped[str | None]
     response_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     reason: Mapped[LlmCallReasonType | None] = mapped_column(
-        Enum(LlmCallReasonType, name="pb_llm_call_reason_type")
+        Enum(LlmCallReasonType, name="psg_llm_call_reason_type")
     )
     status: Mapped[LlmCallStatusType] = mapped_column(
-        Enum(LlmCallStatusType, name="pb_llm_call_status_type"),
+        Enum(LlmCallStatusType, name="psg_llm_call_status_type"),
         server_default=text("'PENDING'"),
     )
     input_tokens: Mapped[int | None] = mapped_column(Integer)

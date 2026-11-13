@@ -1,19 +1,19 @@
-name: persona-blog
+name: personagora
 
 services:
   postgres:
     image: postgres:18
     environment:
-      POSTGRES_USER: pb
-      POSTGRES_PASSWORD: pb
-      POSTGRES_DB: pb_local
+      POSTGRES_USER: psg
+      POSTGRES_PASSWORD: psg
+      POSTGRES_DB: psg_local
     ports:
       - "5437:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pb -d pb_local"]
+      test: ["CMD-SHELL", "pg_isready -U psg -d psg_local"]
       interval: 5s
       timeout: 5s
       retries: 10

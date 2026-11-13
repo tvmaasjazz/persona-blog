@@ -16,13 +16,13 @@ Database. The procedure for making a schema change is the `db-migration` skill.
 
 ## Naming
 
-- Every Postgres object this project creates is prefixed `pb_`: tables, enum types,
+- Every Postgres object this project creates is prefixed `psg_`: tables, enum types,
   and sequences. Python names don't carry it: `PbUserOrm` is wrong, `UserOrm` is
   right.
 - Two exceptions: extensions (`citext`) aren't ours, and Alembic's `alembic_version`
   table belongs to the tooling. Both keep their own names.
-- Table names are singular: `pb_user`, `pb_persona`. A many-to-many table joins both
-  singular names: `pb_persona_tag`. Relationship attributes that hold collections
+- Table names are singular: `psg_user`, `psg_persona`. A many-to-many table joins both
+  singular names: `psg_persona_tag`. Relationship attributes that hold collections
   stay plural: `UserOrm.personas`.
 - Constraint and index names start with their table name, so they carry the prefix
   too. They follow Postgres's own generated names, and a name you write by hand must
@@ -30,11 +30,11 @@ Database. The procedure for making a schema change is the `db-migration` skill.
 
   | Kind        | Pattern                          | Example                     |
   | ----------- | -------------------------------- | --------------------------- |
-  | Primary key | `<table>_pkey`                   | `pb_user_pkey`              |
-  | Unique      | `<table>_<columns>_key`          | `pb_user_identity_key`      |
-  | Foreign key | `<table>_<column>_fkey`          | `pb_user_created_by_id_fkey` |
-  | Index       | `<table>_<columns>_idx`          | `pb_persona_created_by_id_created_at_idx` |
-  | Check       | `<table>_<name>_check`           | `pb_persona_name_check`     |
+  | Primary key | `<table>_pkey`                   | `psg_user_pkey`              |
+  | Unique      | `<table>_<columns>_key`          | `psg_user_identity_key`      |
+  | Foreign key | `<table>_<column>_fkey`          | `psg_user_created_by_id_fkey` |
+  | Index       | `<table>_<columns>_idx`          | `psg_persona_created_by_id_created_at_idx` |
+  | Check       | `<table>_<name>_check`           | `psg_persona_name_check`     |
 
 - Columns ending `_id` are `BIGINT` foreign keys. A provider's or third party's
   identifier never takes that suffix: `provider_subject`, not `provider_id`.
@@ -54,16 +54,16 @@ class never redeclares them, except to make the audit columns nullable (below).
 | `created_at`    | `TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')`      | `Mapped[datetime]`         | |
 | `updated_at`    | `TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')`      | `Mapped[datetime]`         | `BaseOrm`'s `onupdate` sets it (Timestamps) |
 | `deleted_at`    | `TIMESTAMP`                                                  | `Mapped[datetime \| None]` | On `SoftDeleteMixin`, which `BaseOrm` inherits |
-| `created_by_id` | `BIGINT NOT NULL`, FK `pb_user (id)`                         | `Mapped[int]`              | |
-| `updated_by_id` | `BIGINT NOT NULL`, FK `pb_user (id)`                         | `Mapped[int]`              | |
-| `deleted_by_id` | `BIGINT`, FK `pb_user (id)`                                  | `Mapped[int \| None]`      | |
+| `created_by_id` | `BIGINT NOT NULL`, FK `psg_user (id)`                         | `Mapped[int]`              | |
+| `updated_by_id` | `BIGINT NOT NULL`, FK `psg_user (id)`                         | `Mapped[int]`              | |
+| `deleted_by_id` | `BIGINT`, FK `psg_user (id)`                                  | `Mapped[int \| None]`      | |
 
-`pb_user`'s `created_by_id` and `updated_by_id` are nullable, since a person signing up
+`psg_user`'s `created_by_id` and `updated_by_id` are nullable, since a person signing up
 has no creator. `UserOrm` redeclares both.
 
 A row the app calculates from other rows, such as a count or a score, names the system
 user in `created_by_id` and `updated_by_id`, whoever caused the change. The statement
-reads its id inline, `(SELECT id FROM pb_user WHERE is_system_user)`, rather than in a
+reads its id inline, `(SELECT id FROM psg_user WHERE is_system_user)`, rather than in a
 query of its own.
 
 A row a signed-out visitor can cause, such as a view, has nullable `created_by_id` and
@@ -84,14 +84,14 @@ data. Add a clause only for one of these reasons:
 ### Table shape
 
 Every `CREATE TABLE` lists the shared columns in the order of › Shared columns. The
-pattern is `migrations/sql/pb_persona/0001_create_pb_persona.up.sql`.
+pattern is `migrations/sql/psg_persona/0001_create_psg_persona.up.sql`.
 
 - Table-specific columns go between `identity` and `created_at`.
 - A constraint on a single column is written inline and unnamed: `PRIMARY KEY`,
-  `UNIQUE`, `REFERENCES pb_user (id)`, `CHECK (...)`. Postgres's generated names match
+  `UNIQUE`, `REFERENCES psg_user (id)`, `CHECK (...)`. Postgres's generated names match
   the naming convention.
 - A constraint spanning several columns goes at table level, named:
-  `CONSTRAINT pb_persona_tag_persona_id_tag_id_key UNIQUE (persona_id, tag_id)`.
+  `CONSTRAINT psg_persona_tag_persona_id_tag_id_key UNIQUE (persona_id, tag_id)`.
 - If a generated name would pass 63 characters, name the constraint explicitly in both
   the SQL and the Orm class (Postgres truncates; SQLAlchemy shortens differently).
 - Text is `TEXT`, never `VARCHAR(n)`. Case-insensitive text is `CITEXT`.
@@ -139,17 +139,17 @@ pattern is `migrations/sql/pb_persona/0001_create_pb_persona.up.sql`.
 
 Postgres enum labels are `UPPER_SNAKE` and match the Python `StrEnum` members
 exactly. That holds for our own enums only; an enum that mirrors an outside API's values
-is never a column (`python-naming.md` › Enums). The type is `pb_` plus the class name in
-snake_case: `AuthProviderType` → `pb_auth_provider_type`.
+is never a column (`python-naming.md` › Enums). The type is `psg_` plus the class name in
+snake_case: `AuthProviderType` → `psg_auth_provider_type`.
 
 ```sql
-CREATE TYPE pb_auth_provider_type AS ENUM ('GOOGLE');
+CREATE TYPE psg_auth_provider_type AS ENUM ('GOOGLE');
 ```
 
-- The Orm column names the type: `mapped_column(Enum(AuthProviderType, name="pb_auth_provider_type"))`.
+- The Orm column names the type: `mapped_column(Enum(AuthProviderType, name="psg_auth_provider_type"))`.
   The `StrEnum` lives in the owning domain's `libs/<domain>/types.py`.
 - Adding members goes in its own revision, apart from any other change, in the same
-  commit as the Python change: `ALTER TYPE pb_auth_provider_type ADD VALUE IF NOT EXISTS 'GITHUB'`.
+  commit as the Python change: `ALTER TYPE psg_auth_provider_type ADD VALUE IF NOT EXISTS 'GITHUB'`.
   - `IF NOT EXISTS`, because the `.down.sql` can't remove the value (a comment says
     so), and the stairway test upgrades the revision a second time.
   - Each `ADD VALUE` is its own file, run with `run_non_transactional` (› Transactional
@@ -157,8 +157,8 @@ CREATE TYPE pb_auth_provider_type AS ENUM ('GOOGLE');
     Several `ADD VALUE`s to one type may share a revision.
   - Rows that use the new value, such as a seed, go in the next revision.
 - A new `PermissionType` member is a schema change: an `ADD VALUE` to
-  `pb_permission_type`, then, in the next revision, its `pb_permission` row and a
-  `pb_role_permission` grant for each role that holds it.
+  `psg_permission_type`, then, in the next revision, its `psg_permission` row and a
+  `psg_role_permission` grant for each role that holds it.
 - Removing a member isn't supported by Postgres. It takes a new type, a column
   migration, and dropping the old type.
 - The `.down.sql` for a table using a type drops the type after the table.
@@ -176,10 +176,10 @@ that import is what registers every mapper before configuration.
   `true()`, `text(...)`).
 - Indexes and partial unique indexes are declared in `__table_args__` with the exact
   name the SQL uses:
-  `Index("pb_user_email_idx", "email", unique=True, postgresql_where=text("deleted_at IS NULL"))`.
+  `Index("psg_user_email_idx", "email", unique=True, postgresql_where=text("deleted_at IS NULL"))`.
 - Check constraints are declared too, a column's own inside its `mapped_column`, a
   table's in `__table_args__`. `name=` takes only the middle of the SQL's name, since
-  the naming convention adds `<table>_` and `_check`: `pb_invite_used_check` is
+  the naming convention adds `<table>_` and `_check`: `psg_invite_used_check` is
   `CheckConstraint("...", name="used")`. A check whose full name would pass 63
   characters gets a shorter middle, named the same in the SQL and the Orm class.
 - `libs/database/base.py`, `session.py`, `column_types.py`, and `constants.py` are
@@ -194,9 +194,9 @@ to avoid the import cycle; annotations are deferred, so neither side needs quote
 The pattern is `libs/database/orm/generate_text_run.py` (parent) and
 `generate_text_step.py` (child).
 
-- `ForeignKey(<Orm>.id)`, never `ForeignKey("pb_<table>.id")`.
+- `ForeignKey(<Orm>.id)`, never `ForeignKey("psg_<table>.id")`.
 - `__tablename__` and the `back_populates` attribute name are the only permitted loose
-  strings, with one exception: `ForeignKey("pb_user.id")` on `BaseOrm`'s audit columns and
+  strings, with one exception: `ForeignKey("psg_user.id")` on `BaseOrm`'s audit columns and
   `UserOrm`'s own overrides of them, because `UserOrm` extends `BaseOrm` and can't be
   imported there.
 - Add a relationship only in the direction a query uses. A one-way relationship takes
@@ -222,14 +222,14 @@ backend/migrations/
 │   └── 20260917_1528_create_user_tables.py
 └── sql/
     ├── extensions/                 # CREATE EXTENSION files
-    └── pb_user/                    # one folder per table, named exactly as the table
-        ├── 0001_create_pb_user.up.sql
-        └── 0001_create_pb_user.down.sql
+    └── psg_user/                    # one folder per table, named exactly as the table
+        ├── 0001_create_psg_user.up.sql
+        └── 0001_create_psg_user.down.sql
 ```
 
 - SQL files are `<nnnn>_<what_it_does>.<up|down>.sql`, zero-padded to four, in the
   folder of the table they change. The verb describes the change:
-  `create_pb_user`, `add_display_name`, `backfill_persona_slug`, `drop_legacy_token`.
+  `create_psg_user`, `add_display_name`, `backfill_persona_slug`, `drop_legacy_token`.
 - SQL that isn't about one table goes in a named folder: extensions in
   `sql/extensions/`.
 - The numeric prefix orders changes within one folder, for human reading only.

@@ -18,7 +18,7 @@ async def test_utc_date_time_stores_aware_datetime_as_naive_utc(
     )
 
     stored_last_login_at = await db_session.scalar(
-        text("SELECT last_login_at FROM pb_user WHERE id = :user_id"),
+        text("SELECT last_login_at FROM psg_user WHERE id = :user_id"),
         {"user_id": user_record.id},
     )
 

@@ -17,7 +17,7 @@ from libs.database.orm.user import UserOrm
 
 
 class CreditLedgerService:
-    """Writes pb_credit_ledger rows and keeps each user's cached balance in step with them;
+    """Writes psg_credit_ledger rows and keeps each user's cached balance in step with them;
     never commits, so the caller's transaction owns every write."""
 
     def __init__(self, db_session: AsyncSession) -> None:

@@ -12,13 +12,13 @@ jobs:
       postgres:
         image: postgres:18
         env:
-          POSTGRES_USER: pb
-          POSTGRES_PASSWORD: pb
-          POSTGRES_DB: pb_test
+          POSTGRES_USER: psg
+          POSTGRES_PASSWORD: psg
+          POSTGRES_DB: psg_test
         ports:
           - 5437:5432
         options: >-
-          --health-cmd "pg_isready -U pb -d pb_test"
+          --health-cmd "pg_isready -U psg -d psg_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -50,18 +50,18 @@ jobs:
       postgres:
         image: postgres:18
         env:
-          POSTGRES_USER: pb
-          POSTGRES_PASSWORD: pb
-          POSTGRES_DB: pb_test
+          POSTGRES_USER: psg
+          POSTGRES_PASSWORD: psg
+          POSTGRES_DB: psg_test
         ports:
           - 5437:5432
         options: >-
-          --health-cmd "pg_isready -U pb -d pb_test"
+          --health-cmd "pg_isready -U psg -d psg_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql+asyncpg://pb:pb@localhost:5437/pb_test
+      DATABASE_URL: postgresql+asyncpg://psg:psg@localhost:5437/psg_test
     defaults:
       run:
         working-directory: backend

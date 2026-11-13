@@ -1,0 +1,1 @@
+ALTER TABLE psg_user ADD COLUMN credit_balance_usd NUMERIC(16, 10) NOT NULL DEFAULT 0;

@@ -49,7 +49,7 @@ Run commands from `backend/`. You may run only these:
 - `uv run alembic heads`
 - `uv run alembic revision --rev-id <YYYYMMDD_HHMM> -m <slug>`
 - `uv run pytest -m migration`
-- `DATABASE_URL=postgresql+asyncpg://pb:pb@localhost:5437/pb_test uv run python -m scripts.db.check_schema_drift`
+- `DATABASE_URL=postgresql+asyncpg://psg:psg@localhost:5437/psg_test uv run python -m scripts.db.check_schema_drift`
 - `uv run pytest`, once, before you report
 - `uv run ruff check --fix migrations/ libs/` and `uv run ruff format migrations/ libs/`
 
@@ -80,7 +80,7 @@ End with a report in this shape:
 **Conventions applied**: the specific conventions you followed, each tied to where you
 applied it. Name the rule and the file, e.g.:
 - `database.md` › Table shape: shared columns in order in
-  `sql/pb_<table>/0001_create_pb_<table>.up.sql`
+  `sql/psg_<table>/0001_create_psg_<table>.up.sql`
 
 **Verification**: each command you ran and its result. Include the drift check output
 if it reported anything, and the full suite's failures, if any, with a line on why each
@@ -94,4 +94,4 @@ wording you'd propose adding to `database.md`. Write "None" if none.
 
 **Follow-up needed**: work outside your scope this change requires, such as services
 or DTOs that use the new columns, factories and tests to update, and a reminder that
-Tyler applies the migration to `pb_local` with `uv run alembic upgrade head`.
+Tyler applies the migration to `psg_local` with `uv run alembic upgrade head`.

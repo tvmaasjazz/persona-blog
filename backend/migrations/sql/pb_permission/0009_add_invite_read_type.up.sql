@@ -1,1 +1,0 @@
-ALTER TYPE pb_permission_type ADD VALUE IF NOT EXISTS 'INVITE_READ';

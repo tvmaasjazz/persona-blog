@@ -9,14 +9,14 @@ from libs.database.orm.user import UserOrm
 
 
 class ContentItemViewOrm(BaseOrm):
-    __tablename__ = "pb_content_item_view"
+    __tablename__ = "psg_content_item_view"
     __table_args__ = (
         CheckConstraint(
             "(created_by_id IS NULL) <> (anonymous_user_key IS NULL)",
             name="viewer",
         ),
         Index(
-            "pb_content_item_view_user_viewer_day_idx",
+            "psg_content_item_view_user_viewer_day_idx",
             "content_item_id",
             "created_by_id",
             "viewed_on",
@@ -24,7 +24,7 @@ class ContentItemViewOrm(BaseOrm):
             postgresql_where=text("created_by_id IS NOT NULL AND deleted_at IS NULL"),
         ),
         Index(
-            "pb_content_item_view_anonymous_viewer_day_idx",
+            "psg_content_item_view_anonymous_viewer_day_idx",
             "content_item_id",
             "anonymous_user_key",
             "viewed_on",

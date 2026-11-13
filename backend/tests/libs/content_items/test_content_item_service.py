@@ -194,7 +194,7 @@ async def test_delete_content_item_soft_deletes_row(
     orm_result = await db_session.scalar(orm_query)
     database_utc_now = await fetch_database_utc_now(db_session)
     raw_query = text(
-        "SELECT deleted_at, deleted_by_id FROM pb_content_item WHERE id = :content_item_id"
+        "SELECT deleted_at, deleted_by_id FROM psg_content_item WHERE id = :content_item_id"
     )
     raw_result = (
         await db_session.execute(raw_query, {"content_item_id": content_item_record.id})

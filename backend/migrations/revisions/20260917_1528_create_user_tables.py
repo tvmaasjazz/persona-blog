@@ -7,14 +7,14 @@ MIGRATION_RUNNER = MigrationRunner()
 
 
 def upgrade() -> None:
-    MIGRATION_RUNNER.run_transactional("pb_user/0001_create_pb_user.up.sql")
+    MIGRATION_RUNNER.run_transactional("psg_user/0001_create_psg_user.up.sql")
     MIGRATION_RUNNER.run_transactional(
-        "pb_user_auth_provider/0001_create_pb_user_auth_provider.up.sql"
+        "psg_user_auth_provider/0001_create_psg_user_auth_provider.up.sql"
     )
 
 
 def downgrade() -> None:
     MIGRATION_RUNNER.run_transactional(
-        "pb_user_auth_provider/0001_create_pb_user_auth_provider.down.sql"
+        "psg_user_auth_provider/0001_create_psg_user_auth_provider.down.sql"
     )
-    MIGRATION_RUNNER.run_transactional("pb_user/0001_create_pb_user.down.sql")
+    MIGRATION_RUNNER.run_transactional("psg_user/0001_create_psg_user.down.sql")

@@ -66,7 +66,7 @@ A short pointer to the owning file (`database.md` › Soft delete) is not duplic
 2. **Examples that break their own rules.** Every code, SQL, and shell example follows
    the rule text in its own file and in `python-naming.md`: suffixes, variable names,
    `id` vs `identity`, aware UTC datetimes, `MIGRATION_RUNNER.run_transactional`,
-   `pb_` names, singular tables. When an example and its rule disagree, the rule text
+   `psg_` names, singular tables. When an example and its rule disagree, the rule text
    is presumed right.
 3. **Stale references.** Check each one against the repository with Glob and Grep:
    - file paths presented as existing: in "see", "lives in", tool scopes, and commands.

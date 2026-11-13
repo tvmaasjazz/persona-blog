@@ -10,13 +10,13 @@ from libs.database.orm.role import RoleOrm
 
 
 class UserOrm(BaseOrm):
-    __tablename__ = "pb_user"
+    __tablename__ = "psg_user"
     __table_args__ = (
         Index(
-            "pb_user_email_idx", "email", unique=True, postgresql_where=text("deleted_at IS NULL")
+            "psg_user_email_idx", "email", unique=True, postgresql_where=text("deleted_at IS NULL")
         ),
         Index(
-            "pb_user_is_system_user_idx",
+            "psg_user_is_system_user_idx",
             "is_system_user",
             unique=True,
             postgresql_where=text("is_system_user"),
@@ -34,6 +34,6 @@ class UserOrm(BaseOrm):
     credit_balance_usd: Mapped[Decimal] = mapped_column(Numeric(16, 10), server_default=text("0"))
     role_id: Mapped[int] = mapped_column(BigInteger, ForeignKey(RoleOrm.id))
 
-    # A person signing up has no creator, so pb_user relaxes BaseOrm's audit columns.
-    created_by_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("pb_user.id"))
-    updated_by_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("pb_user.id"))
+    # A person signing up has no creator, so psg_user relaxes BaseOrm's audit columns.
+    created_by_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("psg_user.id"))
+    updated_by_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("psg_user.id"))

@@ -7,8 +7,8 @@ MIGRATION_RUNNER = MigrationRunner()
 
 
 def upgrade() -> None:
-    MIGRATION_RUNNER.run_transactional("pb_invite/0001_create_pb_invite.up.sql")
+    MIGRATION_RUNNER.run_transactional("psg_invite/0001_create_psg_invite.up.sql")
 
 
 def downgrade() -> None:
-    MIGRATION_RUNNER.run_transactional("pb_invite/0001_create_pb_invite.down.sql")
+    MIGRATION_RUNNER.run_transactional("psg_invite/0001_create_psg_invite.down.sql")

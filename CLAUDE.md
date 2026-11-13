@@ -139,7 +139,7 @@ Split work across parallel agents only along files they don't share.
 - **Tests.** One `be-test-writer` adds the shared factories, stubs and fixtures first.
   Then two or three run in parallel on separate test files, each running only its
   own files: never the full suite, never `pytest -m migration`, since they share the
-  `pb_test` database. Run the full suite and the migration test once at the end.
+  `psg_test` database. Run the full suite and the migration test once at the end.
 - **Frontend.** A backend change the feature needs lands first, then
   `npm run api:types` regenerates the types before any `react-coder` starts. One
   `react-coder` writes the shared layer: every query and mutation hook, new field

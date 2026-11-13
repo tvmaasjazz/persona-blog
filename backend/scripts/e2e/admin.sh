@@ -9,7 +9,7 @@
 # It signs in by minting a session for the first admin, so no browser needed. Make your
 # user the admin first:
 #
-#   UPDATE pb_user SET role_id = (SELECT id FROM pb_role WHERE code = 'ADMIN')
+#   UPDATE psg_user SET role_id = (SELECT id FROM psg_role WHERE code = 'ADMIN')
 #   WHERE email = '<your email>';
 #
 # It adds a reader with a timestamped email each run, so running it again doesn't
@@ -205,7 +205,7 @@ async def main() -> None:
             admin_record = await db_session.scalar(admin_query)
             if admin_record is None:
                 raise SystemExit(
-                    "no admin yet — run: UPDATE pb_user SET role_id = (SELECT id FROM pb_role "
+                    "no admin yet — run: UPDATE psg_user SET role_id = (SELECT id FROM psg_role "
                     "WHERE code = 'ADMIN') WHERE email = '<your email>';"
                 )
             admin_auth_user = await build_auth_user(db_session, admin_record, RoleType.ADMIN)

@@ -12,7 +12,7 @@
 # It signs in by minting a session for the first admin, so no browser is needed for the
 # rest. Make your user the admin first:
 #
-#   UPDATE pb_user SET role_id = (SELECT id FROM pb_role WHERE code = 'ADMIN')
+#   UPDATE psg_user SET role_id = (SELECT id FROM psg_role WHERE code = 'ADMIN')
 #   WHERE email = '<your email>';
 #
 # It refuses to run unless .env points at a local development database.
@@ -147,7 +147,7 @@ async def main() -> None:
             admin_record = await db_session.scalar(admin_query)
             if admin_record is None:
                 raise SystemExit(
-                    "no admin yet — run: UPDATE pb_user SET role_id = (SELECT id FROM pb_role "
+                    "no admin yet — run: UPDATE psg_user SET role_id = (SELECT id FROM psg_role "
                     "WHERE code = 'ADMIN') WHERE email = '<your email>';"
                 )
             permission_service = PermissionService(db_session=db_session)

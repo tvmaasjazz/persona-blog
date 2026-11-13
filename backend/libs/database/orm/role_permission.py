@@ -7,10 +7,10 @@ from libs.database.orm.role import RoleOrm
 
 
 class RolePermissionOrm(BaseOrm):
-    __tablename__ = "pb_role_permission"
+    __tablename__ = "psg_role_permission"
     __table_args__ = (
         UniqueConstraint(
-            "role_id", "permission_id", name="pb_role_permission_role_id_permission_id_key"
+            "role_id", "permission_id", name="psg_role_permission_role_id_permission_id_key"
         ),
     )
 

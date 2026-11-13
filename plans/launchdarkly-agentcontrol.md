@@ -35,7 +35,7 @@ START
   version is refused on resume (`GenerateTextRunVersionMismatchException`), so changing
   the shape breaks paused runs. Changing a prompt or a model doesn't.
 - **`GenerateTextInstrumentationService`** wraps every node, so each pass is a
-  `pb_generate_text_step` row with its duration, its status, and its charge to the user.
+  `psg_generate_text_step` row with its duration, its status, and its charge to the user.
 
 ### Where the model is chosen
 
@@ -70,7 +70,7 @@ START
 
 ### What every call records
 
-`LlmService._complete` writes a `pb_llm_call` row before the call and fills it in after.
+`LlmService._complete` writes a `psg_llm_call` row before the call and fills it in after.
 The row holds the tier, provider, model, purpose (the node type), both prompts, the
 response, token counts, cost and duration. The run's and step's totals roll up from these
 rows. **This table stays the source of truth for billing**, whatever LaunchDarkly shows.
@@ -96,7 +96,7 @@ What matters for this app, checked against the docs and SDK source (`.reference/
     returns the config with a default you pass, plus a tracker you report tokens,
     duration and success to. It's tested on 3.14.
 - **We can keep making the call ourselves.** Our LLM layer does retries, format
-  validation and `pb_llm_call` logging, and it needs to keep doing them. The current SDK
+  validation and `psg_llm_call` logging, and it needs to keep doing them. The current SDK
   supports this two ways:
   - `inspect_config(key, context)` returns the raw config and never raises.
   - A **custom handler** (`create_handler`) wraps our own call. The SDK times it, reads
@@ -152,7 +152,7 @@ today:
 - Time to first token when streaming.
 
 What we keep is everything `LlmService` does: retries, refusal and truncation mapping,
-the format-fix loop, the `pb_llm_call` row, and the cost that users are charged.
+the format-fix loop, the `psg_llm_call` row, and the cost that users are charged.
 
 **The model list in the dashboard is a catalog, not what can run.**
 
@@ -246,14 +246,14 @@ as it does today.
 4. **`LlmService` does the rest.** It asks `LlmConfigService` for the config,
    LaunchDarkly or default, in place of looking a tier up. It then runs the provider call
    inside that service's tracking wrapper, which reports duration, tokens and success to
-   LaunchDarkly. Pricing, retries and the `pb_llm_call` row are unchanged.
+   LaunchDarkly. Pricing, retries and the `psg_llm_call` row are unchanged.
    - A config is resolved per call, which is cheap because it's read from memory. A
      format retry could therefore land on a new variation if one is published that
      second, and that's accepted.
    - Resolving stays a service of its own, beside `LlmService` and not inside it, because
      it's a different job (`fastapi-structure.md` › Services). Nodes still talk only to
      `LlmService`.
-5. **`pb_llm_call` gets three nullable columns:** `config_key`, `config_variation_key`
+5. **`psg_llm_call` gets three nullable columns:** `config_key`, `config_variation_key`
    and `config_variation_version`. Every call can then be traced to the variation that
    wrote it. Calls that used the code default leave them null.
 6. **Settings and wiring:**
@@ -276,7 +276,7 @@ as it does today.
      above, since that's a configuration mistake rather than an outage.
 7. **The prompt content is kept out of telemetry:** `capture_content=False` on the
    handler, and generative AI message content capture stays off in OpenTelemetry. Prompts
-   carry persona text and briefs, and `pb_llm_call` already holds them. LaunchDarkly also
+   carry persona text and briefs, and `psg_llm_call` already holds them. LaunchDarkly also
    becomes the app's observability backend, covered under Observability below.
 
 **Which SDK:** start with the current `launchdarkly-ai-server`, through `inspect_config`
@@ -320,7 +320,7 @@ Each of these is its own PR, in roughly this order:
   the Anthropic client that Later › *Models per request* needs.
 - **Review decisions as feedback.** When a reviewer approves or rejects a step, report
   positive or negative feedback against the variation that wrote it. Its key and version
-  are already on the `pb_llm_call` row from Level 1. This gives each variation an
+  are already on the `psg_llm_call` row from Level 1. This gives each variation an
   approval rate, the most honest quality signal the app has, and it costs nothing to
   collect.
 - **Experiments.** Split variations by user and compare approval rate, rewrite count,
@@ -554,7 +554,7 @@ the API.
 2. **The spike:** install the SDK on 3.14 and run a throwaway script that reads
    `blog-post-draft` and runs one tracked call through a custom handler. Then pick the
    SDK. Add the dependencies with Tyler's approval, then run `uv lock`.
-3. **The schema:** the three `pb_llm_call` columns (`schema-coder`).
+3. **The schema:** the three `psg_llm_call` columns (`schema-coder`).
 4. **The placement review.** Tyler reviews this list before any coder starts:
    - `libs/llm/services/llm_config_service.py`: `LlmConfigService`. It resolves a config
      key into the model settings and rendered system prompt, falling back to the code
@@ -581,7 +581,7 @@ the API.
    - The renderer.
    - Default templates render byte-for-byte as today's prompts do.
    - One test with a stubbed source that serves a different model and prompt, checking
-     both reach the provider call and the new `pb_llm_call` columns.
+     both reach the provider call and the new `psg_llm_call` columns.
 7. **A script, `backend/scripts/llm_config_check.py`.** It prints what each step resolves
    to (source, model, variation, and the rendered system prompt for a sample persona), so
    a dashboard change can be checked without starting a run.
